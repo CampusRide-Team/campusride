@@ -19,6 +19,7 @@ import StudentHome from './src/screens/student/StudentHome'
 
 // Driver screens
 import DriverHome from './src/screens/driver/DriverHome'
+import ActiveRequests from './src/screens/driver/ActiveRequests'
 
 const RootNavigator = () => {
   const [screen, setScreen] = useState('splash')
@@ -145,15 +146,44 @@ const RootNavigator = () => {
       setScreen('role-selection')
     }
 
-    // Serving your premium map dashboard screen layout directly
-    return <DriverHome onLogout={handleLogout} />
+    return (
+      <DriverHome 
+        onLogout={handleLogout} 
+        onViewRequests={() => setScreen('active-requests')}
+        onChangeTab={(targetTab) => {
+          // Route driver smoothly to queue screen when clicking 'Trips' tab link indicator
+          if (targetTab === 'trips') setScreen('active-requests')
+        }}
+      />
+    )
 
     /* TODO: Restore split routing once AuthContext sync is ready:
     if (role === 'driver') {
-      return <DriverHome onLogout={handleLogout} />
+      return (
+        <DriverHome 
+          onLogout={handleLogout} 
+          onViewRequests={() => setScreen('active-requests')}
+          onChangeTab={(targetTab) => {
+            if (targetTab === 'trips') setScreen('active-requests')
+          }}
+        />
+      )
     }
     return <StudentHome onLogout={handleLogout} />
     */
+  }
+
+  // 12. Incoming Ride Requests Dashboard Queue Screen Layout
+  if (screen === 'active-requests') {
+    return (
+      <ActiveRequests 
+        onBack={() => setScreen('home')} 
+        onChangeTab={(targetTab) => {
+          // Route driver cleanly back to home live map when clicking 'Home' tab link indicator
+          if (targetTab === 'home') setScreen('home')
+        }}
+      />
+    )
   }
 
   return null

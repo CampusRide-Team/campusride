@@ -9,176 +9,171 @@ import {
   Platform,
 } from 'react-native'
 import { StatusBar } from 'expo-status-bar'
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
-// Import the live native map components
+import { SafeAreaView } from 'react-native-safe-area-context' 
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps'
 
 const { width, height } = Dimensions.get('window')
 
-const DriverHome = ({ onLogout }) => {
+// Destructured onChangeTab alongside the other global navigator hooks
+const DriverHome = ({ onLogout, onViewRequests, onChangeTab }) => {
   const [isOnline, setIsOnline] = useState(true)
-  const [activeTab, setActiveTab] = useState('home')
 
   const toggleOnlineStatus = () => setIsOnline((prev) => !prev)
 
-  // Core University of Ghana GPS Coordinates Center Matrix
   const ugCampusRegion = {
-    latitude: 5.6506,       // Legon Campus Latitude
-    longitude: -0.1873,     // Legon Campus Longitude
-    latitudeDelta: 0.015,   // Zoom Level scale proportions
+    latitude: 5.6506,       
+    longitude: -0.1873,     
+    latitudeDelta: 0.015,   
     longitudeDelta: 0.012,
   }
 
-  // Mock passenger request coordinate pins located around campus hubs
   const mockPassengerRequests = [
     { id: 'req_1', latitude: 5.6542, longitude: -0.1915, label: 'Balme Library' },
     { id: 'req_2', latitude: 5.6481, longitude: -0.1812, label: 'Night Market' },
   ]
 
   return (
-    <SafeAreaProvider>
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <StatusBar style="dark" />
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <StatusBar style="dark" />
 
-        {/* 1. TOP HEADER APP BAR */}
-        <View style={styles.header}>
-          <Text style={styles.logoText}>CampusRide</Text>
-          <View style={styles.headerRight}>
-            <Text style={styles.driverName}>ByKMoni</Text>
-            <TouchableOpacity activeOpacity={0.8} onPress={onLogout} style={styles.avatarContainer}>
-              <View style={styles.avatarFallback}>
-                <Text style={styles.avatarFallbackText}>👨‍✈️</Text>
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.notificationBtn} activeOpacity={0.7}>
-              <Text style={styles.notificationIcon}>🔔</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* 2. DYNAMIC GO ONLINE SWITCH CARD */}
-        <View style={styles.toggleCardContainer}>
-          <View style={styles.toggleCard}>
-            <View>
-              <Text style={styles.toggleCardTitle}>
-                {isOnline ? 'Go Offline' : 'Go Online'}
-              </Text>
-              <Text style={styles.toggleCardSubtitle}>
-                {isOnline ? 'Ready to accept ride requests' : 'Stay offline to pause requests'}
-              </Text>
+      {/* 1. TOP HEADER APP BAR */}
+      <View style={styles.header}>
+        <Text style={styles.logoText}>CampusRide</Text>
+        <View style={styles.headerRight}>
+          <Text style={styles.driverName}>ByKMoni</Text>
+          <TouchableOpacity activeOpacity={0.8} onPress={onLogout} style={styles.avatarContainer}>
+            <View style={styles.avatarFallback}>
+              <Text style={styles.avatarFallbackText}>👨‍✈️</Text>
             </View>
-            <Switch
-              trackColor={{ false: '#CBD5E1', true: '#84CC16' }}
-              thumbColor="#FFFFFF"
-              ios_backgroundColor="#CBD5E1"
-              onValueChange={toggleOnlineStatus}
-              value={isOnline}
-            />
-          </View>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.notificationBtn} activeOpacity={0.7}>
+            <Text style={styles.notificationIcon}>🔔</Text>
+          </TouchableOpacity>
         </View>
+      </View>
 
-        {/* 3. LIVE MAP VIEWPORT AREA */}
-        <View style={styles.mapViewportContainer}>
-          <MapView
-            provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : null}
-            style={StyleSheet.absoluteFillObject}
-            initialRegion={ugCampusRegion}
-            showsCompass={false}
-            showsPointsOfInterest={true}
-          >
-            {/* Render dynamic markers on the map canvas when driver is online */}
-            {isOnline && (
-              <>
-                {/* Driver Central Location Node */}
-                <Marker coordinate={{ latitude: 5.6506, longitude: -0.1873 }}>
-                  <View style={styles.driverPulseOuter}>
-                    <View style={styles.driverPulseInner} />
+      {/* 2. DYNAMIC GO ONLINE SWITCH CARD */}
+      <View style={styles.toggleCardContainer}>
+        <View style={styles.toggleCard}>
+          <View>
+            <Text style={styles.toggleCardTitle}>
+              {isOnline ? 'Go Offline' : 'Go Online'}
+            </Text>
+            <Text style={styles.toggleCardSubtitle}>
+              {isOnline ? 'Ready to accept ride requests' : 'Stay offline to pause requests'}
+            </Text>
+          </View>
+          <Switch
+            trackColor={{ false: '#CBD5E1', true: '#84CC16' }}
+            thumbColor="#FFFFFF"
+            ios_backgroundColor="#CBD5E1"
+            onValueChange={toggleOnlineStatus}
+            value={isOnline}
+          />
+        </View>
+      </View>
+
+      {/* 3. LIVE MAP VIEWPORT AREA */}
+      <View style={styles.mapViewportContainer}>
+        <MapView
+          provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : null}
+          style={StyleSheet.absoluteFillObject}
+          initialRegion={ugCampusRegion}
+          showsCompass={false}
+          showsPointsOfInterest={true}
+        >
+          {isOnline && (
+            <>
+              <Marker coordinate={{ latitude: 5.6506, longitude: -0.1873 }}>
+                <View style={styles.driverPulseOuter}>
+                  <View style={styles.driverPulseInner} />
+                </View>
+              </Marker>
+
+              {mockPassengerRequests.map((request) => (
+                <Marker 
+                  key={request.id} 
+                  coordinate={{ latitude: request.latitude, longitude: request.longitude }}
+                  title={request.label}
+                >
+                  <View style={styles.passengerPin}>
+                    <Text style={styles.pinIcon}>👤</Text>
                   </View>
                 </Marker>
+              ))}
+            </>
+          )}
+        </MapView>
 
-                {/* Mapping Passenger Locations around campus */}
-                {mockPassengerRequests.map((request) => (
-                  <Marker 
-                    key={request.id} 
-                    coordinate={{ latitude: request.latitude, longitude: request.longitude }}
-                    title={request.label}
-                  >
-                    <View style={styles.passengerPin}>
-                      <Text style={styles.pinIcon}>👤</Text>
-                    </View>
-                  </Marker>
-                ))}
-              </>
-            )}
-          </MapView>
-
-          {/* Map Overlay Status Badge */}
-          <View style={[styles.mapStatusBadge, { backgroundColor: isOnline ? '#DCFCE7' : '#F1F5F9' }]}>
-            <View style={[styles.statusDot, { backgroundColor: isOnline ? '#22C55E' : '#64748B' }]} />
-            <Text style={[styles.mapStatusBadgeText, { color: isOnline ? '#166534' : '#334155' }]}>
-              {isOnline ? 'ONLINE' : 'OFFLINE'}
-            </Text>
-          </View>
-
-          {/* 4. FLOATING CONTEXT SUMMARY STATUS DRAWER */}
-          <View style={styles.floatingStatusDrawer}>
-            <View style={styles.drawerHeaderRow}>
-              <View style={styles.drawerTextBlock}>
-                <Text style={styles.drawerMainStatusTitle}>
-                  {isOnline ? 'You are online' : 'You are offline'}
-                </Text>
-                <Text style={styles.drawerSubStatusTitle}>
-                  {isOnline ? '⚡ 3 requests nearby' : 'Toggle online status to start tracking'}
-                </Text>
-              </View>
-              <View style={styles.drawerIconSquare}>
-                <Text style={styles.drawerSquareRouteIcon}>🔀</Text>
-              </View>
-            </View>
-
-            <Text style={styles.metricsTextLine}>
-              Trips today: <Text style={styles.metricsBoldValue}>5</Text> • Total trips: <Text style={styles.metricsBoldValue}>42</Text>
-            </Text>
-
-            <TouchableOpacity 
-              style={[styles.actionButton, !isOnline && styles.disabledActionButton]} 
-              activeOpacity={0.85}
-              disabled={!isOnline}
-            >
-              <Text style={styles.actionButtonText}>View Active Requests</Text>
-            </TouchableOpacity>
-          </View>
+        {/* Map Overlay Status Badge */}
+        <View style={[styles.mapStatusBadge, { backgroundColor: isOnline ? '#DCFCE7' : '#F1F5F9' }]}>
+          <View style={[styles.statusDot, { backgroundColor: isOnline ? '#22C55E' : '#64748B' }]} />
+          <Text style={[styles.mapStatusBadgeText, { color: isOnline ? '#166534' : '#334155' }]}>
+            {isOnline ? 'ONLINE' : 'OFFLINE'}
+          </Text>
         </View>
 
-        {/* 5. APP BASE SYSTEM TAB NAV BAR COMPONENT */}
-        <View style={styles.tabBarContainer}>
-          <TouchableOpacity style={styles.tabItem} onPress={() => setActiveTab('home')} activeOpacity={0.7}>
-            <View style={[styles.tabIconBackground, activeTab === 'home' && styles.activeTabIconBackground]}>
-              <Text style={[styles.tabIcon, activeTab === 'home' && styles.activeTabIconText]}>🏠</Text>
+        {/* 4. FLOATING CONTEXT SUMMARY STATUS DRAWER */}
+        <View style={styles.floatingStatusDrawer}>
+          <View style={styles.drawerHeaderRow}>
+            <View style={styles.drawerTextBlock}>
+              <Text style={styles.drawerMainStatusTitle}>
+                {isOnline ? 'You are online' : 'You are offline'}
+              </Text>
+              <Text style={styles.drawerSubStatusTitle}>
+                {isOnline ? '⚡ 3 requests nearby' : 'Toggle online status to start tracking'}
+              </Text>
             </View>
-            <Text style={[styles.tabLabelText, activeTab === 'home' && styles.activeTabLabelText]}>Home</Text>
-          </TouchableOpacity>
+            <View style={styles.drawerIconSquare}>
+              <Text style={styles.drawerSquareRouteIcon}>🔀</Text>
+            </View>
+          </View>
 
-          <TouchableOpacity style={styles.tabItem} onPress={() => setActiveTab('trips')} activeOpacity={0.7}>
-            <Text style={[styles.tabIcon, activeTab === 'trips' && styles.activeTabIconText]}>🔀</Text>
-            <Text style={[styles.tabLabelText, activeTab === 'trips' && styles.activeTabLabelText]}>Trips</Text>
-          </TouchableOpacity>
+          <Text style={styles.metricsTextLine}>
+            Trips today: <Text style={styles.metricsBoldValue}>5</Text> • Total trips: <Text style={styles.metricsBoldValue}>42</Text>
+          </Text>
 
-          <TouchableOpacity style={styles.tabItem} onPress={() => setActiveTab('profile')} activeOpacity={0.7}>
-            <Text style={[styles.tabIcon, activeTab === 'profile' && styles.activeTabIconText]}>👤</Text>
-            <Text style={[styles.tabLabelText, activeTab === 'profile' && styles.activeTabLabelText]}>Profile</Text>
+          <TouchableOpacity 
+            style={[styles.actionButton, !isOnline && styles.disabledActionButton]} 
+            activeOpacity={0.85}
+            disabled={!isOnline}
+            onPress={onViewRequests}
+          >
+            <Text style={styles.actionButtonText}>View Active Requests</Text>
           </TouchableOpacity>
         </View>
+      </View>
 
-      </SafeAreaView>
-    </SafeAreaProvider>
+      {/* 5. APP BASE SYSTEM TAB NAV BAR COMPONENT */}
+      <View style={styles.tabBarContainer}>
+        {/* Home Tab - Explicitly passing 'home' up to the root state context */}
+        <TouchableOpacity style={styles.tabItem} onPress={() => onChangeTab('home')} activeOpacity={0.7}>
+          <View style={[styles.tabIconBackground, styles.activeTabIconBackground]}>
+            <Text style={[styles.tabIcon, styles.activeTabIconText]}>🏠</Text>
+          </View>
+          <Text style={[styles.tabLabelText, styles.activeTabLabelText]}>Home</Text>
+        </TouchableOpacity>
+
+        {/* Trips Tab - Triggers navigation link callback to ActiveRequests */}
+        <TouchableOpacity style={styles.tabItem} onPress={() => onChangeTab('trips')} activeOpacity={0.7}>
+          <Text style={styles.tabIcon}>🔀</Text>
+          <Text style={styles.tabLabelText}>Trips</Text>
+        </TouchableOpacity>
+
+        {/* Profile Tab */}
+        <TouchableOpacity style={styles.tabItem} onPress={() => console.log('Profile')} activeOpacity={0.7}>
+          <Text style={styles.tabIcon}>👤</Text>
+          <Text style={styles.tabLabelText}>Profile</Text>
+        </TouchableOpacity>
+      </View>
+
+    </SafeAreaView>
   )
 }
 
 export default DriverHome
 
 const styles = StyleSheet.create({
-  // Global View Layout Canvas
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
@@ -231,8 +226,6 @@ const styles = StyleSheet.create({
   notificationIcon: {
     fontSize: 18,
   },
-
-  // Toggle Header Switch Module Layout
   toggleCardContainer: {
     paddingHorizontal: 20,
     paddingVertical: 12,
@@ -260,15 +253,11 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontWeight: '500',
   },
-
-  // Map Component Base Wrapper
   mapViewportContainer: {
     flex: 1,
     backgroundColor: '#E2E8F0',
     position: 'relative',
   },
-
-  // Floating Overlay Elements Map Positioning Logic
   mapStatusBadge: {
     position: 'absolute',
     top: 20,
@@ -295,8 +284,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.5,
   },
-
-  // Native Vector Marker Pins Modifiers
   passengerPin: {
     width: 34,
     height: 34,
@@ -337,8 +324,6 @@ const styles = StyleSheet.create({
     borderWidth: 2.5,
     borderColor: '#FFFFFF',
   },
-
-  // Bottom Interactive Summary Drawer UI
   floatingStatusDrawer: {
     position: 'absolute',
     bottom: 24,
@@ -412,8 +397,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
-
-  // Tab Menu Bar Design System Specs
   tabBarContainer: {
     flexDirection: 'row',
     height: 74,
