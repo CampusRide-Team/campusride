@@ -40,8 +40,8 @@ const DriverHome = ({ onLogout, onViewRequests, onChangeTab }) => {
       <View style={styles.header}>
         <Text style={styles.logoText}>CampusRide</Text>
         <View style={styles.headerRight}>
-          <Text style={styles.driverName}>ByKMoni</Text>
-          <TouchableOpacity activeOpacity={0.8} onPress={onLogout} style={styles.avatarContainer}>
+          <Text style={styles.driverName}>Alex</Text>
+          <TouchableOpacity activeOpacity={0.8} onPress={() => onChangeTab('profile')} style={styles.avatarContainer}>
             <View style={styles.avatarFallback}>
               <Text style={styles.avatarFallbackText}>👨‍✈️</Text>
             </View>

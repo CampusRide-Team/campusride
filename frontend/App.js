@@ -203,6 +203,7 @@ const RootNavigator = () => {
 
     return (
       <DriverHome 
+        driverData={driverProfileData} 
         onLogout={handleLogout} 
         onViewRequests={() => setScreen('active-requests')}
         onChangeTab={(targetTab) => {
@@ -443,4 +444,4 @@ export default function App() {
       </AuthProvider>
     </SafeAreaProvider>
   )
-} 
+}
