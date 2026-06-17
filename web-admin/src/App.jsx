@@ -5,7 +5,8 @@ import DriverVerificationScreen from './screens/VerificationScreen'
 import TripsMonitoringScreen from './screens/TripsMonitoringScreen'
 import StudentsManagementScreen from './screens/UserDirectoryScreen'
 import AnalyticsScreen from './screens/AnalyticsScreen'
-import NotificationsScreen from './screens/NotificationsScreen' // 🌟 Live view component registration
+import NotificationsScreen from './screens/NotificationsScreen'
+import SettingsScreen from './screens/SettingsScreen' // 🌟 1. Import the structured settings screen
 import { Search, Bell } from 'lucide-react'
 
 export default function App() {
@@ -50,7 +51,9 @@ export default function App() {
                 : activePage === 'analytics'
                 ? 'Analytics' 
                 : activePage === 'notifications'
-                ? 'Notifications' // 🌟 Synced header title mapping string
+                ? 'Notifications'
+                : activePage === 'settings'
+                ? 'Settings' // 🌟 2. Added header text sync for settings
                 : activePage.replace('-', ' ')}
             </h2>
             <div style={appStyles.searchBar}>
@@ -77,10 +80,12 @@ export default function App() {
           {activePage === 'trips' && <TripsMonitoringScreen />}
           {activePage === 'user-directory' && <StudentsManagementScreen />}
           {activePage === 'analytics' && <AnalyticsScreen />} 
-          {activePage === 'notifications' && <NotificationsScreen />} {/* 🌟 Wired layout anchor conditional render */}
+          {activePage === 'notifications' && <NotificationsScreen />} 
+          {activePage === 'settings' && <SettingsScreen />} {/* 🌟 3. Render Settings component on match */}
           
           {/* FALLBACK SAFEGUARD BLOCK */}
-          {!['dashboard', 'driver-verification', 'trips', 'user-directory', 'analytics', 'notifications'].includes(activePage) && (
+          {/* 🌟 4. Added 'settings' to the array block below to stop the fallback box from triggering */}
+          {!['dashboard', 'driver-verification', 'trips', 'user-directory', 'analytics', 'notifications', 'settings'].includes(activePage) && (
             <div style={appStyles.fallbackBox}>
               <h3 style={appStyles.fallbackTitle}>{activePage.replace('-', ' ')} Shell</h3>
               <p style={appStyles.fallbackDesc}>Global inline framework operating successfully.</p>
