@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { 
   LayoutDashboard, 
   Car, 
@@ -23,6 +23,33 @@ export default function Sidebar({ activePage = 'dashboard', onNavigate }) {
   const [hoveredItemId, setHoveredItemId] = useState(null)
   const [isProfileHovered, setIsProfileHovered] = useState(false)
 
+  // Dynamic Admin Profile State
+  const [adminUser, setAdminUser] = useState({
+    name: 'Syncing Account...',
+    role: 'System Administrator',
+    initials: '..'
+  })
+
+  // 1. 💡 BACKEND TODO: Authenticated Session Context Ingestion Layer
+  useEffect(() => {
+    // axios.get('/api/v1/auth/session')
+    //   .then(res => {
+    //     setAdminUser({
+    //       name: res.data.user.fullName,
+    //       role: res.data.user.roleTitle,
+    //       initials: res.data.user.initialsToken
+    //     })
+    //   })
+    //   .catch(err => console.error("Session missing or token expired:", err))
+
+    // Staging Mock Session Document Tally
+    setAdminUser({
+      name: 'Dr. Julian Vance',
+      role: 'System Administrator',
+      initials: 'JV'
+    })
+  }, [])
+
   return (
     <aside style={styles.sidebar}>
       {/* Brand Header */}
@@ -37,10 +64,10 @@ export default function Sidebar({ activePage = 'dashboard', onNavigate }) {
           const active = activePage === item.id
           const isHovered = hoveredItemId === item.id
           const IconComponent = item.icon
-          
+
           let currentBgColor = 'transparent'
           let currentTextColor = '#64748B'
-          
+
           if (active) {
             currentBgColor = '#1E3A8A'
             currentTextColor = '#ffffff'
@@ -78,21 +105,20 @@ export default function Sidebar({ activePage = 'dashboard', onNavigate }) {
         })}
       </nav>
 
-      {/* USER PROFILE SECTION */}
-      {/* 💡 BACKEND TODO: Fetch authenticated session credentials to render dynamic avatar profiles */}
+      {/* USER PROFILE SECTION CONTAINER */}
       <button 
         style={{ 
           ...styles.adminSectionButton,
           backgroundColor: isProfileHovered ? '#F1F5F9' : 'transparent'
         }}
-        onClick={() => onNavigate?.('settings')} // 🌟 Routes straight to the core Settings tab layout
+        onClick={() => onNavigate?.('admin-profile')} // 🌟 Modified token value string key to point to the dedicated blueprint profile component canvas view
         onMouseEnter={() => setIsProfileHovered(true)}
         onMouseLeave={() => setIsProfileHovered(false)}
       >
-        <div style={styles.adminAvatar}>JV</div>
+        <div style={styles.adminAvatar}>{adminUser.initials}</div>
         <div style={styles.adminInfo}>
-          <span style={styles.adminName}>Dr. Julian Vance</span>
-          <span style={styles.adminRole}>System Administrator</span>
+          <span style={styles.adminName}>{adminUser.name}</span>
+          <span style={styles.adminRole}>{adminUser.role}</span>
         </div>
       </button>
     </aside>
@@ -102,7 +128,7 @@ export default function Sidebar({ activePage = 'dashboard', onNavigate }) {
 // ── ARRANGED CSS STYLESHEET MAP OBJECT WITH CLEAN INDENTS ────────────────────
 const styles = {
   sidebar: { 
-    width: 240, 
+    width: '240px', 
     minHeight: '100vh', 
     backgroundColor: '#ffffff', 
     borderRight: '1px solid #E2E8F0', 
@@ -206,5 +232,5 @@ const styles = {
     fontSize: '10px', 
     fontWeight: 500, 
     color: '#94A3B8' 
-  },
+  }
 }

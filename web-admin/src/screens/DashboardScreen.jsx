@@ -2,39 +2,70 @@ import React, { useState, useEffect } from 'react'
 import { Car, UserCheck, Users, ShieldCheck } from 'lucide-react'
 
 export default function DashboardScreen() {
-  // Operational Real-time Metrics State Framework
-  const [stats, setStats] = useState([
-    { label: 'Active Rides Now', value: '27', change: '+12%', icon: Car, color: '#1E3A8A', bg: '#DBEAFE', changeColor: '#15803D' },
-    { label: 'Drivers Online', value: '128', change: '+5%', icon: UserCheck, color: '#1E3A8A', bg: '#DCFCE7', changeColor: '#15803D' },
-    { label: 'Riders Registered', value: '4,892', change: '+24%', icon: Users, color: '#1E3A8A', bg: '#EFF6FF', changeColor: '#15803D' },
-    { label: 'Pending Verification', value: '3', change: 'Action Req.', icon: ShieldCheck, color: '#991B1B', bg: '#FEE2E2', changeColor: '#991B1B' },
-  ])
-
-  // Driver Leaderboard State Framework
-  const [topDrivers, setTopDrivers] = useState([
-    { name: 'Kwame Evans Mensah', rating: '4.98', trips: 142, initials: 'KM' },
-    { name: 'Emmanuel Kofi Boateng', rating: '4.95', trips: 138, initials: 'EB' },
-    { name: 'Samuel Yaw Addo', rating: '4.89', trips: 125, initials: 'SA' },
-  ])
-
-  // Recent Activity Feed State Framework
-  const [recentActivity, setRecentActivity] = useState([
-    { title: 'New Rider Signup', desc: 'Julian Vance verified his institutional database token.', time: '2 MINS AGO', circleColor: '#3B82F6' },
-    { title: 'Ride Completed', desc: 'Emmanuel Kofi Boateng reached Main Gate terminal cluster.', time: '15 MINS AGO', circleColor: '#22C55E' },
-    { title: 'Dispute Flagged', desc: 'Rider passenger submitted delay alert entry for Ride #78.', time: '42 MINS AGO', circleColor: '#EF4444' },
-  ])
-
-  // Weekly Analytic Volume State Framework
-  const [chartData, setChartData] = useState([35, 45, 55, 90, 75, 30, 20])
+  // Operational Dynamic Dynamic Real-time States
+  const [stats, setStats] = useState([])
+  const [topDrivers, setTopDrivers] = useState([])
+  const [recentActivity, setRecentActivity] = useState([])
+  const [chartData, setChartData] = useState([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // 💡 BACKEND TODO: 
-    // Fetch system configurations from database endpoints via GET routes when live.
+    const fetchDashboardAggregations = async () => {
+      try {
+        setLoading(false)
+
+        // 💡 BACKEND TODO: Assemble global initialization data lookups via Promise.all
+        // const [statsRes, driversRes, feedRes, chartRes] = await Promise.all([
+        //   axios.get('/api/v1/admin/dashboard/stats'),
+        //   axios.get('/api/v1/admin/drivers/leaderboard'),
+        //   axios.get('/api/v1/admin/dashboard/activity-stream'),
+        //   axios.get('/api/v1/admin/dashboard/volume-charts')
+        // ])
+
+        setStats([
+          { label: 'Active Rides Now', value: '27', change: '+12%', icon: Car, color: '#1E3A8A', bg: '#DBEAFE', changeColor: '#15803D' },
+          { label: 'Drivers Online', value: '128', change: '+5%', icon: UserCheck, color: '#1E3A8A', bg: '#DCFCE7', changeColor: '#15803D' },
+          { label: 'Riders Registered', value: '4,892', change: '+24%', icon: Users, color: '#1E3A8A', bg: '#EFF6FF', changeColor: '#15803D' },
+          { label: 'Pending Verification', value: '3', change: 'Action Req.', icon: ShieldCheck, color: '#991B1B', bg: '#FEE2E2', changeColor: '#991B1B' },
+        ])
+
+        setTopDrivers([
+          { name: 'Kwame Evans Mensah', rating: '4.98', trips: 142, initials: 'KM' },
+          { name: 'Emmanuel Kofi Boateng', rating: '4.95', trips: 138, initials: 'EB' },
+          { name: 'Samuel Yaw Addo', rating: '4.89', trips: 125, initials: 'SA' },
+        ])
+
+        setRecentActivity([
+          { title: 'New Rider Signup', desc: 'Julian Vance verified his institutional database token.', time: '2 MINS AGO', circleColor: '#3B82F6' },
+          { title: 'Ride Completed', desc: 'Emmanuel Kofi Boateng reached Main Gate terminal cluster.', time: '15 MINS AGO', circleColor: '#22C55E' },
+          { title: 'Dispute Flagged', desc: 'Rider passenger submitted delay alert entry for Ride #78.', time: '42 MINS AGO', circleColor: '#EF4444' },
+        ])
+
+        setChartData([35, 45, 55, 90, 75, 30, 20])
+
+      } catch (err) {
+        console.error("Failed fetching structural administrative dashboard states:", err)
+      }
+    }
+
+    fetchDashboardAggregations()
+
+    // 💡 BACKEND TODO: Connect client to active socket stream channel layers
+    // socket.on('trip_status_updated', (data) => { updateLocalStatsCounters(data) })
+    // return () => socket.off('trip_status_updated')
   }, [])
+
+  if (loading) {
+    return (
+      <div style={styles.loadingWrapperFrame}>
+        <span style={styles.loadingText}>Hydrating Performance Dashboards...</span>
+      </div>
+    )
+  }
 
   return (
     <div style={styles.container}>
-      
+
       {/* 1. TOP METRICS GRID ROW */}
       <div style={styles.metricsGrid}>
         {stats.map((card, idx) => {
@@ -62,7 +93,7 @@ export default function DashboardScreen() {
           <div style={styles.liveLabel}>
             <span style={styles.pingDot} /> LIVE CAMPUS ACTIVITY
           </div>
-          
+
           <div style={styles.mapVisualFrame}>
             <div style={styles.mapGridLineHorizontal} />
             <div style={styles.mapGridLineVertical} />
@@ -70,7 +101,7 @@ export default function DashboardScreen() {
             <div style={styles.liveDriverNodeBlue} />
             <div style={styles.liveDriverNodeRed} />
           </div>
-          
+
           <div style={styles.mapLegendBox}>
             <div style={styles.legendItem}>
               <span style={styles.legendDotGreen} /> Available Drivers
@@ -154,8 +185,6 @@ export default function DashboardScreen() {
     </div>
   )
 }
-
-// ── ARRANGED MASTER STYLE SHEET MATRIX ───────────────────────────────────────
 const styles = {
   container: {
     display: 'flex',
@@ -546,5 +575,17 @@ const styles = {
     fontSize: '10px',
     fontWeight: 700,
     color: '#94A3B8'
+  },
+  loadingWrapperFrame: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '70vh',
+    width: '100%'
+  },
+  loadingText: {
+    fontSize: '14px',
+    color: '#1E3A8A',
+    fontWeight: 700
   }
 }

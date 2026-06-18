@@ -5,8 +5,6 @@ import {
   UserPlus, 
   AlertTriangle, 
   Search, 
-  SlidersHorizontal, 
-  Download, 
   Mail, 
   Phone, 
   MapPin, 
@@ -20,94 +18,79 @@ import {
 } from 'lucide-react'
 
 export default function UserDirectoryScreen() {
-  const [activeInspectorTab, setActiveInspectorTab] = useState('info') // choices: 'info' | 'trips' | 'feedback' | 'reports'
+  const [activeInspectorTab, setActiveInspectorTab] = useState('info') 
   const [searchQuery, setSearchQuery] = useState('')
+  const [studentsData, setStudentsData] = useState([])
+  const [selectedStudent, setSelectedStudent] = useState(null)
+  const [metrics, setMetrics] = useState([])
+  const [loading, setLoading] = useState(true)
 
-  // Analytical Metrics State Framework
-  const [metrics] = useState([
-    { id: 1, label: 'Total Accounts', value: '5,420', change: '↑ +12% from last month', icon: Users, color: '#1E3A8A', bg: '#DBEAFE', trendColor: '#15803D' },
-    { id: 2, label: 'Active Today', value: '1,890', change: '● Live Activity', icon: UserCheck, color: '#1E3A8A', bg: '#DCFCE7', trendColor: '#15803D' },
-    { id: 3, label: 'New Registrations', value: '45', change: 'Past 24 hours', icon: UserPlus, color: '#1E3A8A', bg: '#EFF6FF', trendColor: '#64748B' },
-    { id: 4, label: 'Flagged Accounts', value: '12', change: 'Requires Attention', icon: AlertTriangle, color: '#991B1B', bg: '#FEE2E2', trendColor: '#991B1B' }
-  ])
-
-  // Passenger Dataset extended with deep-dive Incident Reports History
-  const [studentsData, setStudentsData] = useState([
-    { 
-      id: '#CR-2823-8842', 
-      userType: 'STUDENT', 
-      name: 'Alex Johnson', 
-      email: 'alex.j@st.ug.edu.gh', 
-      regDate: 'Sept 12, 2025', 
-      rideCount: 42, 
-      status: 'ACTIVE', 
-      phone: '+233 24 556 7891', 
-      residence: 'Jean Nelson Aka Hall', 
-      rideStatus: 'In Transit', 
-      image: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=150&h=150&q=80',
-      tripsHistory: [
-        { id: 'RIDE-78', date: 'June 15', route: 'Pent Hall → Main Gate', driver: 'E. Boateng', state: 'COMPLETED' },
-        { id: 'RIDE-62', date: 'June 12', route: 'Balme Library → Night Market', driver: 'K. Mensah', state: 'COMPLETED' },
-        { id: 'RIDE-41', date: 'June 10', route: 'Main Gate → Volta Hall', driver: 'S. Addo', state: 'CANCELED' }
-      ],
-      feedbackHistory: [
-        { rating: 5, comment: 'Very polite driver, clean car.', date: 'June 15' },
-        { rating: 2, comment: 'Driver took a long route to bypass traffic.', date: 'June 12' }
-      ],
-      reportsHistory: [
-        { type: 'Late for Pickup', reporter: 'Driver K. Mensah', date: 'June 12', details: 'Rider kept vehicle waiting at Balme Library loading zone for over 8 minutes.' }
-      ]
-    },
-    { 
-      id: '#CR-GUEST-0931', 
-      userType: 'GUEST', 
-      name: 'Michael Thompson', 
-      email: 'm.thompson92@gmail.com', 
-      regDate: 'Sep 05, 2025', 
-      rideCount: 14, 
-      status: 'ACTIVE', 
-      phone: '+233 50 441 0293', 
-      residence: 'External • Off-Campus Visitor', 
-      rideStatus: 'Offline', 
-      image: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150&q=80',
-      tripsHistory: [
-        { id: 'RIDE-69', date: 'June 14', route: 'Main Gate → Night Market', driver: 'S. Addo', state: 'COMPLETED' }
-      ],
-      feedbackHistory: [
-        { rating: 4, comment: 'Good dynamic drive around campus.', date: 'June 14' }
-      ],
-      reportsHistory: []
-    },
-    {
-      id: '#CR-2823-4412',
-      userType: 'STUDENT',
-      name: 'David Chen',
-      email: 'd.chen@st.ug.edu.gh',
-      regDate: 'Oct 15, 2025',
-      rideCount: 2,
-      status: 'FLAGGED',
-      phone: '+233 27 987 6543',
-      residence: 'Limann Hall',
-      rideStatus: 'Offline',
-      image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&h=150&q=80',
-      tripsHistory: [
-        { id: 'RIDE-12', date: 'April 02', route: 'Limann Hall → Main Gate', driver: 'E. Boateng', state: 'CANCELED' }
-      ],
-      feedbackHistory: [
-        { rating: 1, comment: 'Driver canceled without calling.', date: 'April 02' }
-      ],
-      reportsHistory: [
-        { type: 'Cash Fare Dispute', reporter: 'Driver E. Boateng', date: 'April 02', details: 'Rider refused to pay full standard fare surcharge upon arrival at Limann Hall gateway segment.' },
-        { type: 'Abusive Language', reporter: 'Driver S. Addo', date: 'March 24', details: 'Argument over vehicle pickup location marker choice.' }
-      ]
-    }
-  ])
-
-  const [selectedStudent, setSelectedStudent] = useState(studentsData[0])
-
+  // 1. 💡 BACKEND TODO: Implement Paginated User Records & Metrics Aggregation Loaders
   useEffect(() => {
-    // 💡 BACKEND TODO: Link endpoint data loaders here.
-  }, [])
+    const fetchDirectoryState = async () => {
+      try {
+        setLoading(true)
+        // const [metricsRes, directoryRes] = await Promise.all([
+        //   axios.get('/api/v1/admin/users/metrics-summary'),
+        //   axios.get(`/api/v1/admin/users?query=${searchQuery}`)
+        // ])
+
+        setMetrics([
+          { id: 1, label: 'Total Accounts', value: '5,420', change: '↑ +12% from last month', icon: Users, color: '#1E3A8A', bg: '#DBEAFE', trendColor: '#15803D' },
+          { id: 2, label: 'Active Today', value: '1,890', change: '● Live Activity', icon: UserCheck, color: '#1E3A8A', bg: '#DCFCE7', trendColor: '#15803D' },
+          { id: 3, label: 'New Registrations', value: '45', change: 'Past 24 hours', icon: UserPlus, color: '#1E3A8A', bg: '#EFF6FF', trendColor: '#64748B' },
+          { id: 4, label: 'Flagged Accounts', value: '12', change: 'Requires Attention', icon: AlertTriangle, color: '#991B1B', bg: '#FEE2E2', trendColor: '#991B1B' }
+        ])
+
+        const stagingMockDirectory = [
+          { 
+            id: '#CR-2823-8842', userType: 'STUDENT', name: 'Alex Johnson', email: 'alex.j@st.ug.edu.gh', regDate: 'Sept 12, 2025', rideCount: 42, status: 'ACTIVE', phone: '+233 24 556 7891', residence: 'Jean Nelson Aka Hall', rideStatus: 'In Transit', image: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=150&h=150&q=80',
+            tripsHistory: [{ id: 'RIDE-78', date: 'June 15', route: 'Pent Hall → Main Gate', driver: 'E. Boateng', state: 'COMPLETED' }, { id: 'RIDE-62', date: 'June 12', route: 'Balme Library → Night Market', driver: 'K. Mensah', state: 'COMPLETED' }, { id: 'RIDE-41', date: 'June 10', route: 'Main Gate → Volta Hall', driver: 'S. Addo', state: 'CANCELED' }],
+            feedbackHistory: [{ rating: 5, comment: 'Very polite driver, clean car.', date: 'June 15' }, { rating: 2, comment: 'Driver took a long route to bypass traffic.', date: 'June 12' }],
+            reportsHistory: [{ type: 'Late for Pickup', reporter: 'Driver K. Mensah', date: 'June 12', details: 'Rider kept vehicle waiting at Balme Library loading zone for over 8 minutes.' }]
+          },
+          { 
+            id: '#CR-GUEST-0931', userType: 'GUEST', name: 'Michael Thompson', email: 'm.thompson92@gmail.com', regDate: 'Sep 05, 2025', rideCount: 14, status: 'ACTIVE', phone: '+233 50 441 0293', residence: 'External • Off-Campus Visitor', rideStatus: 'Offline', image: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150&q=80',
+            tripsHistory: [{ id: 'RIDE-69', date: 'June 14', route: 'Main Gate → Night Market', driver: 'S. Addo', state: 'COMPLETED' }],
+            feedbackHistory: [{ rating: 4, comment: 'Good dynamic drive around campus.', date: 'June 14' }],
+            reportsHistory: []
+          },
+          {
+            id: '#CR-2823-4412', userType: 'STUDENT', name: 'David Chen', email: 'd.chen@st.ug.edu.gh', regDate: 'Oct 15, 2025', rideCount: 2, status: 'FLAGGED', phone: '+233 27 987 6543', residence: 'Limann Hall', rideStatus: 'Offline', image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&h=150&q=80',
+            tripsHistory: [{ id: 'RIDE-12', date: 'April 02', route: 'Limann Hall → Main Gate', driver: 'E. Boateng', state: 'CANCELED' }],
+            feedbackHistory: [{ rating: 1, comment: 'Driver canceled without calling.', date: 'April 02' }],
+            reportsHistory: [{ type: 'Cash Fare Dispute', reporter: 'Driver E. Boateng', date: 'April 02', details: 'Rider refused to pay full standard fare surcharge upon arrival at Limann Hall gateway segment.' }, { type: 'Abusive Language', reporter: 'Driver S. Addo', date: 'March 24', details: 'Argument over vehicle pickup location marker choice.' }]
+          }
+        ]
+
+        setStudentsData(stagingMockDirectory)
+        setSelectedStudent(stagingMockDirectory[0])
+      } catch (err) {
+        console.error("Critical core error loading user directory payload lines:", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchDirectoryState()
+  }, [searchQuery])
+
+  // 2. 💡 BACKEND TODO: Connect Direct Action Mutators to REST Router Targets
+  const handleAccountAction = async (targetId, actionProtocol) => {
+    try {
+      // await axios.patch(`/api/v1/admin/users/${targetId}/status`, { action: actionProtocol })
+      console.log(`Dispatched enforcement rule [${actionProtocol.toUpperCase()}] targeting ID: ${targetId}`)
+
+      setStudentsData(prev => prev.map(user => {
+        if (user.id === targetId) {
+          return { ...user, status: actionProtocol === 'suspend' ? 'FLAGGED' : user.status }
+        }
+        return user
+      }))
+    } catch (err) {
+      console.error("Enforcement state tracking error:", err)
+    }
+  }
 
   const getStatusStyle = (status) => {
     switch (status) {
@@ -118,9 +101,17 @@ export default function UserDirectoryScreen() {
     }
   }
 
+  if (loading) {
+    return (
+      <div style={smStyles.loadingWrapperContainerFrame}>
+        <span style={smStyles.loadingText}>Hydrating Platform Directories...</span>
+      </div>
+    )
+  }
+
   return (
     <div style={smStyles.workspaceWrapperContainer}>
-      
+
       {/* 1. UPPER OVERVIEW METRICS GRID */}
       <div style={smStyles.metricsGrid}>
         {metrics.map((card) => {
@@ -144,7 +135,7 @@ export default function UserDirectoryScreen() {
 
       {/* 2. MIDDLE ROW CANVAS: SPLIT TABLE & HISTORICAL INSPECTOR */}
       <div style={smStyles.splitContentRowCanvas}>
-        
+
         {/* LEFT CANVAS COMPONENT: USER DIRECTORY TABLE */}
         <div style={smStyles.leftWorkspaceMainColumn}>
           <div style={smStyles.tableContainerCard}>
@@ -153,7 +144,13 @@ export default function UserDirectoryScreen() {
               <div style={smStyles.tableHeaderToolbarActionCluster}>
                 <div style={smStyles.tableCardInlineSearchBar}>
                   <Search size={14} color="#94A3B8" />
-                  <input type="text" placeholder="Search name, email, identifier ID..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={smStyles.tableCardSearchInputField} />
+                  <input 
+                    type="text" 
+                    placeholder="Search name, email, identifier ID..." 
+                    value={searchQuery} 
+                    onChange={(e) => setSearchQuery(e.target.value)} 
+                    style={smStyles.tableCardSearchInputField} 
+                  />
                 </div>
               </div>
             </div>
@@ -174,7 +171,15 @@ export default function UserDirectoryScreen() {
                   {studentsData.map((user) => {
                     const isSelected = selectedStudent && selectedStudent.id === user.id
                     return (
-                      <tr key={user.id} style={{ ...smStyles.tableDataRowMarkup, backgroundColor: isSelected ? '#F8FAFC' : 'transparent', borderLeft: isSelected ? '4px solid #1E3A8A' : '4px solid transparent' }} onClick={() => { setSelectedStudent(user); setActiveInspectorTab('info'); }}>
+                      <tr 
+                        key={user.id} 
+                        style={{ 
+                          ...smStyles.tableDataRowMarkup, 
+                          backgroundColor: isSelected ? '#F8FAFC' : 'transparent', 
+                          borderLeft: isSelected ? '4px solid #1E3A8A' : '4px solid transparent' 
+                        }} 
+                        onClick={() => { setSelectedStudent(user); setActiveInspectorTab('info'); }}
+                      >
                         <td style={{ ...smStyles.tdNameCellMarkup, paddingLeft: isSelected ? '20px' : '24px' }}>
                           <div style={smStyles.avatarContainerNodeRelative}>
                             <img src={user.image} alt={user.name} style={smStyles.tableRowAvatarImage} />
@@ -201,15 +206,19 @@ export default function UserDirectoryScreen() {
                             <span style={smStyles.rideVolumeTextCounterLabel}>{user.rideCount} rides</span>
                           </div>
                         </td>
-                        <td style={{ ...smStyles.tdStandardDataText, textAlign: 'center' }}><span style={{ ...smStyles.statusBadgeIndicatorPill, ...getStatusStyle(user.status) }}>{user.status}</span></td>
-                        <td style={{ ...smStyles.tdStandardDataText, textAlign: 'right', paddingRight: '24px' }}><span style={smStyles.tableInteractiveInlineActionTextBtn}>Inspect</span></td>
+                        <td style={{ ...smStyles.tdStandardDataText, textAlign: 'center' }}>
+                          <span style={{ ...smStyles.statusBadgeIndicatorPill, ...getStatusStyle(user.status) }}>{user.status}</span>
+                        </td>
+                        <td style={{ ...smStyles.tdStandardDataText, textAlign: 'right', paddingRight: '24px' }}>
+                          <span style={smStyles.tableInteractiveInlineActionTextBtn}>Inspect</span>
+                        </td>
                       </tr>
                     )
                   })}
                 </tbody>
               </table>
             </div>
-            
+
             <div style={smStyles.tableFooterPaginationRow}>
               <div style={smStyles.tableFooterCount}>Showing {studentsData.length} of 5,420 profiles</div>
               <div style={smStyles.paginationButtonCluster}>
@@ -224,7 +233,7 @@ export default function UserDirectoryScreen() {
         <div style={smStyles.rightWorkspaceReviewInspectorSidebarPanel}>
           {selectedStudent ? (
             <div style={smStyles.inspectorSidebarInternalContentFlexContainer}>
-              
+
               {/* Profile Card Header Summary */}
               <div style={smStyles.inspectorHeaderProfileSummaryBlock}>
                 <img src={selectedStudent.image} alt={selectedStudent.name} style={smStyles.inspectorProfileAvatarMainImage} />
@@ -242,7 +251,7 @@ export default function UserDirectoryScreen() {
 
               {/* Content Viewport Stacks */}
               <div style={smStyles.historyScrollContainerViewport}>
-                
+
                 {activeInspectorTab === 'info' && (
                   <div style={smStyles.tabContentBlock}>
                     <h4 style={smStyles.inspectorSegmentGroupHeadingTitleText}>CONTACT DETAILS</h4>
@@ -302,20 +311,23 @@ export default function UserDirectoryScreen() {
 
               {/* Administrative Security Control Block */}
               <div style={smStyles.inspectorSidebarFooterActionToolbarButtonCluster}>
-                <button style={smStyles.inspectorSidebarMessageActionButton}><Send size={14} /> Send Warning Notice</button>
-                <button style={smStyles.inspectorSidebarSuspendAccountActionButton}><Ban size={14} /> Suspend Rider Access</button>
+                <button style={smStyles.inspectorSidebarMessageActionButton} onClick={() => handleAccountAction(selectedStudent.id, 'warn')}><Send size={14} /> Send Warning Notice</button>
+                <button style={smStyles.inspectorSidebarSuspendAccountActionButton} onClick={() => handleAccountAction(selectedStudent.id, 'suspend')}><Ban size={14} /> Suspend Rider Access</button>
               </div>
             </div>
           ) : (
-            <div style={smStyles.inspectorSidebarEmptyStateContainerFallbackBox}><h4>No Profile Selected</h4></div>
+            <div style={smStyles.inspectorSidebarEmptyStateContainerFallbackBox}>
+              <h4 style={smStyles.emptyFallbackItalicMessageText}>Select an active directory profile entry to load structural logs blueprint summaries.</h4>
+            </div>
           )}
         </div>
+
       </div>
     </div>
   )
 }
 
-// ── DEFINED COMPILER SAFE STYLESHEET MATRIX ──────────────────────────────────
+// ── DOUBLE-SPACE INDENTED STYLESHEET MATRIX ──────────────────────────────────
 const smStyles = {
   workspaceWrapperContainer: { 
     display: 'flex', 
@@ -654,9 +666,9 @@ const smStyles = {
     borderBottom: '1px solid #E2E8F0', 
     paddingBottom: '2px', 
     gap: '12px', 
-    marginBottom: '16px',
-    width: '100%',
-    justifyContent: 'space-between'
+    marginBottom: '16px', 
+    width: '100%', 
+    justifyContent: 'space-between' 
   },
   historyTabBtn: { 
     background: 'none', 
@@ -776,16 +788,24 @@ const smStyles = {
   incidentFilerAuthorLabel: { 
     fontSize: '10px', 
     color: '#94A3B8', 
-    fontWeight: 700, 
     textTransform: 'uppercase', 
-    letterSpacing: '0.3px' 
+    letterSpacing: '0.3px', 
+    fontWeight: 700 
+  },
+  emptySidebarFallbackContainerBox: { 
+    display: 'flex', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    height: '100%', 
+    width: '100%' 
   },
   emptyFallbackItalicMessageText: { 
     fontSize: '12px', 
     color: '#64748B', 
     fontWeight: 500, 
     fontStyle: 'italic', 
-    lineHeight: '1.5' 
+    lineHeight: '1.5', 
+    textAlign: 'center' 
   },
   inspectorSidebarFooterActionToolbarButtonCluster: { 
     display: 'flex', 
@@ -807,7 +827,8 @@ const smStyles = {
     display: 'flex', 
     alignItems: 'center', 
     justifyContent: 'center', 
-    gap: '8px' 
+    gap: '8px', 
+    outline: 'none' 
   },
   inspectorSidebarSuspendAccountActionButton: { 
     width: '100%', 
@@ -822,15 +843,19 @@ const smStyles = {
     display: 'flex', 
     alignItems: 'center', 
     justifyContent: 'center', 
-    gap: '8px' 
+    gap: '8px', 
+    outline: 'none' 
   },
-  inspectorSidebarEmptyStateContainerFallbackBox: { 
+  loadingWrapperContainerFrame: { 
     display: 'flex', 
-    flexDirection: 'column', 
     alignItems: 'center', 
     justifyContent: 'center', 
-    textAlign: 'center', 
-    height: '100%', 
+    height: '75vh', 
     width: '100%' 
+  },
+  loadingText: { 
+    fontSize: '14px', 
+    color: '#1E3A8A', 
+    fontWeight: 700 
   }
 }
