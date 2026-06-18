@@ -13,13 +13,13 @@ const NAV_ITEMS = [
   { id: 'dashboard',           label: 'Dashboard',           icon: LayoutDashboard },
   { id: 'trips',               label: 'Trips',               icon: Car },
   { id: 'driver-verification', label: 'Driver Verification', icon: ShieldCheck },
-  { id: 'user-directory',      label: 'User Directory',      icon: Users }, // 🌟 Updated ID key to match new polymorphism architecture
+  { id: 'user-directory',      label: 'User Directory',      icon: Users }, 
   { id: 'analytics',           label: 'Analytics',           icon: BarChart3 },
   { id: 'notifications',       label: 'Notifications',       icon: Bell },
   { id: 'settings',            label: 'Settings',            icon: Settings },
 ]
 
-const Sidebar = ({ activePage = 'dashboard', onNavigate }) => {
+export default function Sidebar({ activePage = 'dashboard', onNavigate }) {
   const [hoveredItemId, setHoveredItemId] = useState(null)
   const [isProfileHovered, setIsProfileHovered] = useState(false)
 
@@ -31,7 +31,7 @@ const Sidebar = ({ activePage = 'dashboard', onNavigate }) => {
         <span style={styles.brandSub}>ADMIN PORTAL</span>
       </div>
 
-      {/* Navigation Options Links stack */}
+      {/* Navigation Options Links Stack */}
       <nav style={styles.nav}>
         {NAV_ITEMS.map((item) => {
           const active = activePage === item.id
@@ -79,13 +79,13 @@ const Sidebar = ({ activePage = 'dashboard', onNavigate }) => {
       </nav>
 
       {/* USER PROFILE SECTION */}
-      {/* 💡 BACKEND TODO: Authenticated Admin Session - Fetch active admin credentials to dynamically render profile details */}
+      {/* 💡 BACKEND TODO: Fetch authenticated session credentials to render dynamic avatar profiles */}
       <button 
         style={{ 
           ...styles.adminSectionButton,
           backgroundColor: isProfileHovered ? '#F1F5F9' : 'transparent'
         }}
-        onClick={() => onNavigate?.('admin-profile')}
+        onClick={() => onNavigate?.('settings')} // 🌟 Routes straight to the core Settings tab layout
         onMouseEnter={() => setIsProfileHovered(true)}
         onMouseLeave={() => setIsProfileHovered(false)}
       >
@@ -114,17 +114,17 @@ const styles = {
     padding: '24px 24px 16px', 
     display: 'flex', 
     flexDirection: 'column', 
-    gap: 2 
+    gap: '2px' 
   },
   brandName: { 
-    fontSize: 20, 
+    fontSize: '20px', 
     fontWeight: 900, 
     color: '#1E3A8A', 
     letterSpacing: '-0.5px', 
     fontFamily: 'Inter, sans-serif' 
   },
   brandSub: { 
-    fontSize: 9, 
+    fontSize: '9px', 
     fontWeight: 800, 
     color: '#94A3B8', 
     letterSpacing: '1.5px', 
@@ -135,14 +135,14 @@ const styles = {
     display: 'flex', 
     flexDirection: 'column', 
     padding: '8px 12px', 
-    gap: 4 
+    gap: '4px' 
   },
   navItem: { 
     display: 'flex', 
     alignItems: 'center', 
-    gap: 12, 
+    gap: '12px', 
     padding: '10px 14px', 
-    borderRadius: 12, 
+    borderRadius: '12px', 
     border: 'none', 
     cursor: 'pointer', 
     width: '100%', 
@@ -154,7 +154,7 @@ const styles = {
     transition: 'background-color 0.15s ease' 
   },
   navLabel: { 
-    fontSize: 13, 
+    fontSize: '13px', 
     fontFamily: 'Inter, sans-serif',
     transition: 'color 0.15s ease'
   },
@@ -166,7 +166,7 @@ const styles = {
     borderTop: '1px solid #F1F5F9', 
     display: 'flex', 
     alignItems: 'center', 
-    gap: 12,
+    gap: '12px',
     border: 'none',
     width: '100%',
     cursor: 'pointer',
@@ -178,12 +178,12 @@ const styles = {
     transition: 'background-color 0.15s ease'
   },
   adminAvatar: { 
-    width: 36, 
-    height: 36, 
+    width: '36px', 
+    height: '36px', 
     borderRadius: '50%', 
     backgroundColor: '#1E3A8A', 
     color: '#ffffff', 
-    fontSize: 12, 
+    fontSize: '12px', 
     fontWeight: 700, 
     display: 'flex', 
     alignItems: 'center', 
@@ -194,19 +194,17 @@ const styles = {
   adminInfo: { 
     display: 'flex', 
     flexDirection: 'column', 
-    gap: 1, 
+    gap: '1px', 
     overflow: 'hidden' 
   },
   adminName: { 
-    fontSize: 13, 
+    fontSize: '13px', 
     fontWeight: 700, 
     color: '#1E293B' 
   },
   adminRole: { 
-    fontSize: 10, 
+    fontSize: '10px', 
     fontWeight: 500, 
     color: '#94A3B8' 
   },
 }
-
-export default Sidebar

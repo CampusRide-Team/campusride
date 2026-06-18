@@ -4,6 +4,9 @@ import DashboardScreen from './screens/DashboardScreen'
 import DriverVerificationScreen from './screens/VerificationScreen'
 import TripsMonitoringScreen from './screens/TripsMonitoringScreen'
 import StudentsManagementScreen from './screens/UserDirectoryScreen'
+import AnalyticsScreen from './screens/AnalyticsScreen'
+import NotificationsScreen from './screens/NotificationsScreen'
+import SettingsScreen from './screens/SettingsScreen' // 🌟 1. Import the structured settings screen
 import { Search, Bell } from 'lucide-react'
 
 export default function App() {
@@ -26,9 +29,7 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    // 💡 BACKEND TODO:
-    // 1. Initialize master session admin verification checks (`GET /api/v1/auth/verify-session`)
-    // 2. Wrap global context state properties here if distributing auth tokens downwards to children.
+    // 💡 BACKEND TODO: Authenticate global admin sessions here.
   }, [])
 
   return (
@@ -46,7 +47,13 @@ export default function App() {
                 : activePage === 'trips' 
                 ? 'Trips Monitoring' 
                 : activePage === 'user-directory'
-                ? 'User Directory' // 🌟 Matches the updated layout mapping flawlessly
+                ? 'User Directory'
+                : activePage === 'analytics'
+                ? 'Analytics' 
+                : activePage === 'notifications'
+                ? 'Notifications'
+                : activePage === 'settings'
+                ? 'Settings' // 🌟 2. Added header text sync for settings
                 : activePage.replace('-', ' ')}
             </h2>
             <div style={appStyles.searchBar}>
@@ -71,10 +78,14 @@ export default function App() {
           {activePage === 'dashboard' && <DashboardScreen />}
           {activePage === 'driver-verification' && <DriverVerificationScreen />}
           {activePage === 'trips' && <TripsMonitoringScreen />}
-          {activePage === 'user-directory' && <StudentsManagementScreen />} {/* 🌟 Synced active key loop rendering */}
+          {activePage === 'user-directory' && <StudentsManagementScreen />}
+          {activePage === 'analytics' && <AnalyticsScreen />} 
+          {activePage === 'notifications' && <NotificationsScreen />} 
+          {activePage === 'settings' && <SettingsScreen />} {/* 🌟 3. Render Settings component on match */}
           
-          {/* FALLBACK SHELL PREVENTS PAGE COMPILING BLANKS */}
-          {!['dashboard', 'driver-verification', 'trips', 'user-directory'].includes(activePage) && (
+          {/* FALLBACK SAFEGUARD BLOCK */}
+          {/* 🌟 4. Added 'settings' to the array block below to stop the fallback box from triggering */}
+          {!['dashboard', 'driver-verification', 'trips', 'user-directory', 'analytics', 'notifications', 'settings'].includes(activePage) && (
             <div style={appStyles.fallbackBox}>
               <h3 style={appStyles.fallbackTitle}>{activePage.replace('-', ' ')} Shell</h3>
               <p style={appStyles.fallbackDesc}>Global inline framework operating successfully.</p>

@@ -4,10 +4,10 @@ import { Car, UserCheck, Users, ShieldCheck } from 'lucide-react'
 export default function DashboardScreen() {
   // Operational Real-time Metrics State Framework
   const [stats, setStats] = useState([
-    { label: 'Active Trips Now', value: '27', change: '+12%', icon: Car, color: '#1E3A8A', bg: '#F1F5F9', changeColor: '#15803D', changeBg: '#DCFCE7' },
-    { label: 'Drivers Online', value: '128', change: '+5%', icon: UserCheck, color: '#1E3A8A', bg: '#F1F5F9', changeColor: '#15803D', changeBg: '#DCFCE7' },
-    { label: 'Students Registered', value: '4,892', change: '+24%', icon: Users, color: '#1E3A8A', bg: '#F1F5F9', changeColor: '#15803D', changeBg: '#DCFCE7' },
-    { label: 'Pending Verification', value: '3', change: 'Action Req.', icon: ShieldCheck, color: '#991B1B', bg: '#FEE2E2', changeColor: '#991B1B', changeBg: '#FEE2E2' },
+    { label: 'Active Rides Now', value: '27', change: '+12%', icon: Car, color: '#1E3A8A', bg: '#DBEAFE', changeColor: '#15803D' },
+    { label: 'Drivers Online', value: '128', change: '+5%', icon: UserCheck, color: '#1E3A8A', bg: '#DCFCE7', changeColor: '#15803D' },
+    { label: 'Riders Registered', value: '4,892', change: '+24%', icon: Users, color: '#1E3A8A', bg: '#EFF6FF', changeColor: '#15803D' },
+    { label: 'Pending Verification', value: '3', change: 'Action Req.', icon: ShieldCheck, color: '#991B1B', bg: '#FEE2E2', changeColor: '#991B1B' },
   ])
 
   // Driver Leaderboard State Framework
@@ -19,9 +19,9 @@ export default function DashboardScreen() {
 
   // Recent Activity Feed State Framework
   const [recentActivity, setRecentActivity] = useState([
-    { title: 'New Student Signup', desc: 'Julian Vance verified his email route.', time: '2 MINS AGO', circleColor: '#3B82F6' },
-    { title: 'Trip Completed', desc: 'Emmanuel Kofi Boateng finished route Main Gate.', time: '15 MINS AGO', circleColor: '#22C55E' },
-    { title: 'Dispute Flagged', desc: 'Student user reported route 14B delay.', time: '42 MINS AGO', circleColor: '#EF4444' },
+    { title: 'New Rider Signup', desc: 'Julian Vance verified his institutional database token.', time: '2 MINS AGO', circleColor: '#3B82F6' },
+    { title: 'Ride Completed', desc: 'Emmanuel Kofi Boateng reached Main Gate terminal cluster.', time: '15 MINS AGO', circleColor: '#22C55E' },
+    { title: 'Dispute Flagged', desc: 'Rider passenger submitted delay alert entry for Ride #78.', time: '42 MINS AGO', circleColor: '#EF4444' },
   ])
 
   // Weekly Analytic Volume State Framework
@@ -29,10 +29,7 @@ export default function DashboardScreen() {
 
   useEffect(() => {
     // 💡 BACKEND TODO: 
-    // 1. Fetch live analytical metrics via HTTP GET to `/api/v1/admin/dashboard-stats`
-    // 2. Fetch driver leaderboard array via HTTP GET to `/api/v1/admin/drivers/leaderboard`
-    // 3. Fetch weekly analytic volumes array via HTTP GET to `/api/v1/admin/analytics/trip-volume`
-    // 4. Connect WebSockets/Socket.io to listen to channel `activity-log-stream` and append real-time objects to `recentActivity` state.
+    // Fetch system configurations from database endpoints via GET routes when live.
   }, [])
 
   return (
@@ -59,7 +56,7 @@ export default function DashboardScreen() {
         })}
       </div>
 
-      {/* 2. MIDDLE AREA: MAP AND RECENT ACTIVITY TIMELINE */}
+      {/* 2. MIDDLE AREA: LIVE RADAR MAP AND ACTIVITY FEED */}
       <div style={styles.middleSection}>
         <div style={styles.mapContainer}>
           <div style={styles.liveLabel}>
@@ -69,28 +66,28 @@ export default function DashboardScreen() {
           <div style={styles.mapVisualFrame}>
             <div style={styles.mapGridLineHorizontal} />
             <div style={styles.mapGridLineVertical} />
-            <div style={{ ...styles.liveDriverNode, top: '35%', left: '25%', backgroundColor: '#22C55E' }} />
-            <div style={{ ...styles.liveDriverNode, top: '60%', left: '70%', backgroundColor: '#2563EB' }} />
-            <div style={{ ...styles.liveDriverNode, top: '20%', left: '55%', backgroundColor: '#EF4444' }} />
+            <div style={styles.liveDriverNodeGreen} />
+            <div style={styles.liveDriverNodeBlue} />
+            <div style={styles.liveDriverNodeRed} />
           </div>
           
           <div style={styles.mapLegendBox}>
             <div style={styles.legendItem}>
-              <span style={{ ...styles.dot, backgroundColor: '#22C55E' }} /> Available Drivers
+              <span style={styles.legendDotGreen} /> Available Drivers
             </div>
             <div style={styles.legendItem}>
-              <span style={{ ...styles.dot, backgroundColor: '#2563EB' }} /> Trips In Progress
+              <span style={styles.legendDotBlue} /> Rides In Progress
             </div>
             <div style={styles.legendItem}>
-              <span style={{ ...styles.dot, backgroundColor: '#EF4444' }} /> High Demand Zones
+              <span style={styles.legendDotRed} /> High Demand Zones
             </div>
           </div>
         </div>
 
-        {/* Flush-Left Recent Activity Container */}
+        {/* Recent Activity Panel */}
         <div style={styles.activityPanel}>
           <div style={styles.panelHeader}>
-            <h3 style={styles.panelTitle}>Recent Activity</h3>
+            <h3 style={styles.panelTitle}>Recent Activity Feed</h3>
             <span style={styles.viewAllBtn}>VIEW ALL</span>
           </div>
           <div style={styles.activityList}>
@@ -108,19 +105,19 @@ export default function DashboardScreen() {
         </div>
       </div>
 
-      {/* 3. BOTTOM AREA: LEADERBOARD AND TRIP VOLUMES */}
+      {/* 3. BOTTOM AREA: PERFORMANCE LEADERBOARD AND CHART */}
       <div style={styles.bottomSection}>
         <div style={styles.tableCard}>
           <div style={styles.panelHeader}>
-            <h3 style={styles.panelTitle}>Top Drivers This Week</h3>
+            <h3 style={styles.panelTitle}>Top Operators This Week</h3>
             <span style={styles.weekBadge}>WEEK 42</span>
           </div>
           <table style={styles.table}>
             <thead>
               <tr>
-                <th style={{ ...styles.th, textAlign: 'left' }}>DRIVER</th>
-                <th style={{ ...styles.th, textAlign: 'center' }}>RATING</th>
-                <th style={{ ...styles.th, textAlign: 'right' }}>TOTAL TRIPS</th>
+                <th style={styles.thLeftAlign}>DRIVER OPERATOR</th>
+                <th style={styles.thCenterAlign}>PERFORMANCE RATING</th>
+                <th style={styles.thRightAlign}>COMPLETED RIDES</th>
               </tr>
             </thead>
             <tbody>
@@ -140,7 +137,7 @@ export default function DashboardScreen() {
 
         <div style={styles.chartCard}>
           <div style={styles.panelHeader}>
-            <h3 style={styles.panelTitle}>Trip Volume</h3>
+            <h3 style={styles.panelTitle}>Ride Volume Performance</h3>
             <span style={styles.weekBadge}>LAST 7 DAYS</span>
           </div>
           <div style={styles.chartTrack}>
@@ -158,13 +155,12 @@ export default function DashboardScreen() {
   )
 }
 
-// ── ARRANGED MASTER STYLE SHEET SHEET WITH DOUBLE SPACE INDENTS ──────────────
+// ── ARRANGED MASTER STYLE SHEET MATRIX ───────────────────────────────────────
 const styles = {
   container: {
     display: 'flex',
     flexDirection: 'column',
     gap: '24px',
-    fontFamily: '"Inter", sans-serif',
     width: '100%',
     boxSizing: 'border-box'
   },
@@ -176,13 +172,15 @@ const styles = {
   },
   middleSection: {
     display: 'flex',
-    gap: '20px',
-    minHeight: '340px'
+    gap: '32px',
+    minHeight: '340px',
+    alignItems: 'stretch'
   },
   bottomSection: {
     display: 'flex',
-    gap: '24px',
-    minHeight: '240px'
+    gap: '32px',
+    minHeight: '240px',
+    alignItems: 'stretch'
   },
   statCard: {
     backgroundColor: '#ffffff',
@@ -262,12 +260,35 @@ const styles = {
     height: '100%',
     borderLeft: '1px dashed rgba(30, 41, 59, 0.4)'
   },
-  liveDriverNode: {
+  liveDriverNodeGreen: {
     position: 'absolute',
     width: '8px',
     height: '8px',
     borderRadius: '50%',
-    boxShadow: '0 0 12px currentColor'
+    top: '35%',
+    left: '25%',
+    backgroundColor: '#22C55E',
+    boxShadow: '0 0 12px #22C55E'
+  },
+  liveDriverNodeBlue: {
+    position: 'absolute',
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    top: '60%',
+    left: '70%',
+    backgroundColor: '#2563EB',
+    boxShadow: '0 0 12px #2563EB'
+  },
+  liveDriverNodeRed: {
+    position: 'absolute',
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    top: '20%',
+    left: '55%',
+    backgroundColor: '#EF4444',
+    boxShadow: '0 0 12px #EF4444'
   },
   liveLabel: {
     backgroundColor: 'rgba(15, 23, 42, 0.75)',
@@ -309,10 +330,23 @@ const styles = {
     alignItems: 'center',
     gap: '8px'
   },
-  dot: {
+  legendDotGreen: {
     width: '6px',
     height: '6px',
-    borderRadius: '50%'
+    borderRadius: '50%',
+    backgroundColor: '#22C55E'
+  },
+  legendDotBlue: {
+    width: '6px',
+    height: '6px',
+    borderRadius: '50%',
+    backgroundColor: '#2563EB'
+  },
+  legendDotRed: {
+    width: '6px',
+    height: '6px',
+    borderRadius: '50%',
+    backgroundColor: '#EF4444'
   },
   activityPanel: {
     backgroundColor: '#ffffff',
@@ -322,7 +356,8 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     flex: 1,
-    boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+    boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+    boxSizing: 'border-box'
   },
   panelHeader: {
     display: 'flex',
@@ -392,7 +427,8 @@ const styles = {
     borderRadius: '20px',
     padding: '20px',
     flex: 3,
-    boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+    boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+    boxSizing: 'border-box'
   },
   weekBadge: {
     fontSize: '10px',
@@ -406,13 +442,32 @@ const styles = {
     width: '100%',
     borderCollapse: 'collapse'
   },
-  th: {
+  thLeftAlign: {
     paddingBottom: '12px',
     fontSize: '11px',
     fontWeight: 700,
     color: '#94A3B8',
     borderBottom: '1px solid #F1F5F9',
-    letterSpacing: '0.5px'
+    letterSpacing: '0.5px',
+    textAlign: 'left'
+  },
+  thCenterAlign: {
+    paddingBottom: '12px',
+    fontSize: '11px',
+    fontWeight: 700,
+    color: '#94A3B8',
+    borderBottom: '1px solid #F1F5F9',
+    letterSpacing: '0.5px',
+    textAlign: 'center'
+  },
+  thRightAlign: {
+    paddingBottom: '12px',
+    fontSize: '11px',
+    fontWeight: 700,
+    color: '#94A3B8',
+    borderBottom: '1px solid #F1F5F9',
+    letterSpacing: '0.5px',
+    textAlign: 'right'
   },
   tableRow: {
     borderBottom: '1px solid #F1F5F9'
@@ -464,7 +519,8 @@ const styles = {
     flexDirection: 'column',
     justifyContent: 'space-between',
     flex: 2,
-    boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+    boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+    boxSizing: 'border-box'
   },
   chartTrack: {
     height: '140px',
