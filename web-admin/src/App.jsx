@@ -6,12 +6,16 @@ import TripsMonitoringScreen from './screens/TripsMonitoringScreen'
 import StudentsManagementScreen from './screens/UserDirectoryScreen'
 import AnalyticsScreen from './screens/AnalyticsScreen'
 import NotificationsScreen from './screens/NotificationsScreen'
-import SettingsScreen from './screens/SettingsScreen' // 🌟 1. Import the structured settings screen
+import SettingsScreen from './screens/SettingsScreen'
+import AdminProfileScreen from './screens/AdminProfileScreen'
+import LoginScreen from './screens/LoginScreen' // 🌟 1. Imported the gateway security checkpoint component
 import { Search, Bell } from 'lucide-react'
 
 export default function App() {
   const [activePage, setActivePage] = useState('dashboard')
   const [currentDateTime, setCurrentDateTime] = useState('')
+  const [sessionLoading, setSessionLoading] = useState(true)
+  const [isAuthenticated, setIsAuthenticated] = useState(false) // 🌟 2. Added master state tracker to gate portal access
 
   // Dynamic Real-Time Status Clock Update Loop
   useEffect(() => {
@@ -28,15 +32,46 @@ export default function App() {
     return () => clearInterval(timerInterval)
   }, [])
 
+  // 1. 💡 BACKEND TODO: Enforce Global Administrative Session Guard Verification
   useEffect(() => {
-    // 💡 BACKEND TODO: Authenticate global admin sessions here.
+    const verifyAdminSessionToken = async () => {
+      try {
+        setSessionLoading(true)
+
+        // 💡 BACKEND PRODUCTION ROUTE: Check cookie token context on initial hydration mount
+        // const response = await fetch('/api/v1/auth/verify-session')
+        // if (response.ok) { setIsAuthenticated(true) }
+
+        // Staging Framework Toggle (Auto-resolves loading state to expose login screen)
+        setIsAuthenticated(false) 
+      } catch (err) {
+        console.error("Unauthorized administrative intercept. Redirecting to login session.", err)
+      } finally {
+        setSessionLoading(false)
+      }
+    }
+
+    verifyAdminSessionToken()
   }, [])
+
+  if (sessionLoading) {
+    return (
+      <div style={appStyles.appFrameLoading}>
+        <span style={appStyles.loadingTextFont}>Authorizing Secure Session Handshake Tokens...</span>
+      </div>
+    )
+  }
+
+  // 🔒 GATING INTERCEPT: Deflect session tracking pathways down to login mask if unverified
+  if (!isAuthenticated) {
+    return <LoginScreen onLoginSuccess={() => setIsAuthenticated(true)} />
+  }
 
   return (
     <div style={appStyles.appFrame}>
       {/* GLOBAL LEFT SIDEBAR NAVIGATION */}
       <Sidebar activePage={activePage} onNavigate={setActivePage} />
-      
+
       {/* MAIN CONTENT VIEWPORT */}
       <main style={appStyles.mainViewport}>
         <header style={appStyles.header}>
@@ -53,7 +88,9 @@ export default function App() {
                 : activePage === 'notifications'
                 ? 'Notifications'
                 : activePage === 'settings'
-                ? 'Settings' // 🌟 2. Added header text sync for settings
+                ? 'Settings'
+                : activePage === 'admin-profile'
+                ? 'Admin Profile' 
                 : activePage.replace('-', ' ')}
             </h2>
             <div style={appStyles.searchBar}>
@@ -61,18 +98,18 @@ export default function App() {
               <input type="text" placeholder="Search trips, drivers, users..." style={appStyles.searchInput} />
             </div>
           </div>
-          
+
           <div style={appStyles.headerRightContainer}>
             <div style={appStyles.dateBlock}>
               <p style={appStyles.dateLabel}>TODAY'S DATE</p>
               <p style={appStyles.dateValue}>{currentDateTime || 'Loading live time...'}</p>
             </div>
-            <button style={appStyles.bellButton}>
+            <button style={appStyles.bellButton} onClick={() => setActivePage('notifications')} aria-label="Open Alerts Feed View">
               <Bell size={16} strokeWidth={2.5} color="#64748B" />
             </button>
           </div>
         </header>
-        
+
         {/* INNER SCREEN CANVAS FRAME LAYER */}
         <div style={appStyles.contentCanvas}>
           {activePage === 'dashboard' && <DashboardScreen />}
@@ -81,11 +118,11 @@ export default function App() {
           {activePage === 'user-directory' && <StudentsManagementScreen />}
           {activePage === 'analytics' && <AnalyticsScreen />} 
           {activePage === 'notifications' && <NotificationsScreen />} 
-          {activePage === 'settings' && <SettingsScreen />} {/* 🌟 3. Render Settings component on match */}
-          
+          {activePage === 'settings' && <SettingsScreen />}
+          {activePage === 'admin-profile' && <AdminProfileScreen />}
+
           {/* FALLBACK SAFEGUARD BLOCK */}
-          {/* 🌟 4. Added 'settings' to the array block below to stop the fallback box from triggering */}
-          {!['dashboard', 'driver-verification', 'trips', 'user-directory', 'analytics', 'notifications', 'settings'].includes(activePage) && (
+          {!['dashboard', 'driver-verification', 'trips', 'user-directory', 'analytics', 'notifications', 'settings', 'admin-profile'].includes(activePage) && (
             <div style={appStyles.fallbackBox}>
               <h3 style={appStyles.fallbackTitle}>{activePage.replace('-', ' ')} Shell</h3>
               <p style={appStyles.fallbackDesc}>Global inline framework operating successfully.</p>
@@ -111,6 +148,20 @@ const appStyles = {
     padding: 0,
     boxSizing: 'border-box'
   },
+  appFrameLoading: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '100vh',
+    width: '100vw',
+    backgroundColor: '#F8FAFC'
+  },
+  loadingTextFont: {
+    fontSize: '14px',
+    color: '#1E3A8A',
+    fontWeight: 700,
+    fontFamily: 'Inter, sans-serif'
+  },
   bellButton: {
     height: '32px',
     width: '32px',
@@ -120,7 +171,9 @@ const appStyles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    cursor: 'pointer'
+    cursor: 'pointer',
+    outline: 'none',
+    boxShadow: 'none'
   },
   contentCanvas: {
     flex: 1,

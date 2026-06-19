@@ -6,34 +6,49 @@ import {
   Palette, 
   AlertTriangle, 
   ChevronDown,
-  RefreshCw
+  RefreshCw,
+  LogOut
 } from 'lucide-react'
 
-export default function SettingsScreen() {
+export default function SettingsScreen({ onLogout }) {
   const [loading, setLoading] = useState(false)
 
-  // 1. System Preferences Configurations
-  const [platformName, setPlatformName] = useState('CampusRide Admin Portal')
+  // 1. System Preferences Configurations States
+  const [platformName, setPlatformName] = useState('')
   const [operatingHours, setOperatingHours] = useState('06:00 AM - 11:59 PM')
   const [rideRadius, setRideRadius] = useState('5 Miles')
   const [enableRideNotifications, setEnableRideNotifications] = useState(true)
 
-  // 2. Security Configuration Vectors
+  // 2. Security Configuration Vectors States
   const [twoFactorAuth, setTwoFactorAuth] = useState(false)
   const [sessionTimeout, setSessionTimeout] = useState('30 Minutes of inactivity')
 
-  // 3. System Notification Preferences Toggles
+  // 3. System Notification Preferences Toggles States
   const [driverVerificationAlerts, setDriverVerificationAlerts] = useState(true)
   const [rideActivityAlerts, setRideActivityAlerts] = useState(true)
   const [riderActivityAlerts, setRiderActivityAlerts] = useState(false)
   const [systemMaintenanceAlerts, setSystemMaintenanceAlerts] = useState(true)
 
-  // 4. Portal Appearance Profile
+  // 4. Portal Appearance Profile States
   const [colorTheme, setColorTheme] = useState('light') 
   const [interfaceDensity, setInterfaceDensity] = useState('comfortable') 
 
+  // 💡 BACKEND TODO: Fetch active admin system configuration documents from database
   useEffect(() => {
-    // 💡 BACKEND TODO: Fetch active admin system configuration documents from database
+    const fetchGlobalSettings = async () => {
+      try {
+        setLoading(true)
+        setPlatformName('CampusRide Admin Portal')
+        setOperatingHours('06:00 AM - 11:59 PM')
+        setRideRadius('5 Miles')
+      } catch (err) {
+        console.error("Failed downloading master architecture settings profile:", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchGlobalSettings()
   }, [])
 
   const handleSaveChanges = async () => {
@@ -47,9 +62,17 @@ export default function SettingsScreen() {
     }
   }
 
+  // 💡 BACKEND TODO: Trigger local cookie clearing and dispatch redirect state
+  const handleImmediateLogout = () => {
+    if (!window.confirm("Are you sure you want to end your session and log out of the CampusRide Admin Portal?")) return
+
+    // Clear tokens here (localStorage.removeItem('token'), clear cookies, etc.)
+    onLogout?.()
+  }
+
   return (
     <div style={seStyles.workspaceWrapperContainer}>
-      
+
       {/* HEADER SECTION METADATA */}
       <div style={seStyles.screenHeaderRow}>
         <h2 style={seStyles.screenTitleMainText}>Portal Settings</h2>
@@ -60,17 +83,17 @@ export default function SettingsScreen() {
 
       {/* TWO-COLUMN CONFIGURATION CANVAS GRID */}
       <div style={seStyles.splitContentRowCanvas}>
-        
+
         {/* LEFT COLUMN: PRIMARY PLATFORM OPERATIONS */}
         <div style={seStyles.leftWorkspaceMainColumn}>
-          
+
           {/* SYSTEM PREFERENCES WIDGET CARD */}
           <div style={seStyles.configCardPanel}>
             <div style={seStyles.cardHeaderRow}>
               <Settings size={16} color="#1E3A8A" />
               <h3 style={seStyles.cardBlockTitle}>System Preferences</h3>
             </div>
-            
+
             <div style={seStyles.formFieldGroupStack}>
               <div style={seStyles.inputUnitBlock}>
                 <label style={seStyles.inputLabelFieldTitle}>Platform Name</label>
@@ -136,7 +159,7 @@ export default function SettingsScreen() {
               <Shield size={16} color="#1E3A8A" />
               <h3 style={seStyles.cardBlockTitle}>Security Settings</h3>
             </div>
-            
+
             <div style={seStyles.formFieldGroupStack}>
               <div style={seStyles.interactiveToggleRowStrip}>
                 <div style={seStyles.toggleTextStackedGroup}>
@@ -181,14 +204,14 @@ export default function SettingsScreen() {
 
         {/* RIGHT COLUMN: WEBHOOK & VISUAL PRESENTATION RULES */}
         <div style={seStyles.rightWorkspaceSidebarPanel}>
-          
+
           {/* NOTIFICATION PREFERENCES */}
           <div style={seStyles.configCardPanel}>
             <div style={seStyles.cardHeaderRow}>
               <Bell size={16} color="#1E3A8A" />
               <h3 style={seStyles.cardBlockTitle}>Notification Preferences</h3>
             </div>
-            
+
             <div style={seStyles.verticalTogglesStackContainer}>
               <div style={seStyles.compactToggleInlineRow}>
                 <span style={seStyles.compactToggleTitleLabelText}>Driver Verification Alerts</span>
@@ -238,7 +261,7 @@ export default function SettingsScreen() {
               <Palette size={16} color="#1E3A8A" />
               <h3 style={seStyles.cardBlockTitle}>Appearance</h3>
             </div>
-            
+
             <div style={seStyles.verticalTogglesStackContainer}>
               <div style={seStyles.radioControlGroupBlock}>
                 <span style={seStyles.compactToggleTitleLabelText}>Color Theme</span>
@@ -291,9 +314,12 @@ export default function SettingsScreen() {
           </div>
           <p style={seStyles.dangerParagraphSupportingExplanationBodyText}>Irreversible global infrastructure data actions. Exercising caution remains strongly advised profile wide.</p>
         </div>
-        
+
         <div style={seStyles.dangerButtonsClusterRowAlignContainer}>
-          <button style={seStyles.dangerSecondaryActionButtonMarkup}>Logout all sessions</button>
+          {/* 🌟 REDESIGNED POWER COMPONENT LAYER: EXPLICIT IMMEDIATE LOCAL ACCOUNT SESSION TERMINATOR */}
+          <button style={seStyles.dangerPrimaryActionButtonMarkup} onClick={handleImmediateLogout}>
+            <LogOut size={12} /> Exit Portal Session
+          </button>
           <button style={seStyles.dangerSecondaryActionButtonMarkup}>Reset System Preferences</button>
         </div>
       </div>
@@ -617,6 +643,21 @@ const seStyles = {
     alignItems: 'center', 
     flexShrink: 0 
   },
+  dangerPrimaryActionButtonMarkup: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    backgroundColor: '#E11D48',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '10px',
+    padding: '10px 16px',
+    fontSize: '12px',
+    fontWeight: 700,
+    cursor: 'pointer',
+    outline: 'none',
+    boxShadow: '0 2px 4px rgba(225,29,72,0.1)'
+  },
   dangerSecondaryActionButtonMarkup: { 
     backgroundColor: '#FEE2E2', 
     color: '#991B1B', 
@@ -664,18 +705,6 @@ const seStyles = {
     fontWeight: 700, 
     cursor: 'pointer', 
     outline: 'none' 
-  },
-  loadingFallbackFrame: { 
-    display: 'flex', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    height: '70vh', 
-    width: '100%' 
-  },
-  loadingSpinnerPlaceholder: { 
-    fontSize: '14px', 
-    color: '#1E3A8A', 
-    fontWeight: 700 
   },
   spinAnimationClassAsset: { 
     animation: 'spin 1s linear infinite' 

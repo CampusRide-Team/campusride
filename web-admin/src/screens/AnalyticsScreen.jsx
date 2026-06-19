@@ -19,9 +19,16 @@ export default function AnalyticsScreen() {
     const fetchAnalyticsData = async () => {
       try {
         setLoading(true)
-        
-        // 💡 BACKEND TODO: Connect REST aggregation queries here
-        
+
+        // 💡 BACKEND TODO: Connect REST cache layer aggregation queries across time-series models
+        // const [summaryRes, zonesRes, performanceRes, distributionRes, overviewRes] = await Promise.all([
+        //   axios.get('/api/v1/admin/analytics/summary'),
+        //   axios.get('/api/v1/admin/analytics/popular-hubs'),
+        //   axios.get('/api/v1/admin/analytics/driver-performance'),
+        //   axios.get('/api/v1/admin/analytics/trip-distribution'),
+        //   axios.get('/api/v1/admin/analytics/rider-overview')
+        // ])
+
         setMetrics([
           { id: 1, label: 'Total Trips This Week', value: '945', change: '+2.7%', icon: <BarChart3 size={18} color="#1E3A8A" />, bg: '#DBEAFE' },
           { id: 2, label: 'Peak Demand Hours', value: '08:00 - 09:30 AM', change: 'Daily Average', icon: <Clock size={18} color="#1E3A8A" />, bg: '#EFF6FF' },
@@ -78,7 +85,7 @@ export default function AnalyticsScreen() {
 
   return (
     <div style={anStyles.workspaceWrapperContainer}>
-      
+
       {/* HEADER SECTION */}
       <div style={anStyles.screenHeaderRow}>
         <h2 style={anStyles.screenTitleMainText}>Analytics Overview</h2>
@@ -103,7 +110,7 @@ export default function AnalyticsScreen() {
 
       {/* 2. MIDDLE AREA CANVAS */}
       <div style={anStyles.splitContentRowCanvas}>
-        
+
         {/* CHART VISUAL CANVAS PANEL */}
         <div style={anStyles.leftWorkspaceMainColumn}>
           <div style={anStyles.chartContainerCard}>
@@ -111,7 +118,7 @@ export default function AnalyticsScreen() {
               <h3 style={anStyles.containerBlockTitle}>Trip Activity Distribution</h3>
               <span style={anStyles.timeframeBadgeIndicator}>Last 7 Days</span>
             </div>
-            
+
             <div style={anStyles.chartBarsTrackViewportFrame}>
               {chartData.map((data, idx) => (
                 <div key={idx} style={anStyles.chartColumnTrackWrapper}>
@@ -139,7 +146,7 @@ export default function AnalyticsScreen() {
         <div style={anStyles.rightWorkspaceSidebarPanel}>
           <div style={anStyles.popularHubsContainerCard}>
             <h3 style={anStyles.containerBlockTitle}>Popular Pickup Hubs</h3>
-            
+
             <div style={anStyles.hubsVerticalStackListContainer}>
               {popularZones.map((zone) => (
                 <div key={zone.rank} style={anStyles.hubListItemBlockStrip}>
@@ -161,7 +168,7 @@ export default function AnalyticsScreen() {
 
       {/* 3. BOTTOM AREA CANVAS */}
       <div style={anStyles.bottomDoubleGridCanvasRow}>
-        
+
         {/* DRIVER PERFORMANCE TABLE */}
         <div style={anStyles.tableWorkspaceCardContainer}>
           <h3 style={anStyles.containerBlockTitle}>Driver Performance Summary</h3>
@@ -201,7 +208,7 @@ export default function AnalyticsScreen() {
         {activityOverview && (
           <div style={anStyles.engagementOverviewCardContainer}>
             <h3 style={anStyles.containerBlockTitle}>Rider Activity Overview</h3>
-            
+
             <div style={anStyles.engagementMetricsDataSplitRowContainer}>
               <div style={anStyles.engagementDataColumnBlockStack}>
                 <span style={anStyles.engagementMicroTitleFieldLabel}>REGISTRATION GROWTH</span>
@@ -399,15 +406,15 @@ const anStyles = {
     width: '14px', 
     borderRadius: '3px 3px 0 0', 
     transition: 'opacity 0.15s ease', 
-    cursor: 'pointer',
-    backgroundColor: '#1E3A8A'
+    cursor: 'pointer', 
+    backgroundColor: '#1E3A8A' 
   },
-  chartBarColumnElementShared: {
+  chartBarColumnElementShared: { 
     width: '14px', 
     borderRadius: '3px 3px 0 0', 
     transition: 'opacity 0.15s ease', 
-    cursor: 'pointer',
-    backgroundColor: '#A3E635'
+    cursor: 'pointer', 
+    backgroundColor: '#A3E635' 
   },
   chartAxisDayLabel: { 
     fontSize: '10px', 
@@ -431,14 +438,14 @@ const anStyles = {
   legendDotBlue: { 
     width: '8px', 
     height: '8px', 
-    borderRadius: '50%',
-    backgroundColor: '#1E3A8A'
+    borderRadius: '50%', 
+    backgroundColor: '#1E3A8A' 
   },
-  legendDotGreen: {
+  legendDotGreen: { 
     width: '8px', 
     height: '8px', 
-    borderRadius: '50%',
-    backgroundColor: '#A3E635'
+    borderRadius: '50%', 
+    backgroundColor: '#A3E635' 
   },
   rightWorkspaceSidebarPanel: { 
     backgroundColor: '#ffffff', 

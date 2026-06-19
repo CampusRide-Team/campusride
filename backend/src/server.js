@@ -6,7 +6,7 @@ import connectDB from './config/db.js'
 dotenv.config()
 
 const app = express()
-const PORT = process.env.PORT || 5000
+const PORT = process.env.PORT || 3001
 
 // Connect to database
 connectDB()
@@ -21,6 +21,6 @@ app.get('/', (req, res) => {
 })
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, 'localhost', () => {
   console.log(`Server running on port ${PORT}`)
 })
