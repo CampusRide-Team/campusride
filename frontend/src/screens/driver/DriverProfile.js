@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 
-// 💡 TODO: BACKEND INTEGRATION — Import Auth context wrapper to access current authenticated session tokens
+// TODO: BACKEND INTEGRATION — Switch fallback profile objects with live session data contexts from state stores
 // import { useAuth } from '../../context/AuthContext'
 // import AsyncStorage from '@react-native-async-storage/async-storage'
 
@@ -21,7 +21,7 @@ const { width } = Dimensions.get('window')
 // Verified badge icon
 const VerifiedBadge = () => (
   <View style={styles.verifiedBadge}>
-    <MaterialCommunityIcons name="check" size={14} color="#1E3A8A" style={styles.verifiedCheck} />
+    <MaterialCommunityIcons name="check" size={14} color="#1E3A8A" />
   </View>
 )
 
@@ -37,13 +37,13 @@ const RatingPill = ({ rating }) => (
 const StatsRow = ({ totalTrips, tripsToday }) => (
   <View style={styles.statsRow}>
     <View style={styles.statItem}>
-      <MaterialCommunityIcons name="car-multiple" size={24} color="#3B82F6" style={styles.statIcon} />
+      <MaterialCommunityIcons name="car-multiple" size={24} color="#1E3A8A" style={styles.statIcon} />
       <Text style={styles.statNumber}>{totalTrips}</Text>
       <Text style={styles.statLabel}>TOTAL TRIPS</Text>
     </View>
     <View style={styles.statDivider} />
     <View style={styles.statItem}>
-      <MaterialCommunityIcons name="calendar-month" size={24} color="#3B82F6" style={styles.statIcon} />
+      <MaterialCommunityIcons name="calendar-month" size={24} color="#1E3A8A" style={styles.statIcon} />
       <Text style={styles.statNumber}>{tripsToday}</Text>
       <Text style={styles.statLabel}>TRIPS TODAY</Text>
     </View>
@@ -73,10 +73,8 @@ const MenuItem = ({ iconName, label, onPress, showDot = false, isFirst = false, 
   </TouchableOpacity>
 )
 
-// Main screen controller
 const DriverProfile = ({ onLogout, onNavigate, driverData }) => {
-
-  // Dynamic state checks: Uses values coming backward from edits screen context or default mocks
+  // Fallbacks read clean context values coming down from the master parent context layer
   const user = {
     name:       driverData?.fullName || 'Alex Johnson',
     email:      driverData?.email || 'alex.j@university.edu',
@@ -87,32 +85,6 @@ const DriverProfile = ({ onLogout, onNavigate, driverData }) => {
     verified:   true,
   }
 
-  const handleRideHistory = () => {
-    if (onNavigate) onNavigate('ride-history')
-  }
-
-  const handleNotifications = () => {
-    if (onNavigate) onNavigate('notifications')
-  }
-
-  const handleHelpSupport = () => {
-    if (onNavigate) onNavigate('help-support')
-  }
-
-  // REDIRECTS UNBUILT APP SETTINGS: Links directly to standalone App Settings screen
-  const handleAppSettings = () => {
-    if (onNavigate) onNavigate('app-settings')
-  }
-
-  // REDIRECTS AVATARS TAP: Shortcuts straight to EditDriverProfile screen layout
-  const handleEditProfile = () => {
-    if (onNavigate) onNavigate('settings')
-  }
-
-  const handleLogout = () => {
-    if (onLogout) onLogout()
-  }
-
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <StatusBar style="dark" />
@@ -120,7 +92,7 @@ const DriverProfile = ({ onLogout, onNavigate, driverData }) => {
       {/* Top logo header section */}
       <View style={styles.header}>
         <Text style={styles.logoText}>CampusRide</Text>
-        <TouchableOpacity onPress={handleEditProfile} activeOpacity={0.8}>
+        <TouchableOpacity onPress={() => onNavigate?.('settings')} activeOpacity={0.8}>
           {user.avatar ? (
             <Image source={{ uri: user.avatar }} style={styles.topBarAvatar} />
           ) : (
@@ -137,7 +109,7 @@ const DriverProfile = ({ onLogout, onNavigate, driverData }) => {
 
         {/* User identification header card layout */}
         <View style={styles.profileSection}>
-          <TouchableOpacity onPress={handleEditProfile} activeOpacity={0.85} style={styles.photoWrap}>
+          <TouchableOpacity onPress={() => onNavigate?.('settings')} activeOpacity={0.85} style={styles.photoWrap}>
             {user.avatar ? (
               <Image source={{ uri: user.avatar }} style={styles.profilePhoto} />
             ) : (
@@ -150,8 +122,8 @@ const DriverProfile = ({ onLogout, onNavigate, driverData }) => {
             {user.verified && <VerifiedBadge />}
           </TouchableOpacity>
 
-          <Text style={styles.profileName}>{user.name}</Text>
-          <Text style={styles.profileEmail}>{user.email}</Text>
+          <Text style={styles.profileName} numberOfLines={1}>{user.name}</Text>
+          <Text style={styles.profileEmail} numberOfLines={1}>{user.email}</Text>
           <RatingPill rating={user.rating} />
         </View>
 
@@ -160,24 +132,24 @@ const DriverProfile = ({ onLogout, onNavigate, driverData }) => {
 
         {/* Settings options card list links */}
         <View style={styles.menuCard}>
-          <MenuItem iconName="clock-outline" label="Ride History" onPress={handleRideHistory} isFirst />
-          <MenuItem iconName="bell-outline" label="Notifications" onPress={handleNotifications} showDot />
-          <MenuItem iconName="help-circle-outline" label="Help & Support" onPress={handleHelpSupport} />
-          <MenuItem iconName="cog-outline" label="Settings" onPress={handleAppSettings} isLast />
+          <MenuItem iconName="clock-outline" label="Ride History" onPress={() => onNavigate?.('ride-history')} isFirst />
+          <MenuItem iconName="bell-outline" label="Notifications" onPress={() => onNavigate?.('notifications')} showDot />
+          <MenuItem iconName="help-circle-outline" label="Help & Support" onPress={() => onNavigate?.('help-support')} />
+          <MenuItem iconName="cog-outline" label="Settings" onPress={() => onNavigate?.('app-settings')} isLast />
         </View>
 
         {/* Account login termination controller action */}
-        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.85}>
-          <MaterialCommunityIcons name="logout" size={18} color="#EF4444" style={styles.logoutIcon} />
+        <TouchableOpacity style={styles.logoutBtn} onPress={onLogout} activeOpacity={0.85}>
+          <MaterialCommunityIcons name="logout" size={18} color="#EF4444" />
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
 
       </ScrollView>
 
-      {/* 🌟 5. APP BASE SYSTEM TAB NAV BAR COMPONENT (Exactly Matches DriverHome.js Structure) */}
+      {/* App Base System Tab Nav Bar Component */}
       <View style={styles.tabBarContainer}>
         {/* Home Tab */}
-        <TouchableOpacity style={styles.tabItem} onPress={() => onNavigate && onNavigate('home')} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.tabItem} onPress={() => onNavigate?.('home')} activeOpacity={0.7}>
           <View style={styles.tabIconBackground}>
             <MaterialCommunityIcons name="home-outline" size={24} color="#94A3B8" />
           </View>
@@ -185,7 +157,7 @@ const DriverProfile = ({ onLogout, onNavigate, driverData }) => {
         </TouchableOpacity>
 
         {/* Trips Tab */}
-        <TouchableOpacity style={styles.tabItem} onPress={() => onNavigate && onNavigate('active-requests')} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.tabItem} onPress={() => onNavigate?.('active-requests')} activeOpacity={0.7}>
           <View style={styles.tabIconBackground}>
             <MaterialCommunityIcons name="car-multiple" size={24} color="#94A3B8" />
           </View>
@@ -193,7 +165,7 @@ const DriverProfile = ({ onLogout, onNavigate, driverData }) => {
         </TouchableOpacity>
 
         {/* Profile Tab */}
-        <TouchableOpacity style={styles.tabItem} onPress={() => onNavigate && onNavigate('profile')} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.tabItem} onPress={() => onNavigate?.('profile')} activeOpacity={0.7}>
           <View style={[styles.tabIconBackground, styles.activeTabIconBackground]}>
             <MaterialCommunityIcons name="account-circle" size={24} color="#1E3A8A" />
           </View>
@@ -208,18 +180,18 @@ const DriverProfile = ({ onLogout, onNavigate, driverData }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF', // Synchronized to pure white background to blend header line transitions
+    backgroundColor: '#FFFFFF',
   },
   scroll: {
     flexGrow: 1,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingHorizontal: 24,
+    paddingBottom: 24,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     paddingVertical: 14,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
@@ -245,17 +217,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#1E3A8A',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#3B82F6',
   },
   topBarAvatarInitials: {
     fontSize: 12,
     fontWeight: '700',
-    color: 'white',
+    color: '#FFFFFF',
   },
   profileSection: {
     alignItems: 'center',
-    paddingTop: 16,
+    paddingTop: 20,
     paddingBottom: 20,
     gap: 8,
   },
@@ -277,18 +247,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#1E3A8A',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.02,
     shadowRadius: 8,
-    elevation: 6,
+    elevation: 2,
   },
   profilePhotoInitials: {
     fontSize: 36,
     fontWeight: '800',
-    color: 'white',
+    color: '#FFFFFF',
   },
   verifiedBadge: {
     position: 'absolute',
@@ -301,28 +269,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: 'white',
-  },
-  verifiedCheck: {
-    fontWeight: '800',
+    borderColor: '#FFFFFF',
   },
   profileName: {
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: '800',
     color: '#1E3A8A',
-    letterSpacing: -0.4,
+    letterSpacing: -0.5,
     textAlign: 'center',
   },
   profileEmail: {
     fontSize: 14,
     color: '#64748B',
-    fontWeight: '400',
+    fontWeight: '500',
     textAlign: 'center',
   },
   ratingPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
     backgroundColor: '#EFF6FF',
     borderRadius: 20,
     paddingHorizontal: 14,
@@ -355,7 +320,7 @@ const styles = StyleSheet.create({
   statNumber: {
     fontSize: 32,
     fontWeight: '800',
-    color: '#1F2937',
+    color: '#1E2937',
     letterSpacing: -0.5,
     lineHeight: 36,
   },
@@ -364,7 +329,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#94A3B8',
     letterSpacing: 0.8,
-    textTransform: 'uppercase',
   },
   statDivider: {
     width: 1,
@@ -373,31 +337,26 @@ const styles = StyleSheet.create({
   },
   menuCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#E8EDF2',
+    borderColor: '#E2E8F0',
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
     paddingVertical: 16,
     gap: 14,
   },
   menuItemFirst: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
   },
   menuItemLast: {
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
   },
   menuItemBorder: {
     borderBottomWidth: 1,
@@ -415,7 +374,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     fontWeight: '600',
-    color: '#1F2937',
+    color: '#1E2937',
   },
   menuRight: {
     flexDirection: 'row',
@@ -426,7 +385,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#22C55E',
+    backgroundColor: '#A3E635',
   },
   logoutBtn: {
     flexDirection: 'row',
@@ -435,26 +394,16 @@ const styles = StyleSheet.create({
     gap: 10,
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    paddingVertical: 18,
+    paddingVertical: 16,
     marginBottom: 8,
     borderWidth: 1,
     borderColor: '#FEE2E2',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  logoutIcon: {
-    marginRight: -2,
   },
   logoutText: {
     fontSize: 16,
     fontWeight: '700',
     color: '#EF4444',
   },
-  
-  // 🌟 SYNCHRONIZED APP FOOTER BOTTOM NAV STYLES (Copied perfectly from DriverHome.js)
   tabBarContainer: {
     flexDirection: 'row',
     height: 74,
@@ -472,16 +421,15 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 16,
     marginBottom: 2,
-    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
   },
   activeTabIconBackground: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: '#F1F5F9',
   },
   tabLabelText: {
     fontSize: 11,
-    fontWeight: '500',
+    fontWeight: '600',
     color: '#94A3B8',
   },
   activeTabLabelText: {

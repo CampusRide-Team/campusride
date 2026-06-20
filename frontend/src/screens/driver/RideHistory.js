@@ -14,17 +14,17 @@ import { MaterialCommunityIcons } from '@expo/vector-icons'
 const { width } = Dimensions.get('window')
 
 const RideHistory = ({ onBack, onNavigate, onChangeTab }) => {
-  
-  // 💡 TODO: BACKEND INTEGRATION — Switch static mock array into a managed database state variable setup
+
+  // TODO: BACKEND INTEGRATION — Switch static mock array into a managed database state variable setup
   // const [historyData, setHistoryData] = useState([])
   // const [isLoading, setIsLoading] = useState(true)
 
-  // 💡 TODO: BACKEND INTEGRATION — Pull real-time completed travel ledgers on screen frame focus mounting
+  // TODO: BACKEND INTEGRATION — Pull real-time completed travel ledgers on screen frame focus mounting
   // useEffect(() => {
   //   const fetchRideHistory = async () => {
   //     try {
   //       const token = await AsyncStorage.getItem('token')
-  //       const response = await fetch('https://your-api.university.edu/api/drivers/me/trips?status=COMPLETED', {
+  //       const response = await fetch('https://your-api-url/api/v1/drivers/me/trips?status=COMPLETED', {
   //         headers: { 'Authorization': `Bearer ${token}` }
   //       })
   //       const json = await response.json()
@@ -37,49 +37,44 @@ const RideHistory = ({ onBack, onNavigate, onChangeTab }) => {
 
   const mockHistoryData = [
     {
-      id: 'CR2024001',
+      id: 'CR2026001',
       date: 'Today, 2:30 PM',
       status: 'Completed',
       type: 'Shared',
       pickup: 'Student Center',
       destination: 'Engineering Building',
-      rating: '4.8',
     },
     {
-      id: 'CR2024000',
+      id: 'CR2026000',
       date: 'Yesterday, 6:45 PM',
       status: 'Completed',
       type: 'Private',
       pickup: 'Library',
       destination: 'Downtown Campus',
-      rating: '5.0',
     },
     {
-      id: 'CR2023999',
-      date: 'Dec 15, 11:20 AM',
+      id: 'CR2025999',
+      date: 'Jun 15, 11:20 AM',
       status: 'Completed',
       type: 'Shared',
       pickup: 'Dormitory A',
       destination: 'Sports Complex',
-      rating: '4.9',
     },
     {
-      id: 'CR2023998',
-      date: 'Dec 14, 3:15 PM',
+      id: 'CR2025998',
+      date: 'Jun 14, 3:15 PM',
       status: 'Completed',
       type: 'Shared',
       pickup: 'Medical Center',
       destination: 'Student Center',
-      rating: '4.7',
     },
     {
-      id: 'CR2023997',
-      date: 'Dec 13, 8:30 AM',
+      id: 'CR2025997',
+      date: 'Jun 13, 8:30 AM',
       status: 'Completed',
       type: 'Private',
       pickup: 'Parking Lot C',
       destination: 'Business School',
-      rating: '5.0',
     },
   ]
 
@@ -87,7 +82,7 @@ const RideHistory = ({ onBack, onNavigate, onChangeTab }) => {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <StatusBar style="dark" />
 
-      {/* 1. TOP BAR NAVBAR SECTION */}
+      {/* Top Bar Navbar Section */}
       <View style={styles.topBar}>
         <TouchableOpacity onPress={onBack} activeOpacity={0.7} style={styles.topBarButton}>
           <MaterialCommunityIcons name="arrow-left" size={24} color="#1E3A8A" />
@@ -98,31 +93,34 @@ const RideHistory = ({ onBack, onNavigate, onChangeTab }) => {
         </TouchableOpacity>
       </View>
 
-      {/* 2. HISTORY LIST CONTENT CARDS MODULE LAYER */}
+      {/* History List Content Cards Module Layer */}
       <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
         {mockHistoryData.map((ride) => (
           <View key={ride.id} style={styles.historyCard}>
-            
-            {/* Metadata Header Meta Row (Date, Status, Type Tag) */}
+
+            {/* Metadata Header Meta Row */}
             <View style={styles.cardHeaderRow}>
               <View style={styles.headerLeftMeta}>
                 <Text style={styles.dateText}>{ride.date}</Text>
                 <Text style={styles.statusText}>{ride.status}</Text>
               </View>
-              <Text style={[
-                styles.typeTagText, 
-                ride.type === 'Shared' ? styles.sharedColor : styles.privateColor
+
+              <View style={[
+                styles.typeTagCapsule,
+                ride.type === 'Shared' ? styles.sharedBackground : styles.privateBackground
               ]}>
-                {ride.type}
-              </Text>
+                <Text style={styles.typeTagText}>
+                  {ride.type?.toUpperCase()}
+                </Text>
+              </View>
             </View>
 
             {/* Vertical Routing Visual Stack */}
             <View style={styles.routeContainer}>
               <View style={styles.timelineIndicatorsColumn}>
-                <MaterialCommunityIcons name="circle" size={12} color="#2563EB" />
+                <MaterialCommunityIcons name="circle" size={10} color="#1E3A8A" />
                 <View style={styles.verticalLinkConnector} />
-                <MaterialCommunityIcons name="map-marker" size={14} color="#DC2626" />
+                <MaterialCommunityIcons name="map-marker" size={14} color="#A3E635" />
               </View>
 
               <View style={styles.routeLabelsColumn}>
@@ -131,20 +129,16 @@ const RideHistory = ({ onBack, onNavigate, onChangeTab }) => {
               </View>
             </View>
 
-            {/* Footer Row Block Module (Ride ID + Rating Star Component) */}
+            {/* Footer Row Block Module */}
             <View style={styles.cardFooterRow}>
               <Text style={styles.rideIdLabel}>Ride ID: #{ride.id}</Text>
-              <View style={styles.ratingContainer}>
-                <Text style={styles.ratingNumberValue}>{ride.rating} </Text>
-                <MaterialCommunityIcons name="star" size={14} color="#475569" />
-              </View>
             </View>
 
           </View>
         ))}
       </ScrollView>
 
-      {/* 3. PERSISTENT APP FOOTER BOTTOM NAV TABS MENU */}
+      {/* Persistent App Footer Bottom Nav Tabs Menu */}
       <View style={styles.bottomNav}>
         <TouchableOpacity style={styles.navItem} onPress={() => onChangeTab && onChangeTab('home')} activeOpacity={0.7}>
           <View style={styles.tabIconBackground}>
@@ -155,7 +149,6 @@ const RideHistory = ({ onBack, onNavigate, onChangeTab }) => {
 
         <TouchableOpacity style={styles.navItem} onPress={() => onChangeTab && onChangeTab('trips')} activeOpacity={0.7}>
           <View style={styles.tabIconBackground}>
-            {/* 🌟 FIXED: Restored 'car-multiple' to keep icon assets uniform across all system tabs */}
             <MaterialCommunityIcons name="car-multiple" size={24} color="#94A3B8" />
           </View>
           <Text style={styles.navLabel}>Trips</Text>
@@ -180,8 +173,8 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     flexGrow: 1,
-    paddingHorizontal: 20,
-    paddingTop: 12,
+    paddingHorizontal: 24,
+    paddingTop: 16,
     paddingBottom: 24,
     backgroundColor: '#FFFFFF',
   },
@@ -189,7 +182,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 24,
     paddingVertical: 14,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
@@ -204,7 +197,7 @@ const styles = StyleSheet.create({
   topBarTitle: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#1E293B',
+    color: '#1E3A8A',
     letterSpacing: -0.5,
   },
   historyCard: {
@@ -215,15 +208,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.02,
     shadowRadius: 8,
-    elevation: 3,
+    elevation: 2,
   },
   cardHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     marginBottom: 16,
   },
   headerLeftMeta: {
@@ -241,20 +234,30 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#16A34A',
   },
+  typeTagCapsule: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  sharedBackground: {
+    backgroundColor: '#A3E635',
+    borderColor: '#1E3A8A',
+  },
+  privateBackground: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#DBEAFE',
+  },
   typeTagText: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  sharedColor: {
-    color: '#2563EB',
-  },
-  privateColor: {
-    color: '#A855F7',
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#1E3A8A',
+    letterSpacing: 0.5,
   },
   routeContainer: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    marginBottom: 18,
+    marginBottom: 16,
     paddingLeft: 2,
   },
   timelineIndicatorsColumn: {
@@ -267,7 +270,7 @@ const styles = StyleSheet.create({
   verticalLinkConnector: {
     flex: 1,
     width: 2,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: '#F1F5F9',
     marginVertical: 4,
   },
   routeLabelsColumn: {
@@ -278,7 +281,7 @@ const styles = StyleSheet.create({
   locationText: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#334155',
+    color: '#1E2937',
   },
   cardFooterRow: {
     flexDirection: 'row',
@@ -294,23 +297,11 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     letterSpacing: 0.3,
   },
-  ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  ratingNumberValue: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#475569',
-  },
   bottomNav: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#F1F5F9',
-    paddingBottom: 4,
-    paddingTop: 12,
-    paddingHorizontal: 12,
     height: 74,
   },
   navItem: {
@@ -323,12 +314,11 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 16,
     marginBottom: 2,
-    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
   },
   activeTabIconBackground: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: '#F1F5F9',
   },
   navLabel: {
     fontSize: 11,
@@ -336,6 +326,7 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
   },
   navLabelActive: {
+    fontSize: 11,
     color: '#1E3A8A',
     fontWeight: '700',
   },

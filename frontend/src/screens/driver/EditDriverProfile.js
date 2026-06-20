@@ -21,7 +21,7 @@ const EditDriverProfile = ({ onBack, onChangeTab }) => {
   // Local state properties bound to text field inputs
   const [fullName, setFullName] = useState('Alex Johnson')
   const [phoneNumber, setPhoneNumber] = useState('+233 (0) 235-343-900')
-  const [email, setEmail] = useState('alex.j@university.edu')
+  const [email, setEmail] = useState('alex.j@gmail.com')
   const [avatarUri, setAvatarUri] = useState(null) 
 
   // Handles the native camera and gallery workflows with automatic OS cropping overlays
@@ -82,7 +82,7 @@ const EditDriverProfile = ({ onBack, onChangeTab }) => {
   }
 
   const handleSaveChanges = () => {
-    // 💡 TODO: BACKEND INTEGRATION — Append avatarUri directly into FormData binary stream payloads
+    // TODO: BACKEND INTEGRATION — Append avatarUri directly into FormData binary stream payloads
     console.log('Saved data values structure: ', { fullName, phoneNumber, email, avatarUri })
     if (onBack) onBack()
   }
@@ -91,7 +91,7 @@ const EditDriverProfile = ({ onBack, onChangeTab }) => {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <StatusBar style="dark" />
 
-      {/* 1. TOP BAR NAVBAR SECTION */}
+      {/* Top Bar Navbar Section */}
       <View style={styles.topBar}>
         <TouchableOpacity onPress={onBack} activeOpacity={0.7} style={styles.topBarButton}>
           <MaterialCommunityIcons name="arrow-left" size={24} color="#1E3A8A" />
@@ -101,8 +101,8 @@ const EditDriverProfile = ({ onBack, onChangeTab }) => {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-        
-        {/* 2. AVATAR MEDIA CHANGER INTERACTIVE COMPONENT ELEMENT */}
+
+        {/* Avatar Media Changer Interactive Component Element */}
         <View style={styles.avatarSection}>
           <View style={styles.photoContainer}>
             {avatarUri ? (
@@ -114,7 +114,7 @@ const EditDriverProfile = ({ onBack, onChangeTab }) => {
                 </Text>
               </View>
             )}
-            
+
             <TouchableOpacity 
               style={styles.pencilBadgeButton} 
               activeOpacity={0.85} 
@@ -123,16 +123,16 @@ const EditDriverProfile = ({ onBack, onChangeTab }) => {
               <MaterialCommunityIcons name="pencil" size={16} color="#1E3A8A" />
             </TouchableOpacity>
           </View>
-          
+
           <TouchableOpacity onPress={handleUpdatePhoto} activeOpacity={0.7} style={styles.changePhotoLink}>
             <Text style={styles.changePhotoLinkText}>Change Photo</Text>
           </TouchableOpacity>
         </View>
 
-        {/* 3. FORMS TEXTFIELD WRAPPERS STACK CONTAINER */}
+        {/* Forms TextField Wrappers Stack Container */}
         <View style={styles.formStack}>
           <View style={styles.inputWrapper}>
-            <Text style={styles.inputLabelText}>FULL NAME</Text>
+            <Text style={styles.inputLabelText}>Full Name</Text>
             <TextInput
               style={styles.textFieldInput}
               value={fullName}
@@ -143,7 +143,7 @@ const EditDriverProfile = ({ onBack, onChangeTab }) => {
           </View>
 
           <View style={styles.inputWrapper}>
-            <Text style={styles.inputLabelText}>PHONE NUMBER</Text>
+            <Text style={styles.inputLabelText}>Phone Number</Text>
             <TextInput
               style={styles.textFieldInput}
               value={phoneNumber}
@@ -155,20 +155,20 @@ const EditDriverProfile = ({ onBack, onChangeTab }) => {
           </View>
 
           <View style={styles.inputWrapper}>
-            <Text style={styles.inputLabelText}>EMAIL</Text>
+            <Text style={styles.inputLabelText}>Email Address</Text>
             <TextInput
               style={styles.textFieldInput}
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
               autoCapitalize="none"
-              placeholder="Enter email address"
+              placeholder="username@gmail.com"
               placeholderTextColor="#94A3B8"
             />
           </View>
         </View>
 
-        {/* 4. ACTIONS FOOTER CONTROLLERS INTERACTIVE LAYER */}
+        {/* Actions Footer Controllers Interactive Layer */}
         <View style={styles.actionButtonsContainer}>
           <TouchableOpacity 
             style={styles.saveChangesButton} 
@@ -185,7 +185,7 @@ const EditDriverProfile = ({ onBack, onChangeTab }) => {
 
       </ScrollView>
 
-      {/* 5. PERSISTENT APP FOOTER BOTTOM NAV TABS MENU */}
+      {/* Persistent App Footer Bottom Nav Tabs Menu */}
       <View style={styles.bottomNav}>
         <TouchableOpacity style={styles.navItem} onPress={() => onChangeTab && onChangeTab('home')} activeOpacity={0.7}>
           <View style={styles.tabIconBackground}>
@@ -229,7 +229,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 24,
     paddingVertical: 14,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
@@ -244,7 +244,7 @@ const styles = StyleSheet.create({
   topBarTitle: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#1E293B',
+    color: '#1E3A8A',
     letterSpacing: -0.5,
   },
   topBarSpacer: {
@@ -275,9 +275,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 4,
+    shadowOpacity: 0.02,
+    shadowRadius: 8,
+    elevation: 2,
   },
   avatarInitials: {
     fontSize: 40,
@@ -296,11 +296,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 3,
     borderColor: '#FFFFFF',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 4,
   },
   changePhotoLink: {
     paddingVertical: 4,
@@ -318,20 +313,19 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
   },
   inputLabelText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
     color: '#475569',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
     marginBottom: 8,
-    textTransform: 'uppercase',
   },
   textFieldInput: {
-    height: 54,
+    height: 56,
     backgroundColor: '#F1F5F9', 
-    borderRadius: 14, 
+    borderRadius: 16, 
     paddingHorizontal: 16,
     fontSize: 16,
-    color: '#1E293B',
+    color: '#1E2937',
     fontWeight: '600',
     borderWidth: 1,
     borderColor: '#E2E8F0',
@@ -344,16 +338,11 @@ const styles = StyleSheet.create({
   },
   saveChangesButton: {
     backgroundColor: '#1E3A8A',
-    height: 52,
-    borderRadius: 14,
+    height: 56,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
-    shadowColor: '#1E3A8A',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 3,
   },
   saveButtonText: {
     color: '#FFFFFF',
@@ -376,9 +365,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#F1F5F9',
-    paddingBottom: 4,
-    paddingTop: 12,
-    paddingHorizontal: 12,
     height: 74,
   },
   navItem: {
@@ -391,12 +377,11 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 16,
     marginBottom: 2,
-    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
   },
   activeTabIconBackground: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: '#F1F5F9',
   },
   navLabel: {
     fontSize: 11,
@@ -404,6 +389,7 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
   },
   navLabelActive: {
+    fontSize: 11,
     color: '#1E3A8A',
     fontWeight: '700',
   },
