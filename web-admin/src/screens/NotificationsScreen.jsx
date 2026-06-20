@@ -35,7 +35,7 @@ export default function NotificationsScreen() {
     const fetchNotificationsData = async () => {
       try {
         setLoading(true)
-        
+
         // 💡 BACKEND TODO: 
         // 1. Fetch system log documents via HTTP GET requests:
         //    const [feedRes, criticalRes, tasksRes] = await Promise.all([
@@ -44,7 +44,7 @@ export default function NotificationsScreen() {
         //      axios.get('/api/v1/admin/notifications/pending-tasks')
         //    ])
         // 2. Set states: setNotifications(feedRes.data), etc.
-        
+
         // Staging Mock Database Tally Records
         setNotifications([
           { id: 1, category: 'driver', type: 'registration', title: 'New driver application submitted', desc: 'Marcus Thorne submitted a commercial operator registration for a Toyota Vitz (GW-8821-25). Background check pending.', time: '2 MINS AGO', icon: <UserPlus size={16} color="#1E3A8A" />, bg: '#EFF6FF', sideBg: '#1E3A8A', hasActions: true, actionText: 'Verify Credentials' },
@@ -80,14 +80,14 @@ export default function NotificationsScreen() {
 
     try {
       setIsSending(true)
-      
+
       // 💡 BACKEND TODO:
       // 1. Send text string input data via HTTP POST:
       //    await axios.post('/api/v1/admin/notifications/broadcast', { title: broadcastTitle, message: broadcastMessage, target: broadcastTarget, urgency: broadcastUrgency })
       // 2. Integration layer emits through WebSockets and triggers native Firebase Topic cloud tray dispatches.
-      
+
       console.log(`Fan-Out pipeline broadcast successfully dispatched to target pool: ${broadcastTarget}`)
-      
+
       const newBroadcastNode = {
         id: Date.now(),
         category: 'system',
@@ -132,7 +132,7 @@ export default function NotificationsScreen() {
 
   return (
     <div style={ntStyles.workspaceWrapperContainer}>
-      
+
       {/* 1. TOP CARD OVERVIEW COUNTER BADGES */}
       <div style={ntStyles.metricsGrid}>
         <div style={ntStyles.statCard}>
@@ -189,11 +189,11 @@ export default function NotificationsScreen() {
 
       {/* 2. SPLIT LAYOUT CANVAS PANELS */}
       <div style={ntStyles.splitContentRowCanvas}>
-        
+
         {/* LEFT COMPONENT: SYSTEM EVENT LOGGER FEED */}
         <div style={ntStyles.leftWorkspaceMainColumn}>
           <div style={ntStyles.feedContainerCard}>
-            
+
             <div style={ntStyles.tabHeaderSwitcherTrackRow}>
               <button onClick={() => setActivePageTab('all')} style={{ ...ntStyles.switchTriggerButton, backgroundColor: activeTab === 'all' ? '#ffffff' : 'transparent', fontWeight: activeTab === 'all' ? 800 : 600, color: activeTab === 'all' ? '#1E3A8A' : '#64748B' }}>All Logs</button>
               <button onClick={() => setActivePageTab('system')} style={{ ...ntStyles.switchTriggerButton, backgroundColor: activeTab === 'system' ? '#ffffff' : 'transparent', fontWeight: activeTab === 'system' ? 800 : 600, color: activeTab === 'system' ? '#1E3A8A' : '#64748B' }}>System Alerts</button>
@@ -205,14 +205,14 @@ export default function NotificationsScreen() {
               {filteredFeed.map((note) => (
                 <div key={note.id} style={{ ...ntStyles.notificationItemStripBlock, borderLeft: `4px solid ${note.sideBg}` }}>
                   <div style={{ ...ntStyles.itemBadgeNodeIcon, backgroundColor: note.bg }}>{note.icon}</div>
-                  
+
                   <div style={ntStyles.itemTextDetailsMetadataStackGroup}>
                     <div style={ntStyles.itemFlexTopHeaderLine}>
                       <span style={ntStyles.itemPrimaryHeadingTitleText}>{note.title}</span>
                       <span style={ntStyles.itemMicroTimestampLabelText}>{note.time}</span>
                     </div>
                     <p style={ntStyles.itemParagraphDescriptionBodyText}>{note.desc}</p>
-                    
+
                     {note.hasActions && (
                       <div style={ntStyles.itemActionButtonsClusterRow}>
                         <button onClick={() => handleActionClick(note.id, 'investigate')} style={ntStyles.itemPrimaryActionButtonMarkup}>{note.actionText}</button>
@@ -237,7 +237,7 @@ export default function NotificationsScreen() {
 
         {/* RIGHT WORKSPACE SIDEBAR PANEL: ACTIONABLE OPERATIONAL HEADS-UP */}
         <div style={ntStyles.rightWorkspaceSidebarPanel}>
-          
+
           {/* CRITICAL ALERTS COMPONENT WIDGET */}
           <div style={ntStyles.criticalSidebarWidgetCard}>
             <div style={ntStyles.widgetHeaderFlexLine}>
