@@ -10,7 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps'
-import { MaterialCommunityIcons } from '@expo/vector-icons' // 🌟 IMPORTED NATIVE PLUGIN VECTOR ICONS
+import { MaterialCommunityIcons } from '@expo/vector-icons'
 
 const { width } = Dimensions.get('window')
 
@@ -18,12 +18,11 @@ const DriverNavigation = ({ onBack, onArrive, onCancelNoPenalty, onChangeTab, pa
   const [hasArrived, setHasArrived] = useState(false)
   const [tripStarted, setTripStarted] = useState(false)
   const [secondsWaiting, setSecondsWaiting] = useState(0)
-  
-  // 💡 TODO: BACKEND INTEGRATION — Initialize native geolocation watchers and stream driver coordinates via WebSockets
-  // Endpoint/Protocol: wss://your-backend.university.edu/api/telemetry/driver
+
+  // TODO: BACKEND INTEGRATION — Initialize native geolocation watchers and stream driver coordinates via WebSockets
+  // Endpoint/Protocol: wss://your-backend-url/api/v1/telemetry/driver
   useEffect(() => {
     console.log('Driver GPS location tracking stream initialized.')
-
     return () => {
       console.log('Driver GPS location stream torn down.')
     }
@@ -59,26 +58,24 @@ const DriverNavigation = ({ onBack, onArrive, onCancelNoPenalty, onChangeTab, pa
   // Determine if the driver has waited past the 5-minute penalty-free limit threshold (300 seconds)
   const isCancellationEligible = secondsWaiting >= 300
 
-  // 1. DYNAMIC COORDINATE SETUP BASES
-  const driverCoords = { latitude: 5.6506, longitude: -0.1915 } // Current mobile vehicle coordinate node
-  let activeTargetCoords = { latitude: 5.6545, longitude: -0.1873 } // Default pickup location node context
+  // DYNAMIC COORDINATE SETUP BASES
+  const driverCoords = { latitude: 5.6506, longitude: -0.1915 } 
+  let activeTargetCoords = { latitude: 5.6545, longitude: -0.1873 } 
 
   // Dynamically re-route coordinates based on current phase state
   if (!tripStarted) {
-    // Phase 1 & 2: Heading to or waiting at Pickup Point
     if (currentPassenger.id === 'req_kwame') {
-      activeTargetCoords = { latitude: 5.6582, longitude: -0.1889 } // Balme Library
+      activeTargetCoords = { latitude: 5.6582, longitude: -0.1889 } 
     } else if (currentPassenger.id === 'req_aisha') {
-      activeTargetCoords = { latitude: 5.6455, longitude: -0.1842 } // Dorms A
+      activeTargetCoords = { latitude: 5.6455, longitude: -0.1842 } 
     }
   } else {
-    // Phase 3: Active Transit Journey heading straight to Drop-off target coordinates
     if (currentPassenger.id === 'req_kwame') {
-      activeTargetCoords = { latitude: 5.6621, longitude: -0.1925 } // Gym / Sports Stadium
+      activeTargetCoords = { latitude: 5.6621, longitude: -0.1925 } 
     } else if (currentPassenger.id === 'req_aisha') {
-      activeTargetCoords = { latitude: 5.6492, longitude: -0.1898 } // Bush Canteen Cafe
+      activeTargetCoords = { latitude: 5.6492, longitude: -0.1898 } 
     } else {
-      activeTargetCoords = { latitude: 5.6595, longitude: -0.1852 } // Engineering Block C default node
+      activeTargetCoords = { latitude: 5.6595, longitude: -0.1852 } 
     }
   }
 
@@ -89,7 +86,7 @@ const DriverNavigation = ({ onBack, onArrive, onCancelNoPenalty, onChangeTab, pa
     longitudeDelta: Math.abs(driverCoords.longitude - activeTargetCoords.longitude) * 2 || 0.010,
   }
 
-  // 💡 TODO: BACKEND INTEGRATION — Replace math midpoint fallback with real coordinates array from Google Directions API fetch
+  // TODO: BACKEND INTEGRATION — Replace math midpoint fallback with real coordinates array from Google Directions API fetch
   // Endpoint: GET https://maps.googleapis.com/maps/api/directions/json
   const routePathCoordinates = [
     driverCoords,
@@ -102,24 +99,24 @@ const DriverNavigation = ({ onBack, onArrive, onCancelNoPenalty, onChangeTab, pa
 
   const handlePrimaryAction = () => {
     if (!hasArrived) {
-      // 💡 TODO: BACKEND INTEGRATION — PUT HTTP request to update ride state to 'ARRIVED' and trigger passenger push notification
-      // Endpoint: PUT /api/rides/${currentPassenger.id}/arrived
+      // TODO: BACKEND INTEGRATION — PUT HTTP request to update ride state to 'ARRIVED' and trigger passenger push notification
+      // Endpoint: PUT /api/v1/rides/${currentPassenger.id}/arrived
       setHasArrived(true)
     } else if (!tripStarted) {
-      // 💡 TODO: BACKEND INTEGRATION — PUT HTTP request to update ride state to 'IN_TRANSIT' and stop waiting timer
-      // Endpoint: PUT /api/rides/${currentPassenger.id}/start
+      // TODO: BACKEND INTEGRATION — PUT HTTP request to update ride state to 'IN_TRANSIT' and stop waiting timer
+      // Endpoint: PUT /api/v1/rides/${currentPassenger.id}/start
       setTripStarted(true)
     } else {
-      // 💡 TODO: BACKEND INTEGRATION — PUT HTTP request to clear active ride record, store transaction logs, and process payment
-      // Endpoint: PUT /api/rides/${currentPassenger.id}/complete
+      // TODO: BACKEND INTEGRATION — PUT HTTP request to clear active ride record, store transaction logs, and process payment
+      // Endpoint: PUT /api/v1/rides/${currentPassenger.id}/complete
       if (onArrive) onArrive()
     }
   }
 
   const handleCancelRide = () => {
     console.log('Cancellation workflow triggered.')
-    // 💡 TODO: BACKEND INTEGRATION — POST HTTP request to clear active ride status with late passenger penalty exemption flags
-    // Endpoint: POST /api/rides/${currentPassenger.id}/cancel-no-penalty
+    // TODO: BACKEND INTEGRATION — POST HTTP request to clear active ride status with late passenger penalty exemption flags
+    // Endpoint: POST /api/v1/rides/${currentPassenger.id}/cancel-no-penalty
     if (onCancelNoPenalty) {
       onCancelNoPenalty()
     } else if (onBack) {
@@ -131,7 +128,7 @@ const DriverNavigation = ({ onBack, onArrive, onCancelNoPenalty, onChangeTab, pa
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <StatusBar style="dark" />
 
-      {/* 1. TOP HEADER NAVIGATION BAR */}
+      {/* Top Header Navigation Bar */}
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} activeOpacity={0.7} style={styles.headerButton}>
           <MaterialCommunityIcons name="arrow-left" size={24} color="#1E3A8A" />
@@ -144,7 +141,7 @@ const DriverNavigation = ({ onBack, onArrive, onCancelNoPenalty, onChangeTab, pa
         </TouchableOpacity>
       </View>
 
-      {/* 2. MAP VIEWPORT CANVAS */}
+      {/* Map Viewport Canvas */}
       <View style={styles.mapViewportContainer}>
         <MapView
           provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : null}
@@ -154,7 +151,7 @@ const DriverNavigation = ({ onBack, onArrive, onCancelNoPenalty, onChangeTab, pa
         >
           <Polyline
             coordinates={routePathCoordinates}
-            strokeColor={tripStarted ? '#16A34A' : '#2563EB'} 
+            strokeColor={tripStarted ? '#A3E635' : '#1E3A8A'} 
             strokeWidth={4}
             lineDashPattern={[6, 6]} 
           />
@@ -181,14 +178,14 @@ const DriverNavigation = ({ onBack, onArrive, onCancelNoPenalty, onChangeTab, pa
 
         <View style={styles.floatingControlsStack}>
           <TouchableOpacity style={styles.mapUtilityButton} activeOpacity={0.8}>
-            <MaterialCommunityIcons name="crosshairs-gps" size={20} color="#1F2937" />
+            <MaterialCommunityIcons name="crosshairs-gps" size={20} color="#1E2937" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.mapUtilityButton} activeOpacity={0.8}>
-            <MaterialCommunityIcons name="layers-outline" size={20} color="#1F2937" />
+            <MaterialCommunityIcons name="layers-outline" size={20} color="#1E2937" />
           </TouchableOpacity>
         </View>
 
-        {/* 3. BOTTOM RIDE INFORMATION BOTTOM SHEET SLIDER */}
+        {/* Bottom Ride Information Sheet */}
         <View style={styles.passengerSheet}>
           <View style={styles.profileMasterRow}>
             <View style={styles.avatarContainerMock}>
@@ -201,7 +198,8 @@ const DriverNavigation = ({ onBack, onArrive, onCancelNoPenalty, onChangeTab, pa
             <View style={styles.identityTextBlock}>
               <Text style={styles.passengerNameText}>{currentPassenger.name}</Text>
               <View style={styles.subLocationRow}>
-                <MaterialCommunityIcons name="arrow-top-right-alignment" size={14} color="#6B7280" />
+                {/* 🌟 FIXED: Validated icon family string parameter */}
+                <MaterialCommunityIcons name="routes" size={14} color="#64748B" />
                 <Text style={styles.subLocationLabel} numberOfLines={1}>
                   {tripStarted ? currentPassenger.destination : currentPassenger.pickup}
                 </Text>
@@ -209,30 +207,30 @@ const DriverNavigation = ({ onBack, onArrive, onCancelNoPenalty, onChangeTab, pa
             </View>
 
             <View style={styles.communicationButtonsGroup}>
-              {/* 💡 TODO: BACKEND INTEGRATION — Hook local string parameter dynamically into the device dialer interface */}
+              {/* TODO: BACKEND INTEGRATION — Hook local string parameter dynamically into the device dialer interface */}
               <TouchableOpacity 
                 style={styles.commsCircleButton} 
                 activeOpacity={0.7}
                 onPress={() => console.log('Native dialer initiated.')}
               >
-                <MaterialCommunityIcons name="phone" size={18} color="#1F2937" />
+                <MaterialCommunityIcons name="phone" size={18} color="#1E2937" />
               </TouchableOpacity>
 
-              {/* 💡 TODO: BACKEND INTEGRATION — Route to dedicated internal workspace messages stack channel */}
+              {/* TODO: BACKEND INTEGRATION — Route to dedicated internal workspace messages stack channel */}
               <TouchableOpacity 
                 style={styles.commsCircleButton} 
                 activeOpacity={0.7}
                 onPress={() => console.log('Internal messaging portal opened.')}
               >
-                <MaterialCommunityIcons name="message-text" size={18} color="#1F2937" />
+                <MaterialCommunityIcons name="message-text" size={18} color="#1E2937" />
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* DYNAMIC TIMEOUT ELEMENT SECTION BLOCK */}
+          {/* Conditional Layout Notification Banners */}
           {tripStarted ? (
             <View style={styles.transitTrackingBanner}>
-              <MaterialCommunityIcons name="rocket-launch" size={16} color="#166534" />
+              <MaterialCommunityIcons name="rocket-launch" size={16} color="#1E3A8A" />
               <Text style={styles.transitTextContent}>
                 Driving to destination point. Follow road safety margins.
               </Text>
@@ -242,7 +240,7 @@ const DriverNavigation = ({ onBack, onArrive, onCancelNoPenalty, onChangeTab, pa
               <MaterialCommunityIcons 
                 name={isCancellationEligible ? "alert-circle" : "clock-outline"} 
                 size={16} 
-                color={isCancellationEligible ? "#991B1B" : "#713F12"} 
+                color={isCancellationEligible ? "#EF4444" : "#1E3A8A"} 
               />
               <Text style={[styles.timerTrackingLabel, isCancellationEligible && styles.timerAlertLabelVariant]}>
                 {isCancellationEligible ? (
@@ -254,14 +252,14 @@ const DriverNavigation = ({ onBack, onArrive, onCancelNoPenalty, onChangeTab, pa
             </View>
           ) : (
             <View style={styles.instructionNoteBanner}>
-              <MaterialCommunityIcons name="information" size={16} color="#3B82F6" />
+              <MaterialCommunityIcons name="information" size={16} color="#1E3A8A" />
               <Text style={styles.instructionTextContent}>
                 "Wait at the North entrance circular drive. Look for the blue backpack."
               </Text>
             </View>
           )}
 
-          {/* CONDITIONAL ACTION BUTTON STACK LAYOUT */}
+          {/* Conditional Action Button Stack */}
           <View style={styles.actionButtonsStack}>
             {hasArrived && !tripStarted && isCancellationEligible && (
               <TouchableOpacity 
@@ -290,22 +288,26 @@ const DriverNavigation = ({ onBack, onArrive, onCancelNoPenalty, onChangeTab, pa
         </View>
       </View>
 
-      {/* 4. BASE SYSTEM DECORATOR NAVIGATION APP TABS BAR */}
+      {/* Base System Tab Nav Bar Component */}
       <View style={styles.tabBarContainer}>
-        <TouchableOpacity style={styles.tabItem} onPress={() => onChangeTab && onChangeTab('home')} activeOpacity={0.7}>
-          <MaterialCommunityIcons name="home-outline" size={24} color="#94A3B8" />
+        <TouchableOpacity style={styles.tabItem} onPress={() => onChangeTab?.('home')} activeOpacity={0.7}>
+          <View style={styles.tabIconBackground}>
+            <MaterialCommunityIcons name="home-outline" size={24} color="#94A3B8" />
+          </View>
           <Text style={styles.tabLabelInactive}>Home</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.tabItem} onPress={() => onChangeTab && onChangeTab('trips')} activeOpacity={0.7}>
-          <View style={styles.activeTabIconBackground}>
+        <TouchableOpacity style={styles.tabItem} onPress={() => onChangeTab?.('trips')} activeOpacity={0.7}>
+          <View style={[styles.tabIconBackground, styles.activeTabIconBackground]}>
             <MaterialCommunityIcons name="car-multiple" size={24} color="#1E3A8A" />
           </View>
           <Text style={styles.tabLabelActive}>Trips</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.tabItem} onPress={() => onChangeTab && onChangeTab('profile')} activeOpacity={0.7}>
-          <MaterialCommunityIcons name="account-circle-outline" size={24} color="#94A3B8" />
+        <TouchableOpacity style={styles.tabItem} onPress={() => onChangeTab?.('profile')} activeOpacity={0.7}>
+          <View style={styles.tabIconBackground}>
+            <MaterialCommunityIcons name="account-circle-outline" size={24} color="#94A3B8" />
+          </View>
           <Text style={styles.tabLabelInactive}>Profile</Text>
         </TouchableOpacity>
       </View>
@@ -313,78 +315,62 @@ const DriverNavigation = ({ onBack, onArrive, onCancelNoPenalty, onChangeTab, pa
   )
 }
 
-export default DriverNavigation
-
 const styles = StyleSheet.create({
-  // GLOBAL LAYOUT CORE CONTAINER RULES
   container: {
     flex: 1,
-    backgroundColor: '#D1EAEB', 
+    backgroundColor: '#FFFFFF', 
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 24,
     paddingVertical: 14,
-    backgroundColor: '#E4EFF2',
-    borderWidth: 1,
-    borderColor: '#CBE0E5',
-    borderRadius: 12,
-    marginHorizontal: 12,
-    marginTop: 8,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
   },
   headerButton: {
-    width: 32,
-    height: 32,
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitleText: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#1E3A8A',
+    letterSpacing: -0.3,
   },
   mapViewportContainer: {
     flex: 1,
     position: 'relative',
-    marginTop: 8,
   },
   floatingControlsStack: {
     position: 'absolute',
     right: 16,
-    top: '35%',
+    top: '25%',
     gap: 12,
   },
   mapUtilityButton: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: 16,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
-
-  // LIVE MAP GRAPHICS MARKERS LAYER
   driverLocatorCircle: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#2563EB',
+    backgroundColor: '#1E3A8A',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 3,
     borderColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
   },
   driverNavIcon: {
     transform: [{ rotate: '45deg' }],
@@ -394,7 +380,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   pickupLabelBadge: {
-    backgroundColor: '#DC2626',
+    backgroundColor: '#1E3A8A',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
@@ -402,7 +388,7 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   dropoffBadgeVariant: {
-    backgroundColor: '#16A34A',
+    backgroundColor: '#A3E635',
   },
   pickupLabelText: {
     color: '#FFFFFF',
@@ -414,14 +400,14 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#DC2626',
+    backgroundColor: '#1E3A8A',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: '#FFFFFF',
   },
   dropoffPinVariant: {
-    backgroundColor: '#16A34A',
+    backgroundColor: '#A3E635',
   },
   pickupPinInnerNode: {
     width: 8,
@@ -429,21 +415,16 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: '#FFFFFF',
   },
-
-  // PASSENGER RIDE INFORMATION BOTTOM SHEET MODULAR SYSTEM
   passengerSheet: {
     position: 'absolute',
     bottom: 16,
     left: 16,
     right: 16,
     backgroundColor: '#FFFFFF',
-    borderRadius: 28,
+    borderRadius: 16,
     padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -10 },
-    shadowOpacity: 0.08,
-    shadowRadius: 24,
-    elevation: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   profileMasterRow: {
     flexDirection: 'row',
@@ -462,13 +443,15 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: -4,
     alignSelf: 'center',
-    backgroundColor: '#84CC16',
+    backgroundColor: '#A3E635',
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#1E3A8A',
   },
   ratingTextValue: {
-    color: '#FFFFFF',
+    color: '#1E3A8A',
     fontSize: 9,
     fontWeight: '800',
   },
@@ -480,7 +463,7 @@ const styles = StyleSheet.create({
   passengerNameText: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#1F2937',
+    color: '#1E2937',
     marginBottom: 4,
   },
   subLocationRow: {
@@ -491,7 +474,7 @@ const styles = StyleSheet.create({
   subLocationLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#6B7280',
+    color: '#64748B',
     width: width * 0.34,
   },
   communicationButtonsGroup: {
@@ -501,41 +484,41 @@ const styles = StyleSheet.create({
   commsCircleButton: {
     width: 44,
     height: 44,
-    borderRadius: 22,
-    backgroundColor: '#F3F4F6',
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
-
-  // CONDITIONAL ROUTING AND TIMEOUT LAYOUT NOTIFICATION BANNERS
   instructionNoteBanner: {
     flexDirection: 'row',
     backgroundColor: '#F8FAFC',
     borderRadius: 16,
     padding: 14,
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: 10,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: '#F1F5F9',
+    borderColor: '#E2E8F0',
   },
   instructionTextContent: {
     flex: 1,
     fontSize: 12,
     fontWeight: '500',
-    color: '#475569',
+    color: '#64748B',
     lineHeight: 16,
   },
   timerTrackingBanner: {
     flexDirection: 'row',
-    backgroundColor: '#FEF9C3',
+    backgroundColor: '#EFF6FF',
     borderRadius: 16,
     padding: 14,
     alignItems: 'center',
     gap: 10,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: '#FEF08A',
+    borderColor: '#DBEAFE',
   },
   timerAlertBannerVariant: {
     backgroundColor: '#FEE2E2',
@@ -544,72 +527,58 @@ const styles = StyleSheet.create({
   timerTrackingLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#713F12',
+    color: '#1E3A8A',
   },
   timerAlertLabelVariant: {
-    color: '#991B1B',
+    color: '#EF4444',
   },
   timerCountdownValue: {
     fontWeight: '800',
-    color: '#A16207',
+    color: '#1E3A8A',
   },
   transitTrackingBanner: {
     flexDirection: 'row',
-    backgroundColor: '#DCFCE7',
+    backgroundColor: '#EFF6FF',
     borderRadius: 16,
     padding: 14,
     alignItems: 'center',
     gap: 10,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: '#BBF7D0',
+    borderColor: '#DBEAFE',
   },
   transitTextContent: {
     flex: 1,
     fontSize: 12,
     fontWeight: '600',
-    color: '#166534',
+    color: '#1E3A8A',
   },
   boldText: {
     fontWeight: '800',
   },
-
-  // ACTION UTILITY SUB-STACK CONTROLLER INTERACTIVE BUTTONS
   actionButtonsStack: {
     flexDirection: 'column',
     gap: 12,
   },
   primaryActionButton: {
-    backgroundColor: '#2A437E',
-    height: 54,
+    backgroundColor: '#1E3A8A',
+    height: 56,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#2A437E',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 4,
   },
   cancelRideButton: {
     backgroundColor: '#EF4444',
-    height: 50,
+    height: 56,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#EF4444',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
   },
   startTripButtonVariant: {
-    backgroundColor: '#15803D',
-    shadowColor: '#15803D',
+    backgroundColor: '#A3E635',
   },
   endTripButtonVariant: {
-    backgroundColor: '#DC2626',
-    shadowColor: '#DC2626',
+    backgroundColor: '#EF4444',
   },
   primaryButtonText: {
     color: '#FFFFFF',
@@ -621,26 +590,28 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
-
-  // BASE SYSTEM TAB DECORATION INTERFACES
   tabBarContainer: {
     flexDirection: 'row',
     height: 74,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: '#F1F5F9',
   },
   tabItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  activeTabIconBackground: {
-    backgroundColor: '#EFF6FF',
+  tabIconBackground: {
     paddingHorizontal: 20,
     paddingVertical: 4,
     borderRadius: 16,
     marginBottom: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeTabIconBackground: {
+    backgroundColor: '#F1F5F9',
   },
   tabLabelActive: {
     fontSize: 11,
@@ -649,7 +620,9 @@ const styles = StyleSheet.create({
   },
   tabLabelInactive: {
     fontSize: 11,
-    fontWeight: '500',
+    fontWeight: '600',
     color: '#94A3B8',
   },
 })
+
+export default DriverNavigation

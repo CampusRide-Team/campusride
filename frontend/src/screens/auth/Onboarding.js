@@ -34,7 +34,6 @@ const SLIDES = [
   },
 ]
 
-
 // Dot indicator
 const Dots = ({ total, active }) => (
   <View style={styles.dotsRow}>
@@ -50,10 +49,9 @@ const Dots = ({ total, active }) => (
   </View>
 )
 
-// Single slide
+// Single slide layout block
 const Slide = ({ item }) => (
   <View style={styles.slide}>
-
     <View style={styles.imageWrapper}>
       <Image
         source={item.image}
@@ -62,23 +60,21 @@ const Slide = ({ item }) => (
       />
     </View>
 
-    {/* Text content */}
+    {/* Text Content Block */}
     <View style={styles.textContent}>
       <Text style={styles.title}>{item.title}</Text>
       <Text style={styles.subtitle}>{item.subtitle}</Text>
     </View>
-
   </View>
 )
 
-// Main Onboarding component
+// Main Onboarding Screen
 const Onboarding = ({ onFinish }) => {
   const [activeIndex, setActiveIndex] = useState(0)
   const flatListRef = useRef(null)
 
   const isLast = activeIndex === SLIDES.length - 1
 
-  // Next slide or finish on last slide
   const handleNext = () => {
     if (isLast) {
       if (onFinish) onFinish()
@@ -89,7 +85,6 @@ const Onboarding = ({ onFinish }) => {
     }
   }
 
-  // Skip — goes straight to Login
   const handleSkip = () => {
     if (onFinish) onFinish()
   }
@@ -108,7 +103,7 @@ const Onboarding = ({ onFinish }) => {
     <View style={styles.container}>
       <StatusBar style="dark" />
 
-      {/* Skip button — redirects to Login */}
+      {/* Skip Context Gateway */}
       <TouchableOpacity
         style={styles.skipBtn}
         onPress={handleSkip}
@@ -117,7 +112,6 @@ const Onboarding = ({ onFinish }) => {
         <Text style={styles.skipText}>Skip</Text>
       </TouchableOpacity>
 
-      {/* Slides */}
       <FlatList
         ref={flatListRef}
         data={SLIDES}
@@ -132,7 +126,7 @@ const Onboarding = ({ onFinish }) => {
         style={styles.flatList}
       />
 
-      {/* Bottom — dots + button */}
+      {/* Control Navigation Footer */}
       <View style={styles.bottom}>
         <Dots total={SLIDES.length} active={activeIndex} />
         <TouchableOpacity
@@ -145,92 +139,77 @@ const Onboarding = ({ onFinish }) => {
           </Text>
         </TouchableOpacity>
       </View>
-
     </View>
   )
 }
 
-// Styles
 const styles = StyleSheet.create({
-
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
-
-  // Skip button
   skipBtn: {
     position: 'absolute',
     top: 56,
-    right: 28,
+    right: 24,
     zIndex: 10,
-    padding: 4,
+    padding: 6,
   },
   skipText: {
     fontSize: 15,
     color: '#94A3B8',
-    fontWeight: '500',
+    fontWeight: '700',
   },
-
   flatList: {
     flex: 1,
   },
-
-  // Each slide
   slide: {
     width: width,
     flex: 1,
     alignItems: 'center',
-    paddingTop: 80,
-    paddingHorizontal: 28,
+    paddingTop: 90,
+    paddingHorizontal: 24,
   },
-
   imageWrapper: {
-    width: width * 0.75,
-    height: height * 0.42,
-    borderRadius: 16,
+    width: width * 0.8,
+    height: height * 0.4,
+    borderRadius: 16, // Enforced 16px standard token
     overflow: 'hidden',
-    marginBottom: 30,
+    marginBottom: 36,
     backgroundColor: '#F1F5F9',
-    top: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
-  
   onboardingImage: {
     width: '100%',
     height: '100%',
   },
-
-  // Text content
   textContent: {
     alignItems: 'center',
     gap: 12,
-    paddingHorizontal: 8,
+    paddingHorizontal: 12,
   },
   title: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: '800',
-    color: '#1F2937',
+    color: '#1E3A8A', // Harmonized to theme brand accent
     textAlign: 'center',
     letterSpacing: -0.5,
-    lineHeight: 40,
+    lineHeight: 36,
   },
   subtitle: {
     fontSize: 15,
     color: '#64748B',
     textAlign: 'center',
     lineHeight: 22,
-    fontWeight: '400',
+    fontWeight: '500',
   },
-
-  // Bottom section
   bottom: {
     paddingHorizontal: 24,
     paddingBottom: 48,
     alignItems: 'center',
     gap: 24,
   },
-
-  // Dots
   dotsRow: {
     flexDirection: 'row',
     gap: 8,
@@ -246,28 +225,21 @@ const styles = StyleSheet.create({
   },
   dotInactive: {
     width: 8,
-    backgroundColor: '#CBD5E1',
+    backgroundColor: '#E2E8F0',
   },
-
-  // Next / Get Started button
   nextBtn: {
     width: '100%',
-    height: 58,
+    height: 56,
     backgroundColor: '#1E3A8A',
-    borderRadius: 16,
+    borderRadius: 16, // Enforced 16px standard token
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#1E3A8A',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 8,
+    //  Styled flat to preserve clean minimalist layout guidelines
   },
   nextText: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: 0.3,
+    color: '#FFFFFF', // Clean high-contrast typography token
   },
 })
 

@@ -7,17 +7,7 @@ import {
   StyleSheet,
 } from 'react-native'
 import { StatusBar } from 'expo-status-bar'
-
-// Reusable Sub-components matching your theme
-const CarIcon = () => (
-  <View style={styles.carWrap}>
-    <View style={styles.carRoof} />
-    <View style={styles.carBase}>
-      <View style={[styles.wheel, { left: 5 }]} />
-      <View style={[styles.wheel, { right: 5 }]} />
-    </View>
-  </View>
-)
+import { MaterialCommunityIcons } from '@expo/vector-icons'
 
 const RoleSelection = ({ onSelectStudent, onSelectDriver }) => {
   return (
@@ -25,43 +15,47 @@ const RoleSelection = ({ onSelectStudent, onSelectDriver }) => {
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
+        {/* Logo Branding Header Area */}
         <View style={styles.logoSection}>
           <View style={styles.iconCard}>
-            <CarIcon />
+            <MaterialCommunityIcons name="car-electric" size={40} color="#FFFFFF" />
           </View>
           <Text style={styles.appName}>CampusRide</Text>
           <Text style={styles.appTagline}>Safe rides for everyone on campus</Text>
         </View>
 
+        {/* Central Interactivity Option Matrix */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Welcome to CampusRide</Text>
           <Text style={styles.cardSubtitle}>Please select your role to continue</Text>
 
           <View style={styles.roleGrid}>
+            {/* Student Option */}
             <TouchableOpacity 
               style={styles.roleOption} 
               onPress={onSelectStudent}
               activeOpacity={0.75}
             >
               <View style={styles.roleOptionIconCard}>
-                <Text style={styles.roleOptionIconText}>🎓</Text>
+                <MaterialCommunityIcons name="school" size={26} color="#1E3A8A" />
               </View>
               <View style={styles.roleOptionMeta}>
-                <Text style={styles.roleOptionTitle}>I am a Student</Text>
-                <Text style={styles.roleOptionSubtitle}>Book rides using university email</Text>
+                <Text style={styles.roleOptionTitle}>Student</Text>
+                <Text style={styles.roleOptionSubtitle}>Campus living made easy: just book, ride, and arrive</Text>
               </View>
             </TouchableOpacity>
 
+            {/* Driver Option */}
             <TouchableOpacity 
               style={styles.roleOption} 
               onPress={onSelectDriver}
               activeOpacity={0.75}
             >
               <View style={styles.roleOptionIconCard}>
-                <Text style={styles.roleOptionIconText}>🚖</Text>
+                <MaterialCommunityIcons name="car" size={26} color="#1E3A8A" />
               </View>
               <View style={styles.roleOptionMeta}>
-                <Text style={styles.roleOptionTitle}>I am a Driver</Text>
+                <Text style={styles.roleOptionTitle}>Driver</Text>
                 <Text style={styles.roleOptionSubtitle}>Access dashboard & manage trips</Text>
               </View>
             </TouchableOpacity>
@@ -76,107 +70,75 @@ const RoleSelection = ({ onSelectStudent, onSelectDriver }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F0F4F8',
+    backgroundColor: '#FFFFFF',
   },
   scroll: {
     flexGrow: 1,
     alignItems: 'center',
     paddingTop: 60,
     paddingBottom: 40,
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
   },
   logoSection: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 32,
     gap: 6,
   },
   iconCard: {
-    width: 76,
-    height: 76,
-    borderRadius: 20,
+    width: 80,
+    height: 80,
+    borderRadius: 16, 
     backgroundColor: '#1E3A8A',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#1E3A8A',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 8,
     marginBottom: 8,
   },
   appName: {
     fontSize: 26,
     fontWeight: '800',
     color: '#1E3A8A',
-    letterSpacing: -0.4,
+    letterSpacing: -0.5,
   },
   appTagline: {
     fontSize: 14,
     color: '#64748B',
-    fontWeight: '400',
-  },
-  carWrap: { alignItems: 'center' },
-  carRoof: {
-    width: 24,
-    height: 12,
-    backgroundColor: 'white',
-    borderTopLeftRadius: 7,
-    borderTopRightRadius: 7,
-    marginBottom: -1,
-  },
-  carBase: {
-    width: 38,
-    height: 15,
-    backgroundColor: 'white',
-    borderRadius: 3,
-  },
-  wheel: {
-    position: 'absolute',
-    bottom: -5,
-    width: 11,
-    height: 11,
-    borderRadius: 6,
-    backgroundColor: '#1E3A8A',
-    borderWidth: 2.5,
-    borderColor: 'white',
+    fontWeight: '500',
   },
   card: {
     width: '100%',
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 28,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 5,
+    borderRadius: 16,  
+    padding: 24,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     marginBottom: 16,
   },
   cardTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '800',
-    color: '#1F2937',
+    color: '#1E3A8A',
     textAlign: 'center',
-    marginBottom: 4,
+    letterSpacing: -0.3,
+    marginBottom: 6,
   },
   cardSubtitle: {
     fontSize: 14,
     color: '#94A3B8',
     textAlign: 'center',
-    marginBottom: 20,
+    fontWeight: '500',
+    marginBottom: 24,
   },
   roleGrid: {
     width: '100%',
     gap: 16,
-    marginTop: 8,
   },
   roleOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1.5,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
     borderColor: '#E2E8F0',
-    borderRadius: 18,
+    borderRadius: 16, 
     padding: 20,
     gap: 16,
   },
@@ -187,9 +149,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#EFF6FF',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  roleOptionIconText: {
-    fontSize: 22,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
   },
   roleOptionMeta: {
     flex: 1,
@@ -197,12 +158,13 @@ const styles = StyleSheet.create({
   roleOptionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#1F2937',
+    color: '#1E2937',
     marginBottom: 2,
   },
   roleOptionSubtitle: {
     fontSize: 13,
     color: '#64748B',
+    fontWeight: '500',
   },
 })
 

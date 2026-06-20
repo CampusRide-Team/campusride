@@ -14,6 +14,7 @@ import {
 import { StatusBar } from 'expo-status-bar'
 import * as DocumentPicker from 'expo-document-picker'
 import * as ImagePicker from 'expo-image-picker'
+import { Ionicons } from '@expo/vector-icons'
 
 // UploadRow — reusable row for document / input fields
 const UploadRow = ({
@@ -27,7 +28,7 @@ const UploadRow = ({
 }) => (
   <View style={styles.uploadBlock}>
     <View style={styles.uploadLabelRow}>
-      <Text style={styles.uploadIcon}>{icon}</Text>
+      <Ionicons name={icon} size={16} color="#1E3A8A" />
       <Text style={styles.uploadLabel}>{label}</Text>
     </View>
     <View style={styles.actionRow}>
@@ -44,7 +45,7 @@ const UploadRow = ({
       ) : (
         <>
           <Text
-            style={[styles.fileNameText, !fileName && styles.noFileText]}
+            style={[styles.fileNameText, !fileName || fileName.includes('No file') ? styles.noFileText : null]}
             numberOfLines={1}
           >
             {fileName}
@@ -70,39 +71,36 @@ const GhanaCardPreview = ({ frontUri, backUri }) => {
       {frontUri ? (
         <View style={styles.previewItem}>
           <Image source={{ uri: frontUri }} style={styles.previewImage} />
-          <Text style={styles.previewLabel}>Front</Text>
+          <Text style={styles.previewLabel}>Front View</Text>
         </View>
       ) : null}
       {backUri ? (
         <View style={styles.previewItem}>
           <Image source={{ uri: backUri }} style={styles.previewImage} />
-          <Text style={styles.previewLabel}>Back</Text>
+          <Text style={styles.previewLabel}>Back View</Text>
         </View>
       ) : null}
     </View>
   )
 }
 
-// Main component
-const DriverRegisterStep3 = ({ onSubmit, onBack, onLogin }) => {
-  const [insuranceFile, setInsuranceFile]       = useState(null)
-  const [licenseFile, setLicenseFile]           = useState(null)
-  const [registrationFile, setRegistrationFile] = useState(null)
+const DriverRegisterStep3 = ({ initialData, onSubmit, onBack, onLogin }) => {
+  // STATE PERSISTENCE HYDRATION: Keeps documents and inputs alive if needed via App.js memory layer
+  const [insuranceFile, setInsuranceFile]       = useState(initialData?.insuranceFile || null)
+  const [licenseFile, setLicenseFile]           = useState(initialData?.licenseFile || null)
+  const [registrationFile, setRegistrationFile] = useState(initialData?.registrationFile || null)
 
-  // Ghana Card front / back image URIs
-  const [ghanaCardFront, setGhanaCardFront] = useState(null)
-  const [ghanaCardBack, setGhanaCardBack]   = useState(null)
+  const [ghanaCardFront, setGhanaCardFront]     = useState(initialData?.ghanaCardFront || null)
+  const [ghanaCardBack, setGhanaCardBack]       = useState(initialData?.ghanaCardBack || null)
 
-  const [nationalIdNumber, setNationalIdNumber] = useState('')
+  const [nationalIdNumber, setNationalIdNumber] = useState(initialData?.nationalIdNumber || '')
   const [errors, setErrors]                     = useState({})
 
-  // Helper: status text shown in Ghana Card row  
   let ghanaCardPlaceholder = 'Select front & back images'
-  if (ghanaCardFront && !ghanaCardBack) ghanaCardPlaceholder = 'Front added — please select back...'
-  if (!ghanaCardFront && ghanaCardBack) ghanaCardPlaceholder = 'Back added — please select front...'
+  if (ghanaCardFront && !ghanaCardBack) ghanaCardPlaceholder = 'Front added — select back...'
+  if (!ghanaCardFront && ghanaCardBack) ghanaCardPlaceholder = 'Back added — select front...'
   if (ghanaCardFront && ghanaCardBack)  ghanaCardPlaceholder = '✓ Front & Back uploaded'
 
-  // Ghana Card number formatter 
   const handleIdNumberChange = (text) => {
     let cleaned = text.toUpperCase().replace(/[^A-Z0-9]/g, '')
 
@@ -122,7 +120,6 @@ const DriverRegisterStep3 = ({ onSubmit, onBack, onLogin }) => {
     setErrors((e) => ({ ...e, nationalIdNumber: null }))
   }
 
-  //  Open device file manager (PDF / doc files)  
   const handleUpload = async (docType) => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -130,7 +127,6 @@ const DriverRegisterStep3 = ({ onSubmit, onBack, onLogin }) => {
         copyToCacheDirectory: true,
       })
 
-      // User cancelled
       if (result.canceled) return
 
       const file = result.assets[0]
@@ -140,27 +136,18 @@ const DriverRegisterStep3 = ({ onSubmit, onBack, onLogin }) => {
       if (docType === 'registration') setRegistrationFile(file)
 
       setErrors((e) => ({ ...e, [`${docType}File`]: null }))
-
-      // TODO: connect to backend — upload file.uri for docType document
     } catch (error) {
       Alert.alert('Error', 'Could not open file manager. Please try again.')
     }
   }
 
-  // Ghana Card upload: choose front or back, then camera or gallery
   const handleGhanaCardUploadPrompt = () => {
     Alert.alert(
       'Upload Ghana Card',
       'Which side are you uploading?',
       [
-        {
-          text: 'Front Side',
-          onPress: () => pickGhanaCardImage('front'),
-        },
-        {
-          text: 'Back Side',
-          onPress: () => pickGhanaCardImage('back'),
-        },
+        { text: 'Front Side', onPress: () => pickGhanaCardImage('front') },
+        { text: 'Back Side', onPress: () => pickGhanaCardImage('back') },
         { text: 'Cancel', style: 'cancel' },
       ]
     )
@@ -171,28 +158,18 @@ const DriverRegisterStep3 = ({ onSubmit, onBack, onLogin }) => {
       `Ghana Card — ${side === 'front' ? 'Front' : 'Back'} Side`,
       'Choose how to provide the image:',
       [
-        {
-          text: '📁 File Manager',
-          onPress: () => pickGhanaCardFromFiles(side),
-        },
-        {
-          text: '📷 Take a Photo',
-          onPress: () => pickGhanaCardFromCamera(side),
-        },
+        { text: '📁 File Manager', onPress: () => pickGhanaCardFromFiles(side) },
+        { text: '📷 Take a Photo', onPress: () => pickGhanaCardFromCamera(side) },
         { text: 'Cancel', style: 'cancel' },
       ]
     )
   }
 
-  // Open image library (file manager / gallery)
   const pickGhanaCardFromFiles = async (side) => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
       if (status !== 'granted') {
-        Alert.alert(
-          'Permission Required',
-          'Please allow access to your photo library in Settings.'
-        )
+        Alert.alert('Permission Required', 'Please allow access to your photo library in Settings.')
         return
       }
 
@@ -205,29 +182,20 @@ const DriverRegisterStep3 = ({ onSubmit, onBack, onLogin }) => {
       if (result.canceled) return
 
       const uri = result.assets[0].uri
-      if (side === 'front') {
-        setGhanaCardFront(uri)
-      } else {
-        setGhanaCardBack(uri)
-      }
-      setErrors((e) => ({ ...e, ghanaCardFile: null }))
+      if (side === 'front') setGhanaCardFront(uri)
+      if (side === 'back')  setGhanaCardBack(uri)
 
-      // TODO: connect to backend — upload Ghana Card image (side: front/back) from uri
+      setErrors((e) => ({ ...e, ghanaCardFile: null }))
     } catch (error) {
-      console.error('Image library error:', error)
       Alert.alert('Error', `Could not open image library: ${error.message}`)
     }
   }
 
-  // Open camera to take a photo
   const pickGhanaCardFromCamera = async (side) => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync()
       if (status !== 'granted') {
-        Alert.alert(
-          'Permission Required',
-          'Please allow camera access in Settings.'
-        )
+        Alert.alert('Permission Required', 'Please allow camera access in Settings.')
         return
       }
 
@@ -240,31 +208,22 @@ const DriverRegisterStep3 = ({ onSubmit, onBack, onLogin }) => {
       if (result.canceled) return
 
       const uri = result.assets[0].uri
-      if (side === 'front') {
-        setGhanaCardFront(uri)
-      } else {
-        setGhanaCardBack(uri)
-      }
-      setErrors((e) => ({ ...e, ghanaCardFile: null }))
+      if (side === 'front') setGhanaCardFront(uri)
+      if (side === 'back')  setGhanaCardBack(uri)
 
-      // TODO: connect to backend — upload Ghana Card photo (side: front/back) from uri
+      setErrors((e) => ({ ...e, ghanaCardFile: null }))
     } catch (error) {
-      console.error('Camera error:', error)
       Alert.alert('Error', `Could not open camera: ${error.message}`)
     }
   }
 
-  // ── Validation ──
   const validate = () => {
     const newErrors = {}
 
     if (!insuranceFile)    newErrors.insuranceFile    = 'Driver insurance document is required'
     if (!licenseFile)      newErrors.licenseFile      = 'Driver license document is required'
     if (!registrationFile) newErrors.registrationFile = 'Vehicle registration document is required'
-
-    if (!ghanaCardFront || !ghanaCardBack) {
-      newErrors.ghanaCardFile = 'Both Front and Back images of the Ghana Card are required'
-    }
+    if (!ghanaCardFront || !ghanaCardBack) newErrors.ghanaCardFile = 'Both Front and Back images are required'
 
     const idRegex = /^GHA-\d{9}-\d{1}$/
     if (!nationalIdNumber.trim()) {
@@ -277,11 +236,26 @@ const DriverRegisterStep3 = ({ onSubmit, onBack, onLogin }) => {
     return Object.keys(newErrors).length === 0
   }
 
-  // Submit 
   const handleSubmit = () => {
     if (!validate()) return
 
-    // TODO: connect to backend — submit all documents and Ghana Card info for verification
+    // TODO: BACKEND INTEGRATION (Step 3 of 3 Completion Gateway)
+    // To send files to your live API server, compile them using FormData inside your parent submit runner:
+    //
+    // const multipartForm = new FormData()
+    // multipartForm.append('nationalIdNumber', nationalIdNumber)
+    // multipartForm.append('insurance', { uri: insuranceFile.uri, name: insuranceFile.name, type: insuranceFile.mimeType || 'application/pdf' })
+    // multipartForm.append('license', { uri: licenseFile.uri, name: licenseFile.name, type: licenseFile.mimeType || 'application/pdf' })
+    // multipartForm.append('registration', { uri: registrationFile.uri, name: registrationFile.name, type: registrationFile.mimeType || 'application/pdf' })
+    // multipartForm.append('ghanaCardFront', { uri: ghanaCardFront, name: 'ghana_card_front.jpg', type: 'image/jpeg' })
+    // multipartForm.append('ghanaCardBack', { uri: ghanaCardBack, name: 'ghana_card_back.jpg', type: 'image/jpeg' })
+    //
+    // fetch('https://your-api-url/api/v1/auth/drivers/register', {
+    //   method: 'POST',
+    //   headers: { 'Content-Type': 'multipart/form-data' },
+    //   body: multipartForm
+    // })
+
     if (onSubmit) {
       onSubmit({
         insuranceFile,
@@ -294,125 +268,89 @@ const DriverRegisterStep3 = ({ onSubmit, onBack, onLogin }) => {
     }
   }
 
-  // Render 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <StatusBar style="dark" />
 
       <View style={styles.headerNav}>
         <TouchableOpacity onPress={onBack} activeOpacity={0.7} style={styles.backButton}>
-          <Text style={styles.backArrow}>←</Text>
+          <Ionicons name="arrow-back" size={24} color="#1E3A8A" />
         </TouchableOpacity>
         <Text style={styles.stepIndicator}>Step 3 of 3</Text>
       </View>
 
       <View style={styles.progressContainer}>
         <View style={styles.progressBarInactive} />
-        <View style={[styles.progressBarInactive, { marginLeft: 8 }]} />
-        <View style={[styles.progressBarActive, { marginLeft: 8 }]} />
+        <View style={styles.progressBarInactive} />
+        <View style={styles.progressBarActive} />
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+
         <View style={styles.titleSection}>
           <Text style={styles.screenTitle}>Upload Documents</Text>
-          <Text style={styles.screenSubtitle}>Required for verification</Text>
+          <Text style={styles.screenSubtitle}>Required for verified system access</Text>
         </View>
 
         <View style={styles.formContainer}>
-          <Text style={styles.sectionTitle}>Documents</Text>
+          <Text style={styles.sectionTitle}>Verification Assets</Text>
 
           {/* Driver Insurance */}
           <UploadRow
-            label="Driver Insurance"
-            icon="🪪"
+            label="Driver Insurance Cover"
+            icon="shield-checkmark-outline"
             fileName={insuranceFile ? insuranceFile.name : 'No file selected'}
             onUploadPress={() => handleUpload('insurance')}
           />
-          {errors.insuranceFile && (
-            <Text style={styles.errorText}>{errors.insuranceFile}</Text>
-          )}
+          {errors.insuranceFile && <Text style={styles.errorText}>{errors.insuranceFile}</Text>}
 
           {/* Driver License */}
           <UploadRow
-            label="Driver License"
-            icon="🪪"
+            label="Driver's License"
+            icon="card-outline"
             fileName={licenseFile ? licenseFile.name : 'No file selected'}
             onUploadPress={() => handleUpload('license')}
           />
-          {errors.licenseFile && (
-            <Text style={styles.errorText}>{errors.licenseFile}</Text>
-          )}
+          {errors.licenseFile && <Text style={styles.errorText}>{errors.licenseFile}</Text>}
 
           {/* Vehicle Registration */}
           <UploadRow
-            label="Vehicle Registration"
-            icon="🚙"
+            label="Vehicle Logbook / Registration"
+            icon="car-sport-outline"
             fileName={registrationFile ? registrationFile.name : 'No file selected'}
             onUploadPress={() => handleUpload('registration')}
           />
-          {errors.registrationFile && (
-            <Text style={styles.errorText}>{errors.registrationFile}</Text>
-          )}
+          {errors.registrationFile && <Text style={styles.errorText}>{errors.registrationFile}</Text>}
 
           {/* Ghana Card Upload */}
           <UploadRow
-            label="Ghana Card (Front & Back)"
-            icon="👤"
+            label="Ghana Card (Front & Back Images)"
+            icon="person-add-outline"
             fileName={ghanaCardPlaceholder}
             onUploadPress={handleGhanaCardUploadPrompt}
           />
-          {errors.ghanaCardFile && (
-            <Text style={styles.errorText}>{errors.ghanaCardFile}</Text>
-          )}
+          {errors.ghanaCardFile && <Text style={styles.errorText}>{errors.ghanaCardFile}</Text>}
 
           {/* Ghana Card image previews */}
           <GhanaCardPreview frontUri={ghanaCardFront} backUri={ghanaCardBack} />
 
           {/* Ghana Card Number */}
           <UploadRow
-            label="Ghana Card Number"
-            icon="🔢"
+            label="Ghana Card Number Ident"
+            icon="keypad-outline"
             showInput={true}
             inputValue={nationalIdNumber}
             onInputChange={handleIdNumberChange}
           />
-          {errors.nationalIdNumber && (
-            <Text style={styles.errorText}>{errors.nationalIdNumber}</Text>
-          )}
+          {errors.nationalIdNumber && <Text style={styles.errorText}>{errors.nationalIdNumber}</Text>}
 
           {/* Submit */}
-          <TouchableOpacity
-            style={styles.submitBtn}
-            onPress={handleSubmit}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.submitBtnText}>Submit for Verification</Text>
+          <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit} activeOpacity={0.85}>
+            <Text style={styles.submitBtnText}>Submit Application</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={onBack}
-            style={styles.goBackCenterBtn}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.goBackCenterText}>← Go Back</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={onLogin}
-            activeOpacity={0.7}
-            style={styles.loginFooterBtn}
-          >
-            <Text style={styles.loginFooterText}>
-              Already have an account?{' '}
-              <Text style={styles.loginFooterLink}>Login</Text>
-            </Text>
+          <TouchableOpacity onPress={onBack} style={styles.goBackCenterBtn} activeOpacity={0.7}>
+            <Text style={styles.goBackCenterText}>← Modify Vehicle Info</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -420,9 +358,6 @@ const DriverRegisterStep3 = ({ onSubmit, onBack, onLogin }) => {
   )
 }
 
-export default DriverRegisterStep3
-
-// Styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -445,11 +380,6 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingRight: 16,
   },
-  backArrow: {
-    fontSize: 24,
-    color: '#1E3A8A',
-    fontWeight: '600',
-  },
   stepIndicator: {
     fontSize: 14,
     fontWeight: '700',
@@ -464,22 +394,24 @@ const styles = StyleSheet.create({
   },
   progressBarActive: {
     flex: 1,
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#1E3A8A',
     borderRadius: 2,
+    marginLeft: 8,
   },
   progressBarInactive: {
     flex: 1,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: '#1E3A8A',
     borderRadius: 2,
+    opacity: 0.15,
   },
   titleSection: {
-    marginBottom: 32,
+    marginBottom: 24,
   },
   screenTitle: {
     fontSize: 28,
     fontWeight: '800',
     color: '#1E3A8A',
-    marginBottom: 8,
+    marginBottom: 6,
     letterSpacing: -0.5,
   },
   screenSubtitle: {
@@ -488,10 +420,10 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   sectionTitle: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '800',
     color: '#1F2937',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   formContainer: {
     width: '100%',
@@ -505,10 +437,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     gap: 8,
   },
-  uploadIcon: {
-    fontSize: 14,
-    color: '#1E3A8A',
-  },
   uploadLabel: {
     fontSize: 14,
     fontWeight: '700',
@@ -518,7 +446,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    height: 58,
+    height: 56,
     paddingHorizontal: 16,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
@@ -549,46 +477,45 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   inlineUploadBtn: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#1E3A8A',
     borderRadius: 12,
-    paddingHorizontal: 20,
-    height: 46,
+    paddingHorizontal: 16,
+    height: 38,
     alignItems: 'center',
     justifyContent: 'center',
   },
   inlineUploadBtnText: {
     color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
   },
-  // Ghana Card image preview
   previewRow: {
     flexDirection: 'row',
     gap: 12,
-    marginTop: -8,
+    marginTop: 4,
     marginBottom: 16,
   },
   previewItem: {
     alignItems: 'center',
   },
   previewImage: {
-    width: 110,
-    height: 70,
-    borderRadius: 10,
+    width: 100,
+    height: 64,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
   previewLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#64748B',
     marginTop: 4,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   errorText: {
     fontSize: 12,
     color: '#EF4444',
-    marginTop: -10,
-    marginBottom: 14,
+    marginTop: 6,
+    marginBottom: 12,
     marginLeft: 4,
   },
   submitBtn: {
@@ -598,8 +525,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 16,
-    backgroundColor: '#223C8F',
-    shadowColor: '#223C8F',
+    backgroundColor: '#1E3A8A',
+    shadowColor: '#1E3A8A',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
@@ -619,20 +546,8 @@ const styles = StyleSheet.create({
   goBackCenterText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#1E2937',
-  },
-  loginFooterBtn: {
-    alignItems: 'center',
-    marginTop: 16,
-    paddingVertical: 8,
-  },
-  loginFooterText: {
-    fontSize: 14,
     color: '#64748B',
-    fontWeight: '500',
-  },
-  loginFooterLink: {
-    color: '#3B82F6',
-    fontWeight: '700',
   },
 })
+
+export default DriverRegisterStep3

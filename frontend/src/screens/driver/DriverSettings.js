@@ -15,18 +15,18 @@ import { MaterialCommunityIcons } from '@expo/vector-icons'
 const { width } = Dimensions.get('window')
 
 const DriverSettings = ({ onBack, onNavigate }) => {
-  // 🌟 Interactive Local Switch State Managers
+  // Interactive Local Switch State Managers
   const [pushEnabled, setPushEnabled] = useState(true)
   const [emailEnabled, setEmailEnabled] = useState(false)
   const [darkModeEnabled, setDarkModeEnabled] = useState(false)
 
   const handlePrivacyCenter = () => {
-    // 💡 TODO: BACKEND INTEGRATION — Map out sub-route sequence or internal disclosure link
+    // TODO: BACKEND INTEGRATION — Map out sub-route sequence or internal disclosure link
     console.log('Privacy center routine activated.')
   }
 
   const handleLanguageSelect = () => {
-    // 💡 TODO: BACKEND INTEGRATION — Initialize locale/i18n picker engine arrays
+    // TODO: BACKEND INTEGRATION — Initialize locale/i18n picker engine arrays
     console.log('Language panel picker fired.')
   }
 
@@ -34,7 +34,7 @@ const DriverSettings = ({ onBack, onNavigate }) => {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <StatusBar style="dark" />
 
-      {/* 1. TOP NAVBAR HEADER SECTION */}
+      {/* Top Navbar Header Section */}
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} activeOpacity={0.7} style={styles.backButton}>
           <MaterialCommunityIcons name="arrow-left" size={24} color="#1E3A8A" />
@@ -44,14 +44,14 @@ const DriverSettings = ({ onBack, onNavigate }) => {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-        
+
         {/* Title Intro Layout Headers */}
         <Text style={styles.mainTitle}>Preferences</Text>
         <Text style={styles.subTitle}>Customize your driving experience and notification triggers.</Text>
 
-        {/* 2. NOTIFICATIONS CONFIGURATION ZONE */}
+        {/* Notifications Configuration Zone */}
         <Text style={styles.sectionHeaderLabel}>Notifications</Text>
-        
+
         <View style={styles.cardStack}>
           {/* Push Toggle Card Row */}
           <View style={styles.preferenceCard}>
@@ -63,7 +63,7 @@ const DriverSettings = ({ onBack, onNavigate }) => {
               <Text style={styles.settingSubtitleText}>Instant ride requests & alerts</Text>
             </View>
             <Switch
-              trackColor={{ false: '#E2E8F0', true: '#1E3A8A' }}
+              trackColor={{ false: '#E2E8F0', true: '#A3E635' }}
               thumbColor="#FFFFFF"
               ios_backgroundColor="#E2E8F0"
               onValueChange={setPushEnabled}
@@ -81,7 +81,7 @@ const DriverSettings = ({ onBack, onNavigate }) => {
               <Text style={styles.settingSubtitleText}>Weekly summaries and news</Text>
             </View>
             <Switch
-              trackColor={{ false: '#E2E8F0', true: '#1E3A8A' }}
+              trackColor={{ false: '#E2E8F0', true: '#A3E635' }}
               thumbColor="#FFFFFF"
               ios_backgroundColor="#E2E8F0"
               onValueChange={setEmailEnabled}
@@ -90,7 +90,7 @@ const DriverSettings = ({ onBack, onNavigate }) => {
           </View>
         </View>
 
-        {/* 3. SYSTEM PREFERENCES ENVIRONMENT ZONE */}
+        {/* System Preferences Environment Zone */}
         <Text style={styles.sectionHeaderLabel}>App & System</Text>
 
         <View style={styles.cardStack}>
@@ -104,7 +104,7 @@ const DriverSettings = ({ onBack, onNavigate }) => {
               <Text style={styles.settingSubtitleText}>Easier on the eyes at night</Text>
             </View>
             <Switch
-              trackColor={{ false: '#E2E8F0', true: '#1E3A8A' }}
+              trackColor={{ false: '#E2E8F0', true: '#A3E635' }}
               thumbColor="#FFFFFF"
               ios_backgroundColor="#E2E8F0"
               onValueChange={setDarkModeEnabled}
@@ -129,7 +129,7 @@ const DriverSettings = ({ onBack, onNavigate }) => {
           </TouchableOpacity>
         </View>
 
-        {/* 4. PRIVACY HERO CARD COMPONENT CONTAINER */}
+        {/* Privacy Hero Card Component Container */}
         <TouchableOpacity 
           style={styles.privacyHeroCard} 
           activeOpacity={0.9}
@@ -140,7 +140,7 @@ const DriverSettings = ({ onBack, onNavigate }) => {
           </View>
           <Text style={styles.privacyMainTitleText}>Privacy Center</Text>
           <Text style={styles.privacySubTitleText}>Manage your location sharing and data privacy settings.</Text>
-          
+
           {/* Watermarked decorative background badge emblem */}
           <View style={styles.privacyWatermarkIconWrap}>
             <MaterialCommunityIcons name="shield-check" size={100} color="rgba(255,255,255,0.06)" />
@@ -149,7 +149,7 @@ const DriverSettings = ({ onBack, onNavigate }) => {
 
       </ScrollView>
 
-      {/* 5. APP BASE SYSTEM TAB NAV BAR (Perfectly Synced directly to DriverHome Style Schema) */}
+      {/* App Base System Tab Nav Bar Component */}
       <View style={styles.tabBarContainer}>
         {/* Home Tab */}
         <TouchableOpacity style={styles.tabItem} onPress={() => onNavigate && onNavigate('home')} activeOpacity={0.7}>
@@ -196,7 +196,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 24,
     paddingVertical: 14,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
@@ -211,7 +211,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#1E293B',
+    color: '#1E3A8A',
     letterSpacing: -0.5,
   },
   headerSpacer: {
@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
   mainTitle: {
     fontSize: 32,
     fontWeight: '800',
-    color: '#0F172A',
+    color: '#1E2937',
     letterSpacing: -0.8,
     marginTop: 12,
     marginBottom: 6,
@@ -252,11 +252,11 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#F1F5F9',
+    borderColor: '#E2E8F0',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.02,
-    shadowRadius: 10,
+    shadowRadius: 8,
     elevation: 2,
   },
   cardIconWrap: {
@@ -275,7 +275,7 @@ const styles = StyleSheet.create({
   settingTitleText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#1E293B',
+    color: '#1E2937',
     marginBottom: 2,
   },
   settingSubtitleText: {
@@ -286,16 +286,16 @@ const styles = StyleSheet.create({
   privacyHeroCard: {
     position: 'relative',
     backgroundColor: '#1E3A8A',
-    borderRadius: 20,
+    borderRadius: 16,
     padding: 24,
     overflow: 'hidden',
     marginTop: 8,
     marginBottom: 12,
     shadowColor: '#1E3A8A',
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 12,
-    elevation: 4,
+    elevation: 3,
   },
   privacyIconWrap: {
     width: 44,
@@ -347,11 +347,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   activeTabIconBackground: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: '#F1F5F9',
   },
   tabLabelText: {
     fontSize: 11,
-    fontWeight: '500',
+    fontWeight: '600',
     color: '#94A3B8',
   },
   activeTabLabelText: {

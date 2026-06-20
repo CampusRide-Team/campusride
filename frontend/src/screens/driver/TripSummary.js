@@ -9,30 +9,29 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
-import { MaterialCommunityIcons } from '@expo/vector-icons' // 🌟 IMPORTED NATIVE PLUGIN VECTOR ICONS
+import { MaterialCommunityIcons } from '@expo/vector-icons'
 
 const { width } = Dimensions.get('window')
 
 const TripSummary = ({ onDismiss, onChangeTab, tripData }) => {
-  
+
   // Fallback structural mock data matching your exact timeframe and distance metrics
   const activeSummary = tripData || {
     driverName: 'Kwame',
     pickupLocation: 'Engineering Block C',
     destinationLocation: 'Student Union North',
-    durationText: '12 minutes', // Real-time duration timeframe display value
-    distanceText: '4.2 km',      // Actual operational distance metric display value
+    durationText: '12 minutes', 
+    distanceText: '4.2 km',      
   }
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <StatusBar style="dark" />
 
-      {/* 1. TOP TITLE HEADER BAR */}
+      {/* Top Title Header Bar */}
       <View style={styles.header}>
-        {/* Redirects driver immediately back to the Active Ride Requests Dashboard View */}
         <TouchableOpacity 
-          onPress={() => onChangeTab && onChangeTab('trips')} 
+          onPress={() => onChangeTab?.('trips')} 
           activeOpacity={0.7} 
           style={styles.headerButton}
         >
@@ -42,12 +41,12 @@ const TripSummary = ({ onDismiss, onChangeTab, tripData }) => {
         <View style={styles.headerButtonPlaceholder} />
       </View>
 
-      {/* 2. MAIN CORE CONTENT LAYER */}
+      {/* Main Core Content Layer */}
       <View style={styles.contentWorkspace}>
-        
+
         {/* Animated Green Checkmark Vector Circle Badge */}
         <View style={styles.successCircleContainer}>
-          <MaterialCommunityIcons name="check" size={48} color="#FFFFFF" />
+          <MaterialCommunityIcons name="check" size={48} color="#1E3A8A" />
         </View>
 
         <Text style={styles.tripCompletedHeadingText}>Trip Completed</Text>
@@ -55,9 +54,9 @@ const TripSummary = ({ onDismiss, onChangeTab, tripData }) => {
           Well done, {activeSummary.driverName}. Safe driving!
         </Text>
 
-        {/* 3. CARD CONTAINER MODULE LAYER */}
+        {/* Metrics Display Master Card Shell */}
         <View style={styles.summaryCardView}>
-          
+
           {/* Vertical Route Indicator Timeline Link Block */}
           <View style={styles.routeTimelineTrackRow}>
             <View style={styles.timelineNodeVisualColumn}>
@@ -65,12 +64,12 @@ const TripSummary = ({ onDismiss, onChangeTab, tripData }) => {
               <View style={styles.pickupOuterCirclePin}>
                 <View style={styles.pickupInnerCirclePin} />
               </View>
-              
+
               <View style={styles.verticalLinkLineTrack} />
-              
-              {/* Destination Pin - Green Ring Enclosing Your 🏁 Finish Flag */}
+
+              {/* Destination Pin - Green Ring Enclosing Finish Marker */}
               <View style={styles.dropoffOuterCirclePin}>
-                <MaterialCommunityIcons name="flag-checkered" size={12} color="#2E7D32" />
+                <MaterialCommunityIcons name="map-marker" size={14} color="#1E3A8A" />
               </View>
             </View>
 
@@ -93,19 +92,21 @@ const TripSummary = ({ onDismiss, onChangeTab, tripData }) => {
 
           <View style={styles.horizontalDividerRule} />
 
-          {/* Metrics Distribution Row Wrapper (Aligned Perfectly Side-by-Side) */}
+          {/* Metrics Distribution Row Wrapper */}
           <View style={styles.metricsDistributionGridRow}>
             <View style={styles.metricDataCellUnit}>
-              <Text style={styles.metricLabelCategory}>
-                <MaterialCommunityIcons name="clock-outline" size={16} color="#94A3B8" /> Duration
-              </Text>
+              <View style={styles.metricLabelContainer}>
+                <MaterialCommunityIcons name="clock-outline" size={16} color="#94A3B8" /> 
+                <Text style={styles.metricLabelCategory}>Duration</Text>
+              </View>
               <Text style={styles.metricValueHeadlineText}>{activeSummary.durationText}</Text>
             </View>
 
             <View style={styles.metricDataCellUnit}>
-              <Text style={styles.metricLabelCategory}>
-                <MaterialCommunityIcons name="map-marker-outline" size={16} color="#94A3B8" /> Distance
-              </Text>
+              <View style={styles.metricLabelContainer}>
+                <MaterialCommunityIcons name="map-marker-outline" size={16} color="#94A3B8" /> 
+                <Text style={styles.metricLabelCategory}>Distance</Text>
+              </View>
               <Text style={styles.metricValueHeadlineText}>{activeSummary.distanceText}</Text>
             </View>
           </View>
@@ -116,22 +117,26 @@ const TripSummary = ({ onDismiss, onChangeTab, tripData }) => {
         <Text style={styles.bottomSuccessBannerLabelToast}>Trip successfully completed</Text>
       </View>
 
-      {/* 4. BASE SYSTEM TAB BAR SYSTEM BAR */}
+      {/* App Base System Tab Nav Bar Component */}
       <View style={styles.tabBarContainer}>
         <TouchableOpacity style={styles.tabItem} onPress={onDismiss} activeOpacity={0.7}>
-          <MaterialCommunityIcons name="home-outline" size={24} color="#94A3B8" />
+          <View style={styles.tabIconBackground}>
+            <MaterialCommunityIcons name="home-outline" size={24} color="#94A3B8" />
+          </View>
           <Text style={styles.tabLabelInactive}>Home</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.tabItem} onPress={() => onChangeTab && onChangeTab('trips')} activeOpacity={0.7}>
-          <View style={styles.activeTabIconBackground}>
+        <TouchableOpacity style={styles.tabItem} onPress={() => onChangeTab?.('trips')} activeOpacity={0.7}>
+          <View style={[styles.tabIconBackground, styles.activeTabIconBackground]}>
             <MaterialCommunityIcons name="car-multiple" size={24} color="#1E3A8A" />
           </View>
           <Text style={styles.tabLabelActive}>Trips</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.tabItem} onPress={() => onChangeTab && onChangeTab('profile')} activeOpacity={0.7}>
-          <MaterialCommunityIcons name="account-circle-outline" size={24} color="#94A3B8" />
+        <TouchableOpacity style={styles.tabItem} onPress={() => onChangeTab?.('profile')} activeOpacity={0.7}>
+          <View style={styles.tabIconBackground}>
+            <MaterialCommunityIcons name="account-circle-outline" size={24} color="#94A3B8" />
+          </View>
           <Text style={styles.tabLabelInactive}>Profile</Text>
         </TouchableOpacity>
       </View>
@@ -139,38 +144,35 @@ const TripSummary = ({ onDismiss, onChangeTab, tripData }) => {
   )
 }
 
-export default TripSummary
-
 const styles = StyleSheet.create({
-  // GLOBAL LAYOUT CORE CONTAINER SPECIFICATIONS
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FFFFFF',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 24,
     paddingVertical: 14,
     backgroundColor: '#FFFFFF',
-    marginHorizontal: 16,
-    marginTop: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
   },
   headerButton: {
-    width: 32,
-    height: 32,
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerButtonPlaceholder: {
-    width: 32,
-    height: 32,
+    width: 40,
   },
   headerTitleText: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 22,
+    fontWeight: '800',
     color: '#1E3A8A',
+    letterSpacing: -0.5,
     textAlign: 'center',
   },
   contentWorkspace: {
@@ -180,26 +182,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 20,
   },
-
-  // SUCCESS GRAPHIC VECTOR INDICATORS
   successCircleContainer: {
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: '#84CC16',
+    backgroundColor: '#A3E635',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 24,
-    shadowColor: '#84CC16',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 6,
+    borderWidth: 1,
+    borderColor: '#1E3A8A',
   },
   tripCompletedHeadingText: {
     fontSize: 32,
     fontWeight: '800',
-    color: '#032B74',
+    color: '#1E3A8A',
+    letterSpacing: -0.8,
     marginBottom: 12,
   },
   driverGreetingSubtext: {
@@ -209,20 +207,13 @@ const styles = StyleSheet.create({
     marginBottom: 32,
     textAlign: 'center',
   },
-
-  // METRICS DISPLAY MASTER CARD SHELL SPECIFICATIONS
   summaryCardView: {
     width: width - 48,
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 24,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.04,
-    shadowRadius: 16,
-    elevation: 4,
     borderWidth: 1,
-    borderColor: '#F1F5F9',
+    borderColor: '#E2E8F0',
   },
   routeTimelineTrackRow: {
     flexDirection: 'row',
@@ -244,29 +235,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#1E40AF',
+    borderColor: '#1E3A8A',
   },
   pickupInnerCirclePin: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#1E40AF',
+    backgroundColor: '#1E3A8A',
   },
   verticalLinkLineTrack: {
     flex: 1,
     width: 2,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: '#F1F5F9',
     marginVertical: 4,
   },
   dropoffOuterCirclePin: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#E8F5E9',
+    backgroundColor: '#EFF6FF',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#2E7D32',
+    borderColor: '#A3E635',
   },
   routeLabelsTextColumn: {
     flex: 1,
@@ -285,40 +276,39 @@ const styles = StyleSheet.create({
   locationHeadlineText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#1E293B',
+    color: '#1E2937',
   },
   horizontalDividerRule: {
     height: 1,
     backgroundColor: '#F1F5F9',
     marginVertical: 4,
   },
-
-  // DISTRIBUTED TRAVEL CORE GRID CELLS (Fixed for side-by-side column perspective)
   metricsDistributionGridRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingVertical: 14,
-    paddingHorizontal: 8,
   },
   metricDataCellUnit: {
     flex: 1,
     flexDirection: 'column',
     alignItems: 'flex-start',
   },
+  metricLabelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
   metricLabelCategory: {
     fontSize: 13,
     fontWeight: '600',
     color: '#94A3B8',
-    marginBottom: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
   },
   metricValueHeadlineText: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#032B74',
-    marginLeft: 4, // Clean alignment offset buffer to sync with the emoji icon width bounds
+    color: '#1E3A8A',
+    paddingLeft: 22,
   },
   bottomSuccessBannerLabelToast: {
     fontSize: 14,
@@ -327,26 +317,28 @@ const styles = StyleSheet.create({
     marginTop: 32,
     textAlign: 'center',
   },
-
-  // SYSTEM TAB DECORATION INTERFACES
   tabBarContainer: {
     flexDirection: 'row',
     height: 74,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: '#F1F5F9',
   },
   tabItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  activeTabIconBackground: {
-    backgroundColor: '#EFF6FF',
+  tabIconBackground: {
     paddingHorizontal: 20,
     paddingVertical: 4,
     borderRadius: 16,
     marginBottom: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeTabIconBackground: {
+    backgroundColor: '#F1F5F9',
   },
   tabLabelActive: {
     fontSize: 11,
@@ -355,7 +347,9 @@ const styles = StyleSheet.create({
   },
   tabLabelInactive: {
     fontSize: 11,
-    fontWeight: '500',
+    fontWeight: '600',
     color: '#94A3B8',
   },
 })
+
+export default TripSummary
