@@ -1,38 +1,68 @@
-import axios from 'axios'
+import axios from "axios";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
 
-// TODO: API call — replace with your actual backend URL once ready
-const BASE_URL = 'http://localhost:5000/api'
+// LIVE BACKEND ROUTING ENGINE
+const getBaseUrl = () => {
+  if (__DEV__) {
+    // Android Emulator bridges on loopback 10.0.2.2, iOS Simulator handles localhost cleanly
+    return Platform.OS === "android"
+      ? "http://10.0.2.2:5000/api/v1"
+      : "http://localhost:5000/api/v1";
+  }
+  return "https://your-live-backend-url.university.edu/api/v1";
+};
 
 const api = axios.create({
-  baseURL: BASE_URL,
-  timeout: 10000,
+  baseURL: getBaseUrl(),
+  timeout: 15000,
   headers: {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
+    Accept: "application/json",
   },
-})
+});
 
-// Request interceptor
+// Request Interceptor: Injects active JWT token structures into header signatures
 api.interceptors.request.use(
   async (config) => {
-    // TODO: API call — Get persistent token from AsyncStorage once package is linked
-    // const token = await AsyncStorage.getItem('token')
-    // if (token) config.headers.Authorization = `Bearer ${token}`
-    return config
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    } catch (error) {
+      console.error(
+        "Failed to retrieve authentication token from storage:",
+        error
+      );
+    }
+    return config;
   },
   (error) => Promise.reject(error)
-)
+);
 
-// Response interceptor
+// Response Interceptor: Catches server eviction flags and safely resets session bounds
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    if (error.response?.status === 401) {
-      // TODO: API call — Clean storage and clear state context logs on authentication failure
-      // await AsyncStorage.removeItem('token')
-      // await AsyncStorage.removeItem('user')
-    }
-    return Promise.reject(error)
-  }
-)
+    const originalRequest = error.config;
 
-export default api
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      try {
+        await AsyncStorage.multiRemove(["token", "user"]);
+        console.warn(
+          "Session expired or unauthorized. Cleared local auth state caches."
+        );
+      } catch (clearError) {
+        console.error(
+          "Failed to flush storage keys on session eviction:",
+          clearError
+        );
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
+export default api;

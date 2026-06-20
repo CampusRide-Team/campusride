@@ -28,13 +28,13 @@ import RideHistory        from './src/screens/driver/RideHistory'
 import DriverNotis        from './src/screens/driver/DriverNotis'
 import DriverSupport      from './src/screens/driver/DriverSupport' 
 import EditDriverProfile  from './src/screens/driver/EditDriverProfile'
-import DriverSettings     from './src/screens/driver/DriverSettings' // 🌟 IMPORTED NEW APP SETTINGS MODULE SCREEN
+import DriverSettings     from './src/screens/driver/DriverSettings'
 
 const RootNavigator = () => {
   const [screen, setScreen] = useState('splash')
   const { role, setRole, logout } = useAuth()
   const [tempVehicleData, setTempVehicleData] = useState(null)
-  
+
   // Global persistence states to remember the selection across screens
   const [selectedRequestId, setSelectedRequestId] = useState('req_lucy')
   const [activeTripData, setActiveTripData] = useState(null)
@@ -43,47 +43,44 @@ const RootNavigator = () => {
   const [tripStartTime, setTripStartTime] = useState(null)
   const [finalCalculatedTrip, setFinalCalculatedTrip] = useState(null)
 
-  // 🚗 LOCAL STATE DRIVER LEDGER: Holds live edits seamlessly across views without database lag
+  // LOCAL STATE DRIVER LEDGER: Holds live edits seamlessly across views without database lag
   const [driverProfileData, setDriverProfileData] = useState({
     fullName: 'Alex Johnson',
-    email: 'alex.j@university.edu',
+    email: 'alex.j@gmail.com',
     avatarUri: null,
   })
 
-  // 🚗 THE REQUESTS POOL STATE (Starts with 3 active requests)
+  // THE REQUESTS POOL STATE (Starts with 3 active requests)
   const [requestsPool, setRequestsPool] = useState([
     {
       id: 'req_lucy',
       name: 'Lucy Amankwa',
-      rating: '4.9',
-      type: 'Student',
       pickup: 'Law Department',
       destination: 'Engineering Block C',
       distance: '2.5 km',
       arrival: '3 mins',
       avatarEmoji: '👩‍🎓',
+      rideMode: 'shared',
     },
     {
       id: 'req_kwame',
       name: 'Kwame Mensah',
-      rating: '4.7',
-      type: 'Student',
       pickup: 'Balme Library',
       destination: 'Gym / Sports Stadium',
       distance: '1.2 km',
       arrival: '5 mins',
       avatarEmoji: '👨‍🎓',
+      rideMode: 'private',
     },
     {
       id: 'req_aisha',
       name: 'Aisha Osei',
-      rating: '4.8',
-      type: 'Guest',
       pickup: 'Dorms A / Volta',
       destination: 'Bush Canteen Cafe',
       distance: '0.8 km',
       arrival: '2 mins',
       avatarEmoji: '👩‍💼',
+      rideMode: 'shared',
     },
   ])
 
@@ -218,17 +215,10 @@ const RootNavigator = () => {
   if (screen === 'active-requests') {
     return (
       <ActiveRequests 
-        requests={requestsPool} 
-        selectedId={selectedRequestId}
-        onSelectId={setSelectedRequestId}
         onBack={() => setScreen('home')} 
         onAcceptRide={(acceptedPassenger) => {
           setActiveTripData(acceptedPassenger)
           setTripStartTime(Date.now()) 
-          
-          // TODO: BACKEND INTEGRATION
-          // send POST request to server (e.g., /api/rides/accept) to update status to 'ACCEPTED'
-          
           setScreen('driver-navigation')
         }}
         onChangeTab={(targetTab) => {
@@ -247,7 +237,7 @@ const RootNavigator = () => {
         onBack={() => setScreen('active-requests')}
         onArrive={() => {
           console.log('Driver confirmed destination drop-off completed.')
-          
+
           const endTime = Date.now()
           const totalElapsedMs = endTime - tripStartTime
           const durationCalculated = tripStartTime ? Math.round(totalElapsedMs / 60000) : 12
@@ -261,7 +251,7 @@ const RootNavigator = () => {
           }
 
           const dynamicTripPayload = {
-            driverName: 'Kwame', 
+            driverName: driverProfileData.fullName.split(' ')[0], 
             pickupLocation: activeTripData?.pickup || 'Engineering Block C',
             destinationLocation: activeTripData?.destination || 'Student Union North',
             durationText: durationTextValue,
@@ -276,9 +266,6 @@ const RootNavigator = () => {
             )
           }
 
-          // TODO: BACKEND INTEGRATION
-          // send POST request to server (e.g., /api/rides/complete) with calculated duration matrices
-          
           setScreen('trip-summary') 
         }}
         onCancelNoPenalty={() => {
@@ -294,10 +281,6 @@ const RootNavigator = () => {
                       currentPool.filter(request => request.id !== activeTripData.id)
                     )
                   }
-                  
-                  // TODO: BACKEND INTEGRATION
-                  // send POST request to server (e.g., /api/rides/cancel-no-penalty) to clear ride status
-                  
                   setActiveTripData(null)
                   setTripStartTime(null)
                   setScreen('active-requests')
@@ -340,20 +323,20 @@ const RootNavigator = () => {
   if (screen === 'driver-profile') {
     return (
       <DriverProfile
-        driverData={driverProfileData} // 🌟 Injects state memory directly into fields fallback
+        driverData={driverProfileData} 
         onLogout={() => {
           logout()
           setScreen('role-selection')
         }}
         onNavigate={(targetTab) => {
-          if (targetTab === 'home') setScreen('home')
-          if (targetTab === 'active-requests') setScreen('active-requests')
-          if (targetTab === 'profile') setScreen('driver-profile')
-          if (targetTab === 'ride-history') setScreen('ride-history')
-          if (targetTab === 'notifications') setScreen('driver-notis')
-          if (targetTab === 'help-support') setScreen('driver-support')
-          if (targetTab === 'settings') setScreen('edit-driver-profile') 
-          if (targetTab === 'app-settings') setScreen('app-settings') // 🌟 DYNAMIC APP-SETTINGS MENU CARD ACTION LINKED HERE
+          if (targetTab === 'home')            return setScreen('home')
+          if (targetTab === 'active-requests')  return setScreen('active-requests')
+          if (targetTab === 'profile')          return; 
+          if (targetTab === 'ride-history')     return setScreen('ride-history')
+          if (targetTab === 'notifications')    return setScreen('driver-notis')
+          if (targetTab === 'help-support')     return setScreen('driver-support')
+          if (targetTab === 'settings')         return setScreen('edit-driver-profile') 
+          if (targetTab === 'app-settings')     return setScreen('app-settings') 
         }}
       />
     )
@@ -420,10 +403,6 @@ const RootNavigator = () => {
     return (
       <DriverSettings
         onBack={() => setScreen('driver-profile')}
-        onLogout={() => {
-          logout()
-          setScreen('role-selection')
-        }}
         onNavigate={(targetTab) => {
           if (targetTab === 'home') setScreen('home')
           if (targetTab === 'active-requests') setScreen('active-requests')

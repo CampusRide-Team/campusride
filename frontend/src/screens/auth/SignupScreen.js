@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -8,22 +8,18 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-} from 'react-native'
-import { StatusBar } from 'expo-status-bar'
+  ActivityIndicator,
+} from "react-native";
+import { StatusBar } from "expo-status-bar";
+import { Ionicons } from "@expo/vector-icons";
 
-// TODO: import your axios API instance when backend is ready
-// import api from '../api/axios'
-
-// TODO: import AsyncStorage to store token after signup
-// import AsyncStorage from '@react-native-async-storage/async-storage'
-
-// Reusable input field
+// Reusable input field component
 const InputField = ({
   label,
   placeholder,
   value,
   onChangeText,
-  keyboardType = 'default',
+  keyboardType = "default",
   secureTextEntry = false,
   icon,
   rightAction,
@@ -31,9 +27,12 @@ const InputField = ({
   <View style={styles.fieldWrap}>
     <Text style={styles.fieldLabel}>{label}</Text>
     <View style={styles.inputRow}>
-      <View style={styles.inputIcon}>
-        <Text style={styles.inputIconText}>{icon}</Text>
-      </View>
+      <Ionicons
+        name={icon}
+        size={18}
+        color="#64748B"
+        style={styles.inputIcon}
+      />
       <TextInput
         style={styles.input}
         placeholder={placeholder}
@@ -48,14 +47,16 @@ const InputField = ({
         <TouchableOpacity
           style={styles.inputRightAction}
           onPress={rightAction.onPress}
+          activeOpacity={0.7}
         >
-          <Text style={styles.inputIconText}>{rightAction.icon}</Text>
+          <Ionicons name={rightAction.icon} size={18} color="#64748B" />
         </TouchableOpacity>
       )}
     </View>
   </View>
-)
-// Car icon — same across all auth screens
+);
+
+// Branding vector car icon element
 const CarIcon = () => (
   <View style={styles.carWrap}>
     <View style={styles.carRoof} />
@@ -64,105 +65,99 @@ const CarIcon = () => (
       <View style={[styles.wheel, { right: 5 }]} />
     </View>
   </View>
-)
+);
 
-// Main Signup screen 
+// Main signup component controller
 const SignupScreen = ({ onDone, onSignIn }) => {
-  const [fullName, setFullName]         = useState('')
-  const [phone, setPhone]               = useState('')
-  const [email, setEmail]               = useState('')
-  const [password, setPassword]         = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const [agreed, setAgreed]             = useState(false)
-  const [loading, setLoading]           = useState(false)
-  const [errors, setErrors]             = useState({})
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [agreed, setAgreed] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState({});
 
-  // ── Validation ──
+  // Client-side application data validation runner
   const validate = () => {
-    const newErrors = {}
+    const newErrors = {};
 
-    if (!fullName.trim())
-      newErrors.fullName = 'Full name is required'
+    if (!fullName.trim()) newErrors.fullName = "Full name is required";
 
-    if (!phone.trim())
-      newErrors.phone = 'Phone number is required'
-    else if (phone.replace(/\s/g, '').length < 10)
-      newErrors.phone = 'Enter a valid phone number'
+    if (!phone.trim()) {
+      newErrors.phone = "Phone number is required";
+    } else if (phone.replace(/\s/g, "").length < 10) {
+      newErrors.phone = "Enter a valid phone number";
+    }
 
-    if (!email.trim())
-      newErrors.email = 'Email address is required'
-    else if (!/\S+@\S+\.\S+/.test(email))
-      newErrors.email = 'Enter a valid email address'
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!email.trim()) {
+      newErrors.email = "Email address is required";
+    } else if (!emailRegex.test(email.trim().toLowerCase())) {
+      newErrors.email = "Enter a valid email address";
+    }
 
-    if (!password.trim())
-      newErrors.password = 'Password is required'
-    else if (password.length < 6)
-      newErrors.password = 'Password must be at least 6 characters'
+    if (!password.trim()) {
+      newErrors.password = "Password is required";
+    } else if (password.length < 6) {
+      newErrors.password = "Password must be at least 6 characters";
+    }
 
-    if (!agreed)
-      newErrors.agreed = 'You must agree to the terms to continue'
+    if (!confirmPassword.trim()) {
+      newErrors.confirmPassword = "Please confirm your password";
+    } else if (password !== confirmPassword) {
+      newErrors.confirmPassword = "Passwords do not match";
+    }
 
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
+    if (!agreed) newErrors.agreed = "You must agree to the terms to continue";
 
-  // ── Signup handler ──
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  // Asynchronous backend register application handshake
   const handleSignup = async () => {
-    if (!validate()) return
-    setLoading(true)
+    if (!validate()) return;
+    setLoading(true);
+    setErrors({});
+
+    const sanitizedPhone = phone.trim().replace(/\s+/g, "");
+
     try {
-      // TODO: BACKEND — Guest user registration
-      // Endpoint : POST /api/auth/signup
-      // Body     : { fullName, phone, email, password, role: 'guest' }
-      // Response : { token, user: { id, name, role } }
-      //
-      // const response = await api.post('/auth/signup', {
-      //   fullName,
-      //   phone,
-      //   email,
-      //   password,
-      //   role: 'guest',
+      // TODO: BACKEND INTEGRATION (Universal Registration Network Payload)
+      // const response = await fetch('https://your-api-url/api/v1/auth/signup', {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify({
+      //     fullName: fullName.trim(),
+      //     phone: sanitizedPhone,
+      //     email: email.trim().toLowerCase(),
+      //     password,
+      //     role: 'student'
+      //   })
       // })
-      //
-      // Save token so user stays logged in:
-      // await AsyncStorage.setItem('token', response.data.token)
-      // await AsyncStorage.setItem('user', JSON.stringify(response.data.user))
-      //
-      // Then navigate to home:
-      // onDone(response.data.token)
+      // const result = await response.json()
+      // if (!response.ok) throw new Error(result.message || 'Registration failed')
+      // await AsyncStorage.setItem('token', result.token)
 
       setTimeout(() => {
-        setLoading(false)
-        if (onDone) onDone()
-      }, 1500)
+        setLoading(false);
+        if (onDone) onDone();
+      }, 1200);
     } catch (err) {
-      setLoading(false)
-      // TODO: BACKEND — Handle specific API error codes
-      // 409 → Email already exists
-      // 400 → Validation error from server
-      setErrors({ general: 'Something went wrong. Please try again.' })
+      setLoading(false);
+      setErrors({
+        general: err.message || "Something went wrong. Please try again.",
+      });
     }
-  }
-
-  // ── Google signup handler ──
-  const handleGoogleSignup = async () => {
-    try {
-      // TODO: BACKEND — Google OAuth signup
-      // Endpoint : POST /api/auth/google
-      // Body     : { googleToken, role: 'guest' }
-      // Response : { token, user: { id, name, role } }
-      //
-      // Use expo-auth-session to get googleToken,
-      // then send to backend for verification
-    } catch (err) {
-      setErrors({ general: 'Google signup failed. Please try again.' })
-    }
-  }
+  };
 
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <StatusBar style="dark" />
       <ScrollView
@@ -170,97 +165,86 @@ const SignupScreen = ({ onDone, onSignIn }) => {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-
-        {/* Logo + tagline */}
+        {/* Header system identity section */}
         <View style={styles.logoSection}>
           <View style={styles.iconCard}>
             <CarIcon />
           </View>
           <Text style={styles.appName}>CampusRide</Text>
-          <Text style={styles.appTagline}>Safe rides for everyone on campus</Text>
+          <Text style={styles.appTagline}>
+            Universal mobility services for campus transit
+          </Text>
         </View>
 
-        {/* ── Form card ── */}
+        {/* Master input layout card wrapper */}
         <View style={styles.card}>
+          <Text style={styles.cardTitle}>Create Account</Text>
+          <Text style={styles.cardSubtitle}>
+            Sign up using your personal details
+          </Text>
 
-          <Text style={styles.cardTitle}>Create account</Text>
-          <Text style={styles.cardSubtitle}>Guest access for campus visitors</Text>
-
-          {/* Info banner */}
-          <View style={styles.infoBanner}>
-            <Text style={styles.infoBannerIcon}>ℹ️</Text>
-            <Text style={styles.infoBannerText}>
-              Not a student? Sign up as a campus guest to access rides.
-            </Text>
-          </View>
-
-          {/* General error from API */}
           {errors.general && (
             <View style={styles.errorBanner}>
               <Text style={styles.errorBannerText}>{errors.general}</Text>
             </View>
           )}
 
-          {/* Full name */}
+          {/* Full name configuration node */}
           <InputField
-            label="Full name"
-            placeholder="Enter your full name"
+            label="Full Name"
+            placeholder="Full name"
             value={fullName}
             onChangeText={(v) => {
-              setFullName(v)
-              setErrors((e) => ({ ...e, fullName: null }))
+              setFullName(v);
+              setErrors((e) => ({ ...e, fullName: null }));
             }}
-            icon="👤"
+            icon="person-outline"
           />
           {errors.fullName && (
             <Text style={styles.errorText}>{errors.fullName}</Text>
           )}
 
-          {/* Phone number */}
+          {/* Phone identity configuration node */}
           <InputField
-            label="Phone number"
-            placeholder="+233 XX XXX XXXX"
+            label="Phone Number"
+            placeholder="Phone number"
             value={phone}
             onChangeText={(v) => {
-              setPhone(v)
-              setErrors((e) => ({ ...e, phone: null }))
+              setPhone(v);
+              setErrors((e) => ({ ...e, phone: null }));
             }}
             keyboardType="phone-pad"
-            icon="📞"
+            icon="call-outline"
           />
-          {errors.phone && (
-            <Text style={styles.errorText}>{errors.phone}</Text>
-          )}
+          {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
 
-          {/* Email */}
+          {/* Communication channel email node */}
           <InputField
-            label="Email address"
-            placeholder="your@email.com"
+            label="Email Address"
+            placeholder="Email address"
             value={email}
             onChangeText={(v) => {
-              setEmail(v)
-              setErrors((e) => ({ ...e, email: null }))
+              setEmail(v);
+              setErrors((e) => ({ ...e, email: null }));
             }}
             keyboardType="email-address"
-            icon="✉️"
+            icon="mail-outline"
           />
-          {errors.email && (
-            <Text style={styles.errorText}>{errors.email}</Text>
-          )}
+          {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
 
-          {/* Password */}
+          {/* Security credential password input */}
           <InputField
             label="Password"
-            placeholder="Create a password"
+            placeholder="Password"
             value={password}
             onChangeText={(v) => {
-              setPassword(v)
-              setErrors((e) => ({ ...e, password: null }))
+              setPassword(v);
+              setErrors((e) => ({ ...e, password: null }));
             }}
             secureTextEntry={!showPassword}
-            icon="🔒"
+            icon="lock-closed-outline"
             rightAction={{
-              icon: showPassword ? '🙈' : '👁️',
+              icon: showPassword ? "eye-off-outline" : "eye-outline",
               onPress: () => setShowPassword((s) => !s),
             }}
           />
@@ -268,22 +252,43 @@ const SignupScreen = ({ onDone, onSignIn }) => {
             <Text style={styles.errorText}>{errors.password}</Text>
           )}
 
-          {/* Terms and conditions checkbox */}
+          {/* Secondary security verification confirmation */}
+          <InputField
+            label="Confirm Password"
+            placeholder="Confirm password"
+            value={confirmPassword}
+            onChangeText={(v) => {
+              setConfirmPassword(v);
+              setErrors((e) => ({ ...e, confirmPassword: null }));
+            }}
+            secureTextEntry={!showConfirmPassword}
+            icon="lock-closed-outline"
+            rightAction={{
+              icon: showConfirmPassword ? "eye-off-outline" : "eye-outline",
+              onPress: () => setShowConfirmPassword((s) => !s),
+            }}
+          />
+          {errors.confirmPassword && (
+            <Text style={styles.errorText}>{errors.confirmPassword}</Text>
+          )}
+
+          {/* Interactive compliance selector box row */}
           <TouchableOpacity
             style={styles.termsRow}
             onPress={() => {
-              setAgreed((a) => !a)
-              setErrors((e) => ({ ...e, agreed: null }))
+              setAgreed((a) => !a);
+              setErrors((e) => ({ ...e, agreed: null }));
             }}
             activeOpacity={0.7}
           >
             <View style={[styles.checkbox, agreed && styles.checkboxChecked]}>
-              {agreed && <Text style={styles.checkmark}>✓</Text>}
+              {agreed && (
+                <Ionicons name="checkmark" size={12} color="#FFFFFF" />
+              )}
             </View>
             <Text style={styles.termsText}>
-              I agree to the{' '}
-              <Text style={styles.termsLink}>Terms of Service</Text>
-              {' '}and{' '}
+              I agree to the{" "}
+              <Text style={styles.termsLink}>Terms of Service</Text> and{" "}
               <Text style={styles.termsLink}>Privacy Policy</Text>
             </Text>
           </TouchableOpacity>
@@ -291,109 +296,107 @@ const SignupScreen = ({ onDone, onSignIn }) => {
             <Text style={styles.errorText}>{errors.agreed}</Text>
           )}
 
-          {/* Create account button */}
+          {/* Primary core account genesis submission hook */}
           <TouchableOpacity
             style={[styles.submitBtn, loading && styles.submitBtnDisabled]}
             onPress={handleSignup}
             activeOpacity={0.85}
             disabled={loading}
           >
-            <Text style={styles.submitBtnText}>
-              {loading ? 'Creating account...' : 'Create account'}
-            </Text>
+            {loading ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <Text style={styles.submitBtnText}>Create Account</Text>
+            )}
           </TouchableOpacity>
 
-          {/* Sign in link → goes to LoginScreen */}
+          {/* View redirection control footer button */}
           <TouchableOpacity
             style={styles.signInBtn}
             onPress={onSignIn}
             activeOpacity={0.7}
           >
             <Text style={styles.signInText}>
-              Already have an account?{' '}
-              <Text style={styles.signInLink}>Sign in</Text>
+              Already have an account?{" "}
+              <Text style={styles.signInLink}>Sign In</Text>
             </Text>
           </TouchableOpacity>
 
-          {/* Divider */}
+          {/* Structural layout design splitter group */}
           <View style={styles.dividerRow}>
             <View style={styles.dividerLine} />
             <Text style={styles.dividerText}>or</Text>
             <View style={styles.dividerLine} />
           </View>
 
-          {/* Continue with Google */}
+          {/* Secondary Google ecosystem sign in method */}
           <TouchableOpacity
             style={styles.googleBtn}
-            onPress={handleGoogleSignup}
+            onPress={handleSignup}
             activeOpacity={0.85}
           >
-            <Text style={styles.googleLetter}>G</Text>
-            <Text style={styles.googleBtnText}>Continue with Google</Text>
+            <Ionicons name="logo-google" size={18} color="#DB4437" />
+            <Text style={styles.googleBtnText}>
+              Continue with Google Account
+            </Text>
           </TouchableOpacity>
-
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
-  )
-}
+  );
+};
 
-// Styles
 const styles = StyleSheet.create({
-
-  // ── Layout ──
+  // ── Layout Canvas Bounds ──
   container: {
     flex: 1,
-    backgroundColor: '#F0F4F8',
+    backgroundColor: "#F8FAFC",
   },
   scroll: {
     flexGrow: 1,
-    alignItems: 'center',
+    alignItems: "center",
     paddingTop: 60,
     paddingBottom: 40,
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
   },
-
-  // ── Logo section ──
   logoSection: {
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 24,
-    gap: 6,
+    gap: 4,
   },
   iconCard: {
     width: 76,
     height: 76,
-    borderRadius: 20,
-    backgroundColor: '#1E3A8A',
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: 16,
+    backgroundColor: "#1E3A8A",
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 8,
-    shadowColor: '#1E3A8A',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 8,
+    shadowColor: "#1E3A8A",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
   },
   appName: {
     fontSize: 26,
-    fontWeight: '800',
-    color: '#1E3A8A',
-    letterSpacing: -0.4,
+    fontWeight: "800",
+    color: "#1E3A8A",
+    letterSpacing: -0.5,
   },
   appTagline: {
-    fontSize: 13,
-    color: '#64748B',
-    textAlign: 'center',
+    fontSize: 14,
+    color: "#64748B",
+    textAlign: "center",
+    fontWeight: "500",
   },
-
-  // ── Car icon ──
   carWrap: {
-    alignItems: 'center',
+    alignItems: "center",
   },
   carRoof: {
     width: 24,
     height: 12,
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderTopLeftRadius: 7,
     borderTopRightRadius: 7,
     marginBottom: -1,
@@ -401,247 +404,201 @@ const styles = StyleSheet.create({
   carBase: {
     width: 38,
     height: 15,
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderRadius: 3,
   },
   wheel: {
-    position: 'absolute',
+    position: "absolute",
     bottom: -5,
     width: 11,
     height: 11,
     borderRadius: 6,
-    backgroundColor: '#1E3A8A',
+    backgroundColor: "#1E3A8A",
     borderWidth: 2.5,
-    borderColor: 'white',
+    borderColor: "white",
   },
-
-  // ── Form card ──
   card: {
-    width: '100%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 28,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 5,
+    width: "100%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02,
+    shadowRadius: 8,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
   cardTitle: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: '#1F2937',
-    textAlign: 'center',
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#1F2937",
+    textAlign: "center",
     marginBottom: 4,
   },
   cardSubtitle: {
     fontSize: 14,
-    color: '#94A3B8',
-    textAlign: 'center',
+    color: "#64748B",
+    textAlign: "center",
     marginBottom: 16,
+    fontWeight: "500",
   },
-
-  // ── Info banner ──
-  infoBanner: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    backgroundColor: '#EFF6FF',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 16,
-  },
-  infoBannerIcon: {
-    fontSize: 14,
-  },
-  infoBannerText: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#1E3A8A',
-    lineHeight: 18,
-  },
-
-  // ── Error states ──
   errorBanner: {
-    backgroundColor: '#FEF2F2',
-    borderRadius: 10,
+    backgroundColor: "#FEF2F2",
+    borderRadius: 12,
     padding: 12,
-    marginBottom: 12,
-    borderLeftWidth: 3,
-    borderLeftColor: '#EF4444',
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: "#EF4444",
   },
   errorBannerText: {
     fontSize: 13,
-    fontWeight: '500',
-    color: '#DC2626',
+    fontWeight: "600",
+    color: "#DC2626",
   },
   errorText: {
     fontSize: 12,
-    color: '#EF4444',
-    marginTop: -8,
-    marginBottom: 8,
+    color: "#EF4444",
+    marginTop: -10,
+    marginBottom: 12,
     marginLeft: 4,
+    fontWeight: "500",
   },
-
-  // ── Input field ──
   fieldWrap: {
-    marginBottom: 14,
+    marginBottom: 16,
   },
   fieldLabel: {
     fontSize: 14,
-    fontWeight: '700',
-    color: '#1F2937',
+    fontWeight: "600",
+    color: "#1E2937",
     marginBottom: 8,
   },
   inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    height: 54,
-    paddingHorizontal: 14,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    borderRadius: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    height: 56,
+    paddingHorizontal: 16,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 16,
   },
   input: {
     flex: 1,
     fontSize: 15,
-    color: '#1F2937',
+    color: "#1F2937",
+    fontWeight: "500",
+    height: "100%",
   },
   inputIcon: {
-    opacity: 0.55,
-  },
-  inputIconText: {
-    fontSize: 17,
+    marginRight: 10,
   },
   inputRightAction: {
     paddingLeft: 8,
-    opacity: 0.55,
   },
-
-  // ── Terms checkbox ──
   termsRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 10,
     marginBottom: 16,
   },
   checkbox: {
     width: 20,
     height: 20,
-    borderRadius: 5,
+    borderRadius: 6,
     borderWidth: 1.5,
-    borderColor: '#CBD5E1',
-    backgroundColor: '#F8FAFC',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 1,
+    borderColor: "#CBD5E1",
+    backgroundColor: "#F8FAFC",
+    alignItems: "center",
+    justifyContent: "center",
     flexShrink: 0,
   },
   checkboxChecked: {
-    backgroundColor: '#1E3A8A',
-    borderColor: '#1E3A8A',
-  },
-  checkmark: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: 'white',
+    backgroundColor: "#1E3A8A",
+    borderColor: "#1E3A8A",
   },
   termsText: {
     flex: 1,
     fontSize: 13,
-    color: '#64748B',
-    lineHeight: 20,
+    color: "#64748B",
+    fontWeight: "500",
   },
   termsLink: {
-    color: '#1E3A8A',
-    fontWeight: '600',
+    color: "#1E3A8A",
+    fontWeight: "700",
   },
-
-  // ── Create account button ──
   submitBtn: {
-    width: '100%',
+    width: "100%",
     height: 56,
     borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 14,
-    backgroundColor: '#1E3A8A',
-    shadowColor: '#1E3A8A',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 8,
+    backgroundColor: "#1E3A8A",
+    shadowColor: "#1E3A8A",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 3,
   },
   submitBtnDisabled: {
     opacity: 0.65,
   },
   submitBtnText: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: 0.3,
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    letterSpacing: 0.2,
   },
-
-  // ── Sign in link ──
   signInBtn: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingVertical: 4,
     marginBottom: 14,
   },
   signInText: {
     fontSize: 14,
-    color: '#64748B',
-    textAlign: 'center',
+    color: "#64748B",
+    fontWeight: "500",
+    textAlign: "center",
   },
   signInLink: {
-    color: '#1E3A8A',
-    fontWeight: '700',
+    color: "#1E3A8A",
+    fontWeight: "700",
   },
-
-  // ── Divider ──
   dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 10,
     marginBottom: 14,
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: "#E2E8F0",
   },
   dividerText: {
     fontSize: 13,
-    fontWeight: '500',
-    color: '#94A3B8',
+    fontWeight: "500",
+    color: "#94A3B8",
   },
-
-  // ── Google button ──
   googleBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 10,
-    width: '100%',
+    width: "100%",
     height: 54,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    backgroundColor: '#FFFFFF',
-  },
-  googleLetter: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#DB4437',
+    borderColor: "#E2E8F0",
+    backgroundColor: "#FFFFFF",
   },
   googleBtnText: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#1F2937',
+    fontWeight: "600",
+    color: "#1F2937",
   },
-})
+});
 
-export default SignupScreen
+export default SignupScreen;

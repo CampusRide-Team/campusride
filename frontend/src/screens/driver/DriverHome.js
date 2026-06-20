@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -7,77 +7,108 @@ import {
   Switch,
   Dimensions,
   Platform,
-} from 'react-native'
-import { StatusBar } from 'expo-status-bar'
-import { SafeAreaView } from 'react-native-safe-area-context' 
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps'
-import { MaterialCommunityIcons } from '@expo/vector-icons'
+} from "react-native";
+import { StatusBar } from "expo-status-bar";
+import { SafeAreaView } from "react-native-safe-area-context";
+import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 
-const { width, height } = Dimensions.get('window')
+const { width, height } = Dimensions.get("window");
 
-const DriverHome = ({ onLogout, onViewRequests, onChangeTab }) => {
-  const [isOnline, setIsOnline] = useState(true)
+const DriverHome = ({ driverData, onLogout, onViewRequests, onChangeTab }) => {
+  const [isOnline, setIsOnline] = useState(true);
 
-  const toggleOnlineStatus = () => setIsOnline((prev) => !prev)
+  const toggleOnlineStatus = () => setIsOnline((prev) => !prev);
 
+  // Default coordinate viewport framing Legon UG Campus territory
   const ugCampusRegion = {
-    latitude: 5.6506,       
-    longitude: -0.1873,     
-    latitudeDelta: 0.015,   
+    latitude: 5.6506,
+    longitude: -0.1873,
+    latitudeDelta: 0.015,
     longitudeDelta: 0.012,
-  }
+  };
 
   const mockPassengerRequests = [
-    { id: 'req_1', latitude: 5.6542, longitude: -0.1915, label: 'Balme Library' },
-    { id: 'req_2', latitude: 5.6481, longitude: -0.1812, label: 'Night Market' },
-  ]
+    {
+      id: "req_1",
+      latitude: 5.6542,
+      longitude: -0.1915,
+      label: "Balme Library",
+    },
+    {
+      id: "req_2",
+      latitude: 5.6481,
+      longitude: -0.1812,
+      label: "Night Market",
+    },
+  ];
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
       <StatusBar style="dark" />
 
-      {/* 1. TOP HEADER APP BAR */}
+      {/* Top Header App Bar */}
       <View style={styles.header}>
         <Text style={styles.logoText}>CampusRide</Text>
         <View style={styles.headerRight}>
-          <Text style={styles.driverName}>Alex</Text>
-          <TouchableOpacity activeOpacity={0.8} onPress={() => onChangeTab('profile')} style={styles.avatarContainer}>
+          <Text style={styles.driverName}>
+            {driverData?.fullName?.split(" ")[0] || "Driver"}
+          </Text>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => onChangeTab("profile")}
+            style={styles.avatarContainer}
+          >
             <View style={styles.avatarFallback}>
-              <Text style={styles.avatarFallbackText}>👨‍✈️</Text>
+              <MaterialCommunityIcons
+                name="account"
+                size={20}
+                color="#1E3A8A"
+              />
             </View>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.notificationBtn} activeOpacity={0.7}>
-            <MaterialCommunityIcons name="bell-outline" size={20} color="#1F2937" />
+          <TouchableOpacity
+            style={styles.notificationBtn}
+            activeOpacity={0.7}
+            onPress={() => onChangeTab("profile")}
+          >
+            <MaterialCommunityIcons
+              name="bell-outline"
+              size={22}
+              color="#1E3A8A"
+            />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* 2. DYNAMIC GO ONLINE SWITCH CARD */}
+      {/* Dynamic Go Online Switch Card */}
       <View style={styles.toggleCardContainer}>
         <View style={styles.toggleCard}>
-          <View>
+          <View style={styles.toggleCardTextColumn}>
             <Text style={styles.toggleCardTitle}>
-              {isOnline ? 'Go Offline' : 'Go Online'}
+              {isOnline ? "Go Offline" : "Go Online"}
             </Text>
-            <Text style={styles.toggleCardSubtitle}>
-              {isOnline ? 'Ready to accept ride requests' : 'Stay offline to pause requests'}
+            <Text style={styles.toggleCardSubtitle} numberOfLines={1}>
+              {isOnline
+                ? "Ready to accept ride requests"
+                : "Stay offline to pause requests"}
             </Text>
           </View>
           <Switch
-            trackColor={{ false: '#CBD5E1', true: '#84CC16' }}
+            trackColor={{ false: "#E2E8F0", true: "#A3E635" }}
             thumbColor="#FFFFFF"
-            ios_backgroundColor="#CBD5E1"
+            ios_backgroundColor="#E2E8F0"
             onValueChange={toggleOnlineStatus}
             value={isOnline}
           />
         </View>
       </View>
 
-      {/* 3. LIVE MAP VIEWPORT AREA */}
+      {/* Live Map Viewport Area */}
       <View style={styles.mapViewportContainer}>
-        {/* 💡 TODO: BACKEND INTEGRATION — Initialize background polling or server sent events (SSE) to update surrounding active student coordinates */}
+        {/* TODO: BACKEND INTEGRATION — Initialize background polling or WebSockets to update live client locations */}
         <MapView
-          provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : null}
+          provider={Platform.OS === "android" ? PROVIDER_GOOGLE : null}
           style={StyleSheet.absoluteFillObject}
           initialRegion={ugCampusRegion}
           showsCompass={false}
@@ -85,7 +116,7 @@ const DriverHome = ({ onLogout, onViewRequests, onChangeTab }) => {
         >
           {isOnline && (
             <>
-              {/* 💡 TODO: BACKEND INTEGRATION — Switch static driver marker coordinates with live geolocation device tracking state */}
+              {/* TODO: BACKEND INTEGRATION — Swap placeholder device coordinate structures with live geolocation hooks */}
               <Marker coordinate={{ latitude: 5.6506, longitude: -0.1873 }}>
                 <View style={styles.driverPulseOuter}>
                   <View style={styles.driverPulseInner} />
@@ -93,13 +124,20 @@ const DriverHome = ({ onLogout, onViewRequests, onChangeTab }) => {
               </Marker>
 
               {mockPassengerRequests.map((request) => (
-                <Marker 
-                  key={request.id} 
-                  coordinate={{ latitude: request.latitude, longitude: request.longitude }}
+                <Marker
+                  key={request.id}
+                  coordinate={{
+                    latitude: request.latitude,
+                    longitude: request.longitude,
+                  }}
                   title={request.label}
                 >
                   <View style={styles.passengerPin}>
-                    <MaterialCommunityIcons name="account" size={14} color="#FFFFFF" />
+                    <MaterialCommunityIcons
+                      name="account"
+                      size={14}
+                      color="#FFFFFF"
+                    />
                   </View>
                 </Marker>
               ))}
@@ -108,22 +146,39 @@ const DriverHome = ({ onLogout, onViewRequests, onChangeTab }) => {
         </MapView>
 
         {/* Map Overlay Status Badge */}
-        <View style={[styles.mapStatusBadge, { backgroundColor: isOnline ? '#DCFCE7' : '#F1F5F9' }]}>
-          <View style={[styles.statusDot, { backgroundColor: isOnline ? '#22C55E' : '#64748B' }]} />
-          <Text style={[styles.mapStatusBadgeText, { color: isOnline ? '#166534' : '#334155' }]}>
-            {isOnline ? 'ONLINE' : 'OFFLINE'}
+        <View
+          style={[
+            styles.mapStatusBadge,
+            { backgroundColor: isOnline ? "#EFF6FF" : "#F1F5F9" },
+          ]}
+        >
+          <View
+            style={[
+              styles.statusDot,
+              { backgroundColor: isOnline ? "#1E3A8A" : "#94A3B8" },
+            ]}
+          />
+          <Text
+            style={[
+              styles.mapStatusBadgeText,
+              { color: isOnline ? "#1E3A8A" : "#64748B" },
+            ]}
+          >
+            {isOnline ? "ONLINE" : "OFFLINE"}
           </Text>
         </View>
 
-        {/* 4. FLOATING CONTEXT SUMMARY STATUS DRAWER */}
+        {/* Floating Context Summary Drawer */}
         <View style={styles.floatingStatusDrawer}>
           <View style={styles.drawerHeaderRow}>
             <View style={styles.drawerTextBlock}>
               <Text style={styles.drawerMainStatusTitle}>
-                {isOnline ? 'You are online' : 'You are offline'}
+                {isOnline ? "You are online" : "You are offline"}
               </Text>
               <Text style={styles.drawerSubStatusTitle}>
-                {isOnline ? '⚡ 3 requests nearby' : 'Toggle online status to start tracking'}
+                {isOnline
+                  ? "Active ride dispatch active"
+                  : "Toggle online status to start tracking"}
               </Text>
             </View>
             <View style={styles.drawerIconSquare}>
@@ -131,14 +186,17 @@ const DriverHome = ({ onLogout, onViewRequests, onChangeTab }) => {
             </View>
           </View>
 
-          {/* 💡 TODO: BACKEND INTEGRATION — Pull analytics aggregate history payloads to replace static driving matrices */}
-          {/* Endpoint target: GET /api/drivers/analytics-summary */}
+          {/* TODO: BACKEND INTEGRATION — GET /api/v1/drivers/analytics-summary */}
           <Text style={styles.metricsTextLine}>
-            Trips today: <Text style={styles.metricsBoldValue}>5</Text> • Total trips: <Text style={styles.metricsBoldValue}>42</Text>
+            Trips today: <Text style={styles.metricsBoldValue}>5</Text> • Total
+            trips: <Text style={styles.metricsBoldValue}>42</Text>
           </Text>
 
-          <TouchableOpacity 
-            style={[styles.actionButton, !isOnline && styles.disabledActionButton]} 
+          <TouchableOpacity
+            style={[
+              styles.actionButton,
+              !isOnline && styles.disabledActionButton,
+            ]}
             activeOpacity={0.85}
             disabled={!isOnline}
             onPress={onViewRequests}
@@ -148,138 +206,164 @@ const DriverHome = ({ onLogout, onViewRequests, onChangeTab }) => {
         </View>
       </View>
 
-      {/* 5. APP BASE SYSTEM TAB NAV BAR COMPONENT */}
+      {/* App Base System Tab Nav Bar Component */}
       <View style={styles.tabBarContainer}>
         {/* Home Tab */}
-        <TouchableOpacity style={styles.tabItem} onPress={() => onChangeTab('home')} activeOpacity={0.7}>
-          <View style={[styles.tabIconBackground, styles.activeTabIconBackground]}>
+        <TouchableOpacity
+          style={styles.tabItem}
+          onPress={() => onChangeTab("home")}
+          activeOpacity={0.7}
+        >
+          <View
+            style={[styles.tabIconBackground, styles.activeTabIconBackground]}
+          >
             <MaterialCommunityIcons name="home" size={24} color="#1E3A8A" />
           </View>
-          <Text style={[styles.tabLabelText, styles.activeTabLabelText]}>Home</Text>
+          <Text style={[styles.tabLabelText, styles.activeTabLabelText]}>
+            Home
+          </Text>
         </TouchableOpacity>
 
         {/* Trips Tab */}
-        <TouchableOpacity style={styles.tabItem} onPress={() => onChangeTab('trips')} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={styles.tabItem}
+          onPress={() => onChangeTab("trips")}
+          activeOpacity={0.7}
+        >
           <View style={styles.tabIconBackground}>
-            <MaterialCommunityIcons name="car-multiple" size={24} color="#94A3B8" />
+            <MaterialCommunityIcons
+              name="car-multiple"
+              size={24}
+              color="#94A3B8"
+            />
           </View>
           <Text style={styles.tabLabelText}>Trips</Text>
         </TouchableOpacity>
 
         {/* Profile Tab */}
-        <TouchableOpacity style={styles.tabItem} onPress={() => onChangeTab('profile')} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={styles.tabItem}
+          onPress={() => onChangeTab("profile")}
+          activeOpacity={0.7}
+        >
           <View style={styles.tabIconBackground}>
-            <MaterialCommunityIcons name="account-circle-outline" size={24} color="#94A3B8" />
+            <MaterialCommunityIcons
+              name="account-circle-outline"
+              size={24}
+              color="#94A3B8"
+            />
           </View>
           <Text style={styles.tabLabelText}>Profile</Text>
         </TouchableOpacity>
       </View>
-
     </SafeAreaView>
-  )
-}
-
-export default DriverHome
+  );
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 24,
     paddingVertical: 14,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    borderBottomColor: "#F1F5F9",
   },
   logoText: {
     fontSize: 22,
-    fontWeight: '800',
-    color: '#1E3A8A',
+    fontWeight: "800",
+    color: "#1E3A8A",
     letterSpacing: -0.5,
   },
   headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
   },
   driverName: {
     fontSize: 14,
-    fontWeight: '700',
-    color: '#334155',
+    fontWeight: "700",
+    color: "#1E2937",
   },
   avatarContainer: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   avatarFallback: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#E2E8F0',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarFallbackText: {
-    fontSize: 18,
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
   notificationBtn: {
     padding: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   toggleCardContainer: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
   },
   toggleCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#F8FAFC',
-    paddingHorizontal: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 16,
     paddingVertical: 16,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#F1F5F9',
+    borderColor: "#E2E8F0",
+  },
+  toggleCardTextColumn: {
+    flex: 1,
+    paddingRight: 8,
   },
   toggleCardTitle: {
     fontSize: 16,
-    fontWeight: '800',
-    color: '#1E3A8A',
+    fontWeight: "700",
+    color: "#1E2937",
     marginBottom: 2,
   },
   toggleCardSubtitle: {
-    fontSize: 12,
-    color: '#64748B',
-    fontWeight: '500',
+    fontSize: 13,
+    color: "#64748B",
+    fontWeight: "500",
   },
   mapViewportContainer: {
     flex: 1,
-    backgroundColor: '#E2E8F0',
-    position: 'relative',
+    backgroundColor: "#E2E8F0",
+    position: "relative",
   },
   mapStatusBadge: {
-    position: 'absolute',
+    position: "absolute",
     top: 20,
-    alignSelf: 'center',
-    flexDirection: 'row',
-    alignItems: 'center',
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
     gap: 8,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.04,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
   statusDot: {
     width: 8,
@@ -288,64 +372,66 @@ const styles = StyleSheet.create({
   },
   mapStatusBadgeText: {
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: "800",
     letterSpacing: 0.5,
   },
   passengerPin: {
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: '#1E3A8A',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#1E3A8A",
+    alignItems: "center",
+    justifyContent: "center",
     borderWidth: 2.5,
-    borderColor: '#FFFFFF',
-    shadowColor: '#000',
+    borderColor: "#FFFFFF",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 4,
+    elevation: 3,
   },
   driverPulseOuter: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.15,
     shadowRadius: 4,
-    elevation: 5,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
   driverPulseInner: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#3B82F6',
-    borderWidth: 2.5,
-    borderColor: '#FFFFFF',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "#1E3A8A",
   },
   floatingStatusDrawer: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 24,
-    left: 20,
-    right: 20,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 8,
+    left: 24,
+    right: 24,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
   drawerHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 8,
   },
   drawerTextBlock: {
     flex: 1,
@@ -353,80 +439,91 @@ const styles = StyleSheet.create({
   },
   drawerMainStatusTitle: {
     fontSize: 20,
-    fontWeight: '800',
-    color: '#1E3A8A',
+    fontWeight: "800",
+    color: "#1E2937",
     marginBottom: 4,
-    letterSpacing: -0.3,
+    letterSpacing: -0.5,
   },
   drawerSubStatusTitle: {
     fontSize: 14,
-    color: '#475569',
-    fontWeight: '600',
+    color: "#64748B",
+    fontWeight: "500",
   },
   drawerIconSquare: {
     width: 44,
     height: 44,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: "#F8FAFC",
     borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
   metricsTextLine: {
-    fontSize: 12,
-    color: '#94A3B8',
-    fontWeight: '500',
-    marginBottom: 20,
+    fontSize: 13,
+    color: "#94A3B8",
+    fontWeight: "500",
+    marginBottom: 16,
   },
   metricsBoldValue: {
-    color: '#475569',
-    fontWeight: '700',
+    color: "#475569",
+    fontWeight: "700",
   },
   actionButton: {
-    backgroundColor: '#1E3A8A',
-    height: 54,
+    backgroundColor: "#1E3A8A",
+    height: 56,
     borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#1E3A8A",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 3,
   },
   disabledActionButton: {
-    backgroundColor: '#CBD5E1',
+    backgroundColor: "#CBD5E1",
+    shadowOpacity: 0,
+    elevation: 0,
   },
   actionButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "700",
   },
   tabBarContainer: {
-    flexDirection: 'row',
+    flexDirection: "row",
     height: 74,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
     borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
+    borderTopColor: "#F1F5F9",
   },
   tabItem: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   tabIconBackground: {
     paddingHorizontal: 20,
     paddingVertical: 4,
     borderRadius: 16,
     marginBottom: 2,
-    backgroundColor: 'transparent',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "transparent",
+    alignItems: "center",
+    justifyContent: "center",
   },
   activeTabIconBackground: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: "#F1F5F9",
   },
   tabLabelText: {
     fontSize: 11,
-    fontWeight: '500',
-    color: '#94A3B8',
+    fontWeight: "600",
+    color: "#94A3B8",
   },
   activeTabLabelText: {
-    color: '#1E3A8A',
-    fontWeight: '700',
+    color: "#1E3A8A",
+    fontWeight: "700",
   },
-})
+});
+
+export default DriverHome;

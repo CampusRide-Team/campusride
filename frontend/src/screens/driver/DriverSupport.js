@@ -51,7 +51,7 @@ const DriverSupport = ({ onBack, onChangeTab }) => {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <StatusBar style="dark" />
 
-      {/* 1. TOP BAR NAVBAR SECTION */}
+      {/* Top Bar Navbar Section */}
       <View style={styles.topBar}>
         <TouchableOpacity onPress={onBack} activeOpacity={0.7} style={styles.topBarButton}>
           <MaterialCommunityIcons name="arrow-left" size={24} color="#1E3A8A" />
@@ -61,11 +61,11 @@ const DriverSupport = ({ onBack, onChangeTab }) => {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-        
+
         {/* Subtitle intro layout header section */}
         <Text style={styles.subTitleText}>Find answers to common questions</Text>
 
-        {/* 2. SEARCHINPUT BOX CONTAINER */}
+        {/* Search Input Box Container */}
         <View style={styles.searchContainer}>
           <MaterialCommunityIcons name="magnify" size={20} color="#94A3B8" style={styles.searchIcon} />
           <TextInput
@@ -77,7 +77,7 @@ const DriverSupport = ({ onBack, onChangeTab }) => {
           />
         </View>
 
-        {/* 3. INTERACTIVE ACCORDION FAQ AREA BLOCK */}
+        {/* Interactive Accordion FAQ Area Block */}
         <View style={styles.faqStack}>
           {filteredFaqs.map((faq, index) => {
             const isExpanded = expandedIndex === index
@@ -95,7 +95,7 @@ const DriverSupport = ({ onBack, onChangeTab }) => {
                     color="#94A3B8"
                   />
                 </TouchableOpacity>
-                
+
                 {isExpanded && (
                   <View style={styles.accordionBody}>
                     <Text style={styles.answerText}>{faq.answer}</Text>
@@ -106,21 +106,19 @@ const DriverSupport = ({ onBack, onChangeTab }) => {
           })}
         </View>
 
-      </ScrollView>
-
-      {/* 4. FLOATING PERSISTENT CONTROLLER SUBMIT TRIGGER ACTION BUTTON */}
-      <View style={styles.footerActionContainer}>
+        {/* Integrated Contact Action Trigger */}
         <TouchableOpacity 
           style={styles.contactButton} 
           activeOpacity={0.85}
           onPress={() => console.log('Internal support ticket desk routine fired.')}
         >
-          {/* 💡 TODO: BACKEND INTEGRATION — Hook up Linking module to dial campus security dispatch desk or open internal email modal */}
-          <Text style={styles.contactButtonText}>Contact Support</Text>
+          {/* TODO: BACKEND INTEGRATION — Hook up Linking module to dial campus security dispatch desk or open internal email modal */}
+          <Text style={styles.contactButtonText}>Contact Support Desk</Text>
         </TouchableOpacity>
-      </View>
 
-      {/* 5. PERSISTENT APP FOOTER BOTTOM NAV TABS MENU */}
+      </ScrollView>
+
+      {/* Persistent App Footer Bottom Nav Tabs Menu */}
       <View style={styles.bottomNav}>
         <TouchableOpacity style={styles.navItem} onPress={() => onChangeTab && onChangeTab('home')} activeOpacity={0.7}>
           <View style={styles.tabIconBackground}>
@@ -155,15 +153,15 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     flexGrow: 1,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 100, // Leave safety space buffer clearance room for floating footer button stack layout overlays
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 40,
   },
   topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 24,
     paddingVertical: 14,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
@@ -178,7 +176,7 @@ const styles = StyleSheet.create({
   topBarTitle: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#1E293B',
+    color: '#1E3A8A',
     letterSpacing: -0.5,
   },
   topBarSpacer: {
@@ -198,9 +196,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    borderRadius: 14,
+    borderRadius: 16,
     paddingHorizontal: 16,
-    height: 52,
+    height: 56,
     marginBottom: 24,
   },
   searchIcon: {
@@ -209,17 +207,18 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 15,
-    color: '#1E293B',
+    color: '#1E2937',
     fontWeight: '500',
   },
   faqStack: {
     gap: 12,
+    marginBottom: 24,
   },
   accordionWrapper: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#F1F5F9',
+    borderColor: '#E2E8F0',
     overflow: 'hidden',
   },
   accordionHeader: {
@@ -232,12 +231,12 @@ const styles = StyleSheet.create({
   },
   accordionHeaderExpanded: {
     borderBottomWidth: 1,
-    borderBottomColor: '#F8FAFC',
+    borderBottomColor: '#F1F5F9',
   },
   questionText: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#1E293B',
+    color: '#1E2937',
     flex: 1,
     paddingRight: 12,
   },
@@ -252,24 +251,13 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontWeight: '500',
   },
-  footerActionContainer: {
-    position: 'absolute',
-    bottom: 90, // Places right over the sticky navigation tabs row perfectly without crowding
-    left: 20,
-    right: 20,
-    backgroundColor: 'transparent',
-  },
   contactButton: {
     backgroundColor: '#1E3A8A',
-    height: 52,
-    borderRadius: 14,
+    height: 56,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#1E3A8A',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 3,
+    marginTop: 12,
   },
   contactButtonText: {
     color: '#FFFFFF',
@@ -281,9 +269,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#F1F5F9',
-    paddingBottom: 4,
-    paddingTop: 12,
-    paddingHorizontal: 12,
     height: 74,
   },
   navItem: {
@@ -296,12 +281,11 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 16,
     marginBottom: 2,
-    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
   },
   activeTabIconBackground: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: '#F1F5F9',
   },
   navLabel: {
     fontSize: 11,
@@ -309,6 +293,7 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
   },
   navLabelActive: {
+    fontSize: 11,
     color: '#1E3A8A',
     fontWeight: '700',
   },
