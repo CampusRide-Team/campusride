@@ -1,0 +1,30 @@
+{
+  "name": "campusride",
+  "version": "1.0.0",
+  "description": "A University ride-matching platform connecting student with campus drivers in real time.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CampusRide-Team/campusride.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/CampusRide-Team/campusride/issues"
+  },
+  "homepage": "https://github.com/CampusRide-Team/campusride#readme",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.5.2",
+    "express-validator": "^7.3.2",
+    "helmet": "^8.2.0",
+    "mongoose": "^9.7.2",
+    "morgan": "^1.11.0"
+  }
+}

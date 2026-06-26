@@ -41,6 +41,12 @@ const DriverHome = ({ driverData, onLogout, onViewRequests, onChangeTab }) => {
       longitude: -0.1812,
       label: "Night Market",
     },
+    {
+      id: "req_3",
+      latitude: 5.651,
+      longitude: -0.185,
+      label: "Commonwealth Hall",
+    },
   ];
 
   return (
@@ -177,7 +183,7 @@ const DriverHome = ({ driverData, onLogout, onViewRequests, onChangeTab }) => {
               </Text>
               <Text style={styles.drawerSubStatusTitle}>
                 {isOnline
-                  ? "Active ride dispatch active"
+                  ? `${mockPassengerRequests.length} requests nearby`
                   : "Toggle online status to start tracking"}
               </Text>
             </View>
