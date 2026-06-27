@@ -6,7 +6,7 @@ import { Platform } from "react-native";
 const getBaseUrl = () => {
   if (__DEV__) {
     // Standardized network binding for local environments
-    return "https://icy-doodles-notice.loca.lt";
+    return "https://eb793f91-8f72-4b48-ba54-5404c64c1696-00-3tbfonmau7mqf.riker.replit.dev/api/v1";
   }
   return "https://your-live-backend-url.university.edu/api/v1";
 };
