@@ -8,11 +8,9 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
-import api from "../../api/axios"; // 🔌 Connected to your global Axios configuration instance
 
 const InputField = ({
   label,
@@ -50,19 +48,27 @@ const InputField = ({
 );
 
 const DriverRegisterStep1 = ({ initialData, onNext, onBack, onLogin }) => {
-  // 💾 STATE PERSISTENCE HYDRATION: Reads cached memory data from App.js if it exists
+  // 💾 STATE PERSISTENCE HYDRATION: Maps with registrationForm ledger in App.js
   const [fullName, setFullName] = useState(initialData?.fullName || "");
-  const [phone, setPhone] = useState(initialData?.phone || "");
+  const [phone, setPhone] = useState(initialData?.phoneNumber || ""); // ✅ Fixed hydration mapping key
   const [email, setEmail] = useState(initialData?.email || "");
   const [password, setPassword] = useState(initialData?.password || "");
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState({});
-  const [isSubmitting, setIsSubmitting] = useState(false); // ⏳ Loading indicator for backend checks
 
   const validate = () => {
     const newErrors = {};
     if (!fullName.trim()) newErrors.fullName = "Full name is required";
-    if (!phone.trim()) newErrors.phone = "Phone number is required";
+
+    // 🇬🇭 Validate clean Ghana phone sequence structure
+    const ghanaPhoneRegex = /^(05|02)[0-9]{8}$/;
+    const cleanedPhone = phone.trim().replace(/[\s\-\+\(\)]/g, "");
+    if (!cleanedPhone) {
+      newErrors.phone = "Phone number is required";
+    } else if (!ghanaPhoneRegex.test(cleanedPhone)) {
+      newErrors.phone =
+        "Must be a valid Ghana phone number starting with 02 or 05 (e.g. 0541234567)";
+    }
 
     const gmailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
     if (!email.trim()) {
@@ -71,55 +77,38 @@ const DriverRegisterStep1 = ({ initialData, onNext, onBack, onLogin }) => {
       newErrors.email = "Please enter a valid @gmail.com address";
     }
 
-    if (!password.trim()) newErrors.password = "Password is required";
-    else if (password.length < 6)
-      newErrors.password = "Password must be at least 6 characters";
+    // 🔒 Synchronized with backend strong password rule profiles
+    const hasUppercase = /[A-Z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
+    const hasSymbol = /[^A-Za-z0-9]/.test(password);
+
+    if (!password.trim()) {
+      newErrors.password = "Password is required";
+    } else if (
+      password.length < 8 ||
+      !hasUppercase ||
+      !hasNumber ||
+      !hasSymbol
+    ) {
+      newErrors.password =
+        "Password must be 8+ chars, 1 uppercase, 1 number, 1 special symbol";
+    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleContinue = async () => {
+  const handleContinue = () => {
     if (!validate()) return;
+    if (onNext) {
+      const sanitizedPhone = phone.trim().replace(/[\s\-\+\(\)]/g, "");
 
-    const sanitizedPhone = phone.trim().replace(/\s+/g, "");
-    const targetEmail = email.trim().toLowerCase();
-
-    setIsSubmitting(true);
-    setErrors({});
-
-    try {
-      // 🚦 LIVE BACKEND CHECK: Filter uniqueness prior to collection of vehicle details
-      const response = await api.post("/auth/driver/check-availability", {
-        email: targetEmail,
-        phone: sanitizedPhone,
+      onNext({
+        fullName: fullName.trim(),
+        phoneNumber: sanitizedPhone, // ✅ Passes matching payload parameters
+        email: email.trim().toLowerCase(),
+        password,
       });
-
-      if (response.data?.success || response.status === 200) {
-        if (onNext) {
-          onNext({
-            fullName: fullName.trim(),
-            phone: sanitizedPhone,
-            email: targetEmail,
-            password,
-          });
-        }
-      }
-    } catch (error) {
-      const backendMessage =
-        error.response?.data?.message || "Connection error";
-      const lowerMessage = backendMessage.toLowerCase();
-
-      if (lowerMessage.includes("email")) {
-        setErrors({ email: "This email address is already registered" });
-      } else if (lowerMessage.includes("phone")) {
-        setErrors({ phone: "This phone number is already registered" });
-      } else {
-        setErrors({ email: backendMessage });
-      }
-      console.error("Pre-validation gateway failure:", error);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -172,7 +161,7 @@ const DriverRegisterStep1 = ({ initialData, onNext, onBack, onLogin }) => {
 
           <InputField
             label="Phone Number"
-            placeholder="+233 (0) 25-704-3880"
+            placeholder="0541234567"
             value={phone}
             onChangeText={(v) => {
               setPhone(v);
@@ -192,11 +181,7 @@ const DriverRegisterStep1 = ({ initialData, onNext, onBack, onLogin }) => {
             }}
             keyboardType="email-address"
           />
-          {errors.email && (
-            <Text style={styles.errorText}>
-              {errors.errorText || errors.email}
-            </Text>
-          )}
+          {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
 
           <InputField
             label="Password"
@@ -217,16 +202,11 @@ const DriverRegisterStep1 = ({ initialData, onNext, onBack, onLogin }) => {
           )}
 
           <TouchableOpacity
-            style={[styles.continueBtn, isSubmitting && styles.disabledBtn]}
+            style={styles.continueBtn}
             onPress={handleContinue}
             activeOpacity={0.85}
-            disabled={isSubmitting}
           >
-            {isSubmitting ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Text style={styles.continueBtnText}>Continue →</Text>
-            )}
+            <Text style={styles.continueBtnText}>Continue →</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -344,7 +324,7 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 12,
     color: "#EF4444",
-    marginTop: -12,
+    marginTop: 6,
     marginBottom: 12,
     marginLeft: 4,
   },
@@ -361,9 +341,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 3,
-  },
-  disabledBtn: {
-    backgroundColor: "#93C5FD",
   },
   continueBtnText: {
     fontSize: 16,
