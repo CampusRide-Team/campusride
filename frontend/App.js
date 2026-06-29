@@ -32,6 +32,7 @@ import DriverRegisterSuccess from "./src/screens/auth/DriverRegisterSuccess";
 
 // Student screens
 import StudentHome from "./src/screens/student/StudentHome";
+import StudentsPage from "./src/screens/student/StudentsPage";
 
 // Driver screens
 import DriverHome from "./src/screens/driver/DriverHome";
@@ -53,7 +54,7 @@ const RootNavigator = () => {
   const { role, setRole, login, logout, user: authUser, token: authToken } = useAuth();
   const { theme, darkModeEnabled } = useTheme();
 
-  //  GLOBAL SUSPENDED MODAL STATE & ERROR INTERCEPTION
+  // GLOBAL SUSPENDED MODAL STATE & ERROR INTERCEPTION
   const [globalSuspendedModalVisible, setGlobalSuspendedModalVisible] = useState(false);
   const [globalAttemptedEmail, setGlobalAttemptedEmail] = useState("");
 
@@ -76,7 +77,7 @@ const RootNavigator = () => {
     };
   }, [authUser]);
 
-  // 🚀 PRODUCTION SYNCED MASTER REGISTRATION FORM LEDGER
+  // PRODUCTION SYNCED MASTER REGISTRATION FORM LEDGER
   const [registrationForm, setRegistrationForm] = useState({
     fullName: "",
     phoneNumber: "",
@@ -253,7 +254,6 @@ const RootNavigator = () => {
         <DriverRegisterStep2
           initialData={registrationForm}
           onNext={(vehicleData) => {
-            //  HOT PATCH MATCH: Perfectly merges synced vehicle keys into master ledger context
             setRegistrationForm((prev) => ({ ...prev, ...vehicleData }));
             setScreen("driver-reg-step3");
           }}
@@ -506,7 +506,7 @@ const RootNavigator = () => {
     <View style={[styles.rootWrapper, { backgroundColor: theme.background }]}>
       {renderScreen()}
 
-      {/*  Global Account Suspended Modal Interceptor */}
+      {/* Global Account Suspended Modal Interceptor */}
       <AccountSuspendedModal 
         visible={globalSuspendedModalVisible} 
         userEmail={globalAttemptedEmail}
