@@ -15,6 +15,7 @@ import DriverRegisterSuccess from './src/screens/auth/DriverRegisterSuccess'
 
 // Student screens
 import StudentHome from './src/screens/student/StudentHome'
+import StudentsPage  from './src/screens/student/StudentsPage'
 
 // Driver screens
 import DriverHome from './src/screens/driver/DriverHome'
@@ -182,7 +183,7 @@ const RootNavigator = () => {
       return <DriverHome onLogout={handleLogout} />
     }
 
-    return <StudentHome onLogout={handleLogout} />
+    return <StudentsPage onLogout={handleLogout} />
   }
 
   return null
