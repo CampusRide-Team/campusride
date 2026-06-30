@@ -85,11 +85,11 @@ export default function RideHistoryScreen({ onNavigate }) {
         ))}
       </ScrollView>
 
-      {/* Main App Footer Tab bar matching exactly layout scale */}
+      {/* Fixed Tab Bar Actions */}
       <View style={styles.tabBar}>
         <TabItem icon={<Ionicons name="home" size={22} color={MUTED} />} label="Home" onPress={() => onNavigate('home')} />
         <TabItem icon={<FontAwesome5 name="car" size={18} color={BLUE} />} label="Rides" active={true} />
-        <TabItem icon={<Ionicons name="notifications-outline" size={22} color={MUTED} />} label="Alerts" />
+        <TabItem icon={<Ionicons name="notifications-outline" size={22} color={MUTED} />} label="Alerts" onPress={() => onNavigate('alerts')} />
         <TabItem icon={<Feather name="user" size={22} color={MUTED} />} label="Profile" onPress={() => onNavigate('profile')} />
       </View>
     </SafeAreaView>
@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
   balanceBlock: { width: 40 },
   scrollContainer: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 110 },
   card: { backgroundColor: CARD_BG, borderRadius: 16, padding: 16, marginBottom: 14, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-  cardTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  cardTopRow: { flexDirection: 'row', alignItems: 'center', justifycontent: 'space-between', marginBottom: 14 },
   when: { fontSize: 14, color: MUTED, fontWeight: '500', flex: 1 },
   statusBadge: { backgroundColor: '#E6F6F0', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginRight: 10 },
   statusCompleted: { fontSize: 12, color: '#22A06B', fontWeight: '700' },

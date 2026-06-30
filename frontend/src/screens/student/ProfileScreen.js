@@ -1,3 +1,4 @@
+// ProfileScreen.js
 import React from 'react';
 import {
   View,
@@ -53,6 +54,7 @@ export default function ProfileScreen({ onLogout, onNavigate }) {
       <StatusBar barStyle="light-content" />
       
       <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent}>
+        {/* Profile Card Header Background Accent */}
         <View style={styles.header}>
           <View style={styles.headerTop}>
             <TouchableOpacity onPress={() => onNavigate('home')} style={styles.navTouchArea}>
@@ -73,12 +75,22 @@ export default function ProfileScreen({ onLogout, onNavigate }) {
           <Text style={styles.sub}>sarah.mitchell@university.edu</Text>
         </View>
 
+        {/* Menu Cards */}
         <View style={styles.cardShifted}>
           <Row icon={<MaterialCommunityIcons name="history" size={22} color={BLUE} />} label="Edit Profile" />
           <Divider />
-          <Row icon={<Ionicons name="notifications" size={20} color={BLUE} />} label="Ride History" badge={3} onPress={() => onNavigate('history')} />
+          <Row 
+            icon={<Ionicons name="notifications" size={20} color={BLUE} />} 
+            label="Ride History" 
+            badge={3} 
+            onPress={() => onNavigate('history')} 
+          />
           <Divider />
-          <Row icon={<Feather name="help-circle" size={22} color={BLUE} />} label="Help & Support" />
+          <Row 
+            icon={<Feather name="help-circle" size={22} color={BLUE} />} 
+            label="Help & Support" 
+            onPress={() => onNavigate('support')} 
+          />
         </View>
 
         <View style={styles.card}>
@@ -95,11 +107,11 @@ export default function ProfileScreen({ onLogout, onNavigate }) {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Matching Tab Bar Container Block */}
+      {/* Synchronized Shared System Bottom Tab Navigation Bar */}
       <View style={styles.tabBar}>
         <TabItem icon={<Ionicons name="home" size={22} color={MUTED} />} label="Home" onPress={() => onNavigate('home')} />
         <TabItem icon={<FontAwesome5 name="car" size={18} color={MUTED} />} label="Rides" onPress={() => onNavigate('history')} />
-        <TabItem icon={<Ionicons name="notifications-outline" size={22} color={MUTED} />} label="Alerts" />
+        <TabItem icon={<Ionicons name="notifications-outline" size={22} color={MUTED} />} label="Alerts" onPress={() => onNavigate('alerts')} />
         <TabItem icon={<Feather name="user" size={22} color={BLUE} />} label="Profile" active={true} />
       </View>
     </SafeAreaView>
@@ -110,7 +122,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: SCREEN_BG },
   scrollContent: { paddingBottom: 120 },
   header: { backgroundColor: BLUE, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 56, alignItems: 'center', borderBottomLeftRadius: 4, borderBottomRightRadius: 4 },
-  headerTop: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  headerTop: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyStyle: 'center', justifyContent: 'space-between', marginBottom: 8 },
   navTouchArea: { padding: 4 },
   headerTitle: { color: '#fff', fontSize: 18, fontWeight: '600' },
   avatarWrap: { width: 116, height: 116, borderRadius: 58, borderWidth: 4, borderColor: '#fff', marginTop: 12, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
