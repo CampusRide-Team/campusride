@@ -15,6 +15,8 @@ import { Ionicons, MaterialCommunityIcons, Feather, FontAwesome5 } from '@expo/v
 
 import ProfileScreen from './ProfileScreen'; 
 import RideHistoryScreen from './RideHistoryScreen'; 
+import AlertScreen from './AlertScreen';
+import HelpSupportScreen from './HelpSupportScreen';
 
 const NAVY = '#10206B';
 const BLUE = '#2F6BFF';
@@ -51,6 +53,17 @@ export default function HomeScreen({ onLogout }) {
         onNavigate={(tab) => setActiveTab(tab)} 
       />
     );
+  }
+
+  if (activeTab === 'alerts') {
+    return (
+      <AlertScreen 
+        onNavigate={(tab) => setActiveTab(tab)} 
+      />
+    );
+  }
+  if (activeTab === 'support') {
+  return <HelpSupportScreen onNavigate={(tab) => setActiveTab(tab)} />;
   }
 
   return (
@@ -132,7 +145,7 @@ export default function HomeScreen({ onLogout }) {
       <View style={styles.tabBar}>
         <TabItem icon={<Ionicons name="home" size={22} color={BLUE} />} label="Home" active={true} />
         <TabItem icon={<FontAwesome5 name="car" size={18} color={MUTED} />} label="Rides" onPress={() => setActiveTab('history')} />
-        <TabItem icon={<Ionicons name="notifications-outline" size={22} color={MUTED} />} label="Alerts" />
+        <TabItem icon={<Ionicons name="notifications-outline" size={22} color={MUTED} />} label="Alerts" onPress={() => setActiveTab('alerts')} />
         <TabItem icon={<Feather name="user" size={22} color={MUTED} />} label="Profile" onPress={() => setActiveTab('profile')} />
       </View>
     </SafeAreaView>
