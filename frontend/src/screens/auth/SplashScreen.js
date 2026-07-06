@@ -7,12 +7,12 @@ import {
   Dimensions,
 } from 'react-native'
 import { StatusBar } from 'expo-status-bar'
+import { MaterialCommunityIcons } from '@expo/vector-icons'
 
 const { width, height } = Dimensions.get('window')
 
 const SplashScreen = ({ onFinish }) => {
-
-  // Animation values
+  // Animation state tracking keys
   const iconScale    = useRef(new Animated.Value(0)).current
   const iconOpacity  = useRef(new Animated.Value(0)).current
   const textOpacity  = useRef(new Animated.Value(0)).current
@@ -22,7 +22,7 @@ const SplashScreen = ({ onFinish }) => {
   const dot3Opacity  = useRef(new Animated.Value(0.3)).current
 
   useEffect(() => {
-    // 1. Pop in the icon
+    // 1. Pop-in choreography sequence for the central icon card
     Animated.parallel([
       Animated.spring(iconScale, {
         toValue: 1,
@@ -36,7 +36,7 @@ const SplashScreen = ({ onFinish }) => {
         useNativeDriver: true,
       }),
     ]).start(() => {
-      // 2. Fade in text after icon appears
+      // 2. Slide and fade text structures once icon rests
       Animated.parallel([
         Animated.timing(textOpacity, {
           toValue: 1,
@@ -51,7 +51,7 @@ const SplashScreen = ({ onFinish }) => {
       ]).start()
     })
 
-    // 3. Bouncing loading dots
+    // 3. Continuous loading pulse loop engine
     const bounceDot = (dot, delay) => {
       Animated.loop(
         Animated.sequence([
@@ -74,7 +74,7 @@ const SplashScreen = ({ onFinish }) => {
     bounceDot(dot2Opacity, 200)
     bounceDot(dot3Opacity, 400)
 
-    // 4. Navigate to onboarding after 3 seconds
+    // 4. Session timeout exit dispatch
     const timer = setTimeout(() => {
       if (onFinish) onFinish()
     }, 3000)
@@ -86,17 +86,15 @@ const SplashScreen = ({ onFinish }) => {
     <View style={styles.container}>
       <StatusBar style="light" />
 
-      {/* Decorative background dots */}
+      {/* Decorative ambient context elements */}
       <View style={[styles.bgDot, { top: height * 0.14, left: width * 0.12 }]} />
       <View style={[styles.bgDot, { top: height * 0.20, right: width * 0.28 }]} />
       <View style={[styles.bgDot, { top: height * 0.38, right: width * 0.07 }]} />
       <View style={[styles.bgDot, { top: height * 0.62, right: width * 0.10 }]} />
       <View style={[styles.bgDot, { top: height * 0.68, left: width * 0.20 }]} />
 
-      {/* Center content */}
+      {/* Center Layout Stack */}
       <View style={styles.centerContent}>
-
-        {/* App icon card */}
         <Animated.View
           style={[
             styles.iconCard,
@@ -106,11 +104,10 @@ const SplashScreen = ({ onFinish }) => {
             },
           ]}
         >
-          {/* Car SVG replaced with Unicode car emoji-style using shapes */}
-          <CarIcon />
+          {/* Unified clean vector icon to replace complex custom view grids */}
+          <MaterialCommunityIcons name="car-electric" size={52} color="#FFFFFF" />
         </Animated.View>
 
-        {/* App name + tagline */}
         <Animated.View
           style={[
             styles.textBlock,
@@ -121,16 +118,12 @@ const SplashScreen = ({ onFinish }) => {
           ]}
         >
           <Text style={styles.appName}>CampusRide</Text>
-
-          {/* Divider line */}
           <View style={styles.divider} />
-
           <Text style={styles.tagline}>Smart Rides Around Campus</Text>
         </Animated.View>
-
       </View>
 
-      {/* Loading indicator */}
+      {/* Synchronized Action Footer */}
       <View style={styles.loadingContainer}>
         <View style={styles.dotsRow}>
           <Animated.View style={[styles.dot, { opacity: dot1Opacity }]} />
@@ -139,28 +132,9 @@ const SplashScreen = ({ onFinish }) => {
         </View>
         <Text style={styles.loadingText}>LOADING</Text>
       </View>
-
     </View>
   )
 }
-
-// Car icon drawn with React Native views
-const CarIcon = () => (
-  <View style={styles.carWrap}>
-    {/* Car body */}
-    <View style={styles.carBody}>
-      {/* Car roof */}
-      <View style={styles.carRoof} />
-      {/* Car base */}
-      <View style={styles.carBase}>
-        {/* Left wheel */}
-        <View style={[styles.wheel, { left: 6 }]} />
-        {/* Right wheel */}
-        <View style={[styles.wheel, { right: 6 }]} />
-      </View>
-    </View>
-  </View>
-)
 
 const styles = StyleSheet.create({
   container: {
@@ -168,108 +142,59 @@ const styles = StyleSheet.create({
     backgroundColor: '#1E3A8A',
     alignItems: 'center',
     justifyContent: 'center',
-    // Radial-like gradient via overlay — use LinearGradient for true gradient
   },
-
-  // Background decorative dots
   bgDot: {
     position: 'absolute',
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.2)',
   },
-
-  // Center content block
   centerContent: {
     alignItems: 'center',
     gap: 24,
   },
-
-  // Icon card
   iconCard: {
     width: 96,
     height: 96,
-    borderRadius: 22,
+    borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
   },
-
-  // Car icon pieces
-  carWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  carBody: {
-    alignItems: 'center',
-  },
-  carRoof: {
-    width: 28,
-    height: 14,
-    backgroundColor: 'white',
-    borderTopLeftRadius: 8,
-    borderTopRightRadius: 8,
-    marginBottom: -1,
-  },
-  carBase: {
-    width: 46,
-    height: 18,
-    backgroundColor: 'white',
-    borderRadius: 4,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    paddingBottom: -4,
-    paddingHorizontal: 2,
-  },
-  wheel: {
-    position: 'absolute',
-    bottom: -6,
-    width: 13,
-    height: 13,
-    borderRadius: 7,
-    backgroundColor: '#1E3A8A',
-    borderWidth: 3,
-    borderColor: 'white',
-  },
-
-  // Text block
   textBlock: {
     alignItems: 'center',
-    gap: 10,
-    marginTop: 8,
+    gap: 12,
   },
   appName: {
-    fontSize: 38,
+    fontSize: 36,
     fontWeight: '800',
-    color: 'white',
+    color: '#FFFFFF',
     letterSpacing: -0.5,
   },
   divider: {
-    width: 32,
-    height: 2,
+    width: 36,
+    height: 3,
     borderRadius: 2,
-    backgroundColor: 'rgba(147,197,253,0.7)',
+    backgroundColor: 'rgba(147,197,253,0.5)',
   },
   tagline: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
     color: '#93C5FD',
-    letterSpacing: 0.3,
+    letterSpacing: 0.5,
   },
-
-  // Loading dots
   loadingContainer: {
     position: 'absolute',
     bottom: 80,
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
   dotsRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 8,
   },
   dot: {
     width: 8,
@@ -280,7 +205,7 @@ const styles = StyleSheet.create({
   loadingText: {
     color: '#93C5FD',
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
     letterSpacing: 3,
   },
 })

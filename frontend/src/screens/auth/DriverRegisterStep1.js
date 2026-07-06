@@ -10,6 +10,7 @@ import {
   Platform,
 } from 'react-native'
 import { StatusBar } from 'expo-status-bar'
+import { Ionicons } from '@expo/vector-icons'
 
 const InputField = ({ label, placeholder, value, onChangeText, keyboardType = 'default', secureTextEntry = false, rightAction }) => (
   <View style={styles.fieldWrap}>
@@ -27,18 +28,19 @@ const InputField = ({ label, placeholder, value, onChangeText, keyboardType = 'd
       />
       {rightAction && (
         <TouchableOpacity style={styles.inputRightAction} onPress={rightAction.onPress} activeOpacity={0.7}>
-          <Text style={styles.inputRightIconText}>{rightAction.icon}</Text>
+          <Ionicons name={rightAction.icon} size={20} color="#64748B" />
         </TouchableOpacity>
       )}
     </View>
   </View>
 )
 
-const DriverRegisterStep1 = ({ onNext, onBack, onLogin }) => {
-  const [fullName, setFullName]         = useState('')
-  const [phone, setPhone]               = useState('')
-  const [email, setEmail]               = useState('')
-  const [password, setPassword]         = useState('')
+const DriverRegisterStep1 = ({ initialData, onNext, onBack, onLogin }) => {
+  // 💾 STATE PERSISTENCE HYDRATION: Reads cached memory data from App.js if it exists
+  const [fullName, setFullName]         = useState(initialData?.fullName || '')
+  const [phone, setPhone]               = useState(initialData?.phone || '')
+  const [email, setEmail]               = useState(initialData?.email || '')
+  const [password, setPassword]         = useState(initialData?.password || '')
   const [showPassword, setShowPassword] = useState(false)
   const [errors, setErrors]             = useState({})
 
@@ -46,8 +48,7 @@ const DriverRegisterStep1 = ({ onNext, onBack, onLogin }) => {
     const newErrors = {}
     if (!fullName.trim()) newErrors.fullName = 'Full name is required'
     if (!phone.trim()) newErrors.phone = 'Phone number is required'
-    
-    // Strict Gmail matching rule validation checks
+
     const gmailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/
     if (!email.trim()) {
       newErrors.email = 'Email address is required'
@@ -57,7 +58,7 @@ const DriverRegisterStep1 = ({ onNext, onBack, onLogin }) => {
 
     if (!password.trim()) newErrors.password = 'Password is required'
     else if (password.length < 6) newErrors.password = 'Password must be at least 6 characters'
-    
+
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -65,17 +66,28 @@ const DriverRegisterStep1 = ({ onNext, onBack, onLogin }) => {
   const handleContinue = () => {
     if (!validate()) return
     if (onNext) {
-      onNext({ fullName, phone, email, password })
+      const sanitizedPhone = phone.trim().replace(/\s+/g, '')
+
+      // TODO: BACKEND INTEGRATION (Step 1 of 3 Pre-Validation Gateway)
+      // If adding real-time check filters prior to entering vehicle information, execute async queries here:
+      // axios.post('/api/v1/auth/drivers/check-availability', { email: email.toLowerCase(), phone: sanitizedPhone })
+
+      onNext({ 
+        fullName: fullName.trim(), 
+        phone: sanitizedPhone, 
+        email: email.trim().toLowerCase(), 
+        password 
+      })
     }
   }
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <StatusBar style="dark" />
-      
+
       <View style={styles.headerNav}>
         <TouchableOpacity onPress={onBack} activeOpacity={0.7} style={styles.backButton}>
-          <Text style={styles.backArrow}>←</Text>
+          <Ionicons name="arrow-back" size={24} color="#1E3A8A" />
         </TouchableOpacity>
         <Text style={styles.stepIndicator}>Step 1 of 3</Text>
       </View>
@@ -86,7 +98,7 @@ const DriverRegisterStep1 = ({ onNext, onBack, onLogin }) => {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        
+
         <View style={styles.titleSection}>
           <Text style={styles.screenTitle}>Create Driver Account</Text>
           <Text style={styles.screenSubtitle}>Enter your personal details</Text>
@@ -126,7 +138,7 @@ const DriverRegisterStep1 = ({ onNext, onBack, onLogin }) => {
             onChangeText={(v) => { setPassword(v); setErrors((e) => ({ ...e, password: null })) }}
             secureTextEntry={!showPassword}
             rightAction={{
-              icon: showPassword ? '🙈' : '👁️',
+              icon: showPassword ? 'eye-off-outline' : 'eye-outline',
               onPress: () => setShowPassword((s) => !s),
             }}
           />
@@ -170,11 +182,6 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingRight: 16,
   },
-  backArrow: {
-    fontSize: 24,
-    color: '#1E3A8A',
-    fontWeight: '600',
-  },
   stepIndicator: {
     fontSize: 14,
     fontWeight: '700',
@@ -189,7 +196,7 @@ const styles = StyleSheet.create({
   },
   progressBarActive: {
     flex: 1,
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#1E3A8A',
     borderRadius: 2,
   },
   progressBarInactive: {
@@ -248,10 +255,6 @@ const styles = StyleSheet.create({
   },
   inputRightAction: {
     paddingLeft: 8,
-    opacity: 0.6,
-  },
-  inputRightIconText: {
-    fontSize: 18,
   },
   errorText: {
     fontSize: 12,
@@ -291,7 +294,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   loginFooterLink: {
-    color: '#3B82F6',
+    color: '#1E3A8A',
     fontWeight: '700',
   },
 })

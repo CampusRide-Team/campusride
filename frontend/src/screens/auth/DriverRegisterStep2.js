@@ -8,137 +8,193 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Modal,
+  FlatList,
 } from 'react-native'
 import { StatusBar } from 'expo-status-bar'
+import { Ionicons } from '@expo/vector-icons'
 
-const InputField = ({ label, placeholder, value, onChangeText, keyboardType = 'default', isDropdown = false, onDropdownPress }) => (
-  <View style={styles.fieldWrap}>
-    <Text style={styles.fieldLabel}>{label}</Text>
-    {isDropdown ? (
-      <TouchableOpacity style={styles.inputRow} onPress={onDropdownPress} activeOpacity={0.7}>
-        <Text style={[styles.input, !value && styles.placeholderText]}>
-          {value || placeholder}
+const CustomDropdown = ({ label, placeholder, selectedValue, items, onSelect }) => {
+  const [visible, setVisible] = useState(false)
+
+  return (
+    <View style={styles.fieldWrap}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <TouchableOpacity 
+        style={styles.dropdownTrigger} 
+        activeOpacity={0.7} 
+        onPress={() => setVisible(true)}
+      >
+        <Text style={[styles.dropdownTriggerText, !selectedValue && { color: '#94A3B8' }]}>
+          {selectedValue || placeholder}
         </Text>
-        <Text style={styles.dropdownArrow}>▼</Text>
+        <Ionicons name="chevron-down" size={18} color="#64748B" />
       </TouchableOpacity>
-    ) : (
-      <View style={styles.inputRow}>
-        <TextInput
-          style={styles.input}
-          placeholder={placeholder}
-          placeholderTextColor="#94A3B8"
-          value={value}
-          onChangeText={onChangeText}
-          keyboardType={keyboardType}
-          autoCapitalize="characters"
-        />
-      </View>
-    )}
-  </View>
-)
 
-const DriverRegisterStep2 = ({ onNext, onBack, onLogin }) => {
-  const [vehicleType, setVehicleType]   = useState('')
-  const [licensePlate, setLicensePlate] = useState('')
-  const [vehicleColor, setVehicleColor] = useState('')
-  const [seats, setSeats]               = useState('')
+      <Modal visible={visible} transparent animationType="fade">
+        <TouchableOpacity 
+          style={styles.modalOverlay} 
+          activeOpacity={1} 
+          onPress={() => setVisible(false)}
+        >
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{placeholder}</Text>
+            <FlatList
+              data={items}
+              keyExtractor={(item) => item}
+              renderItem={({ item }) => (
+                <TouchableOpacity 
+                  style={[styles.modalItem, selectedValue === item && styles.modalItemSelected]}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    onSelect(item)
+                    setVisible(false)
+                  }}
+                >
+                  <Text style={[styles.modalItemText, selectedValue === item && styles.modalItemTextSelected]}>
+                    {item}
+                  </Text>
+                  {selectedValue === item && <Ionicons name="checkmark" size={18} color="#1E3A8A" />}
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </View>
+  )
+}
+
+const DriverRegisterStep2 = ({ initialData, onNext, onBack, onLogin }) => {
+  //  STATE PERSISTENCE HYDRATION: Reloads state values from App.js context if backtracking occurs
+  const [vehicleType, setVehicleType]   = useState(initialData?.vehicleType || '')
+  const [licensePlate, setLicensePlate] = useState(initialData?.licensePlate || '')
+  const [vehicleColor, setVehicleColor] = useState(initialData?.vehicleColor || '')
+  const [seats, setSeats]               = useState(initialData?.seats ? String(initialData.seats) : '')
   const [errors, setErrors]             = useState({})
+
+  const vehicleTypes = [
+    'Opel', 'Kia', 'Toyota Corolla', 'Toyota Vitz / Yaris', 'Toyota Camry',
+    'Hyundai', 'Honda', 'Nissan', 'Mazda', 'Mercedes-Benz'
+  ]
+
+  const vehicleColors = [
+    'Black', 'White', 'Silver', 'Gray', 'Blue', 'Red', 'Green', 'Yellow', 'Brown'
+  ]
 
   const validate = () => {
     const newErrors = {}
-    if (!vehicleType) newErrors.vehicleType = 'Vehicle type selection is required'
-    if (!licensePlate.trim()) newErrors.licensePlate = 'License plate number is required'
-    if (!vehicleColor) newErrors.vehicleColor = 'Vehicle color selection is required'
+    if (!vehicleType) newErrors.vehicleType = 'Car brand is required'
+    if (!licensePlate.trim()) newErrors.licensePlate = 'License plate is required'
+    if (!vehicleColor) newErrors.vehicleColor = 'Vehicle color is required'
     if (!seats.trim()) newErrors.seats = 'Number of seats is required'
-    
+
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
 
   const handleContinue = () => {
     if (!validate()) return
-    if (onNext) {
-      onNext({ vehicleType, licensePlate, vehicleColor, seats })
-    }
-  }
+    const sanitizedPlate = licensePlate.trim().toUpperCase().replace(/[\s-]/g, '')
 
-  // Temporary local mock mock modal trigger callbacks
-  const handleSelectVehicleType = () => {
-    setVehicleType('Shuttle Bus')
-    setErrors((e) => ({ ...e, vehicleType: null }))
-  }
-
-  const handleSelectVehicleColor = () => {
-    setVehicleColor('White')
-    setErrors((e) => ({ ...e, vehicleColor: null }))
+    // TODO: BACKEND INTEGRATION (Step 2 of 3)
+    // Local memory state cache block mapped prior to final multipart generation gateway.
+    onNext?.({ 
+      vehicleType, 
+      licensePlate: sanitizedPlate, 
+      vehicleColor, 
+      seats: parseInt(seats.trim(), 10) 
+    })
   }
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <StatusBar style="dark" />
-      
+
       <View style={styles.headerNav}>
         <TouchableOpacity onPress={onBack} activeOpacity={0.7} style={styles.backButton}>
-          <Text style={styles.backArrow}>←</Text>
+          <Ionicons name="arrow-back" size={24} color="#1E3A8A" />
         </TouchableOpacity>
         <Text style={styles.stepIndicator}>Step 2 of 3</Text>
       </View>
 
       <View style={styles.progressContainer}>
+        <View style={styles.progressBarActive} />
+        <View style={styles.progressBarActive} />
         <View style={styles.progressBarInactive} />
-        <View style={[styles.progressBarActive, { marginLeft: 8 }]} />
-        <View style={[styles.progressBarInactive, { marginLeft: 8 }]} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        
+
         <View style={styles.titleSection}>
           <Text style={styles.screenTitle}>Vehicle Information</Text>
-          <Text style={styles.screenSubtitle}>Tell us about the vehicle you’ll be driving on campus</Text>
+          <Text style={styles.screenSubtitle}>Enter your asset transportation parameters</Text>
         </View>
 
         <View style={styles.formContainer}>
-          <InputField
-            label="Vehicle Type"
-            placeholder="Select Vehicle Type"
-            value={vehicleType}
-            isDropdown={true}
-            onDropdownPress={handleSelectVehicleType}
+
+          <CustomDropdown
+            label="Vehicle Type / Brand"
+            placeholder="Select car brand"
+            selectedValue={vehicleType}
+            items={vehicleTypes}
+            onSelect={(value) => {
+              setVehicleType(value)
+              setErrors((e) => ({ ...e, vehicleType: null }))
+            }}
           />
           {errors.vehicleType && <Text style={styles.errorText}>{errors.vehicleType}</Text>}
 
-          <InputField
-            label="License Plate Number"
-            placeholder="e.g. GA - 123 - 24"
-            value={licensePlate}
-            onChangeText={(v) => { setLicensePlate(v); setErrors((e) => ({ ...e, licensePlate: null })) }}
-          />
+          <View style={styles.fieldWrap}>
+            <Text style={styles.fieldLabel}>License Plate Number</Text>
+            <View style={styles.inputRow}>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. GA - 123 - 24"
+                placeholderTextColor="#94A3B8"
+                autoCapitalize="characters"
+                value={licensePlate}
+                onChangeText={(v) => {
+                  setLicensePlate(v)
+                  setErrors((e) => ({ ...e, licensePlate: null }))
+                }}
+              />
+            </View>
+          </View>
           {errors.licensePlate && <Text style={styles.errorText}>{errors.licensePlate}</Text>}
 
-          <InputField
+          <CustomDropdown
             label="Vehicle Color"
-            placeholder="Select Vehicle Color"
-            value={vehicleColor}
-            isDropdown={true}
-            onDropdownPress={handleSelectVehicleColor}
+            placeholder="Select color"
+            selectedValue={vehicleColor}
+            items={vehicleColors}
+            onSelect={(value) => {
+              setVehicleColor(value)
+              setErrors((e) => ({ ...e, vehicleColor: null }))
+            }}
           />
           {errors.vehicleColor && <Text style={styles.errorText}>{errors.vehicleColor}</Text>}
 
-          <InputField
-            label="Number of Seat"
-            placeholder="e.g. 4"
-            value={seats}
-            onChangeText={(v) => { setSeats(v); setErrors((e) => ({ ...e, seats: null })) }}
-            keyboardType="number-pad"
-          />
+          <View style={styles.fieldWrap}>
+            <Text style={styles.fieldLabel}>Number of Seats Available</Text>
+            <View style={styles.inputRow}>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. 4"
+                placeholderTextColor="#94A3B8"
+                keyboardType="number-pad"
+                value={seats}
+                onChangeText={(v) => {
+                  setSeats(v)
+                  setErrors((e) => ({ ...e, seats: null }))
+                }}
+              />
+            </View>
+          </View>
           {errors.seats && <Text style={styles.errorText}>{errors.seats}</Text>}
 
           <TouchableOpacity style={styles.continueBtn} onPress={handleContinue} activeOpacity={0.85}>
             <Text style={styles.continueBtnText}>Continue  →</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={onBack} style={styles.goBackCenterBtn} activeOpacity={0.7}>
-            <Text style={styles.goBackCenterText}>← Go Back</Text>
           </TouchableOpacity>
 
           <TouchableOpacity onPress={onLogin} activeOpacity={0.7} style={styles.loginFooterBtn}>
@@ -154,7 +210,6 @@ const DriverRegisterStep2 = ({ onNext, onBack, onLogin }) => {
 }
 
 const styles = StyleSheet.create({
-  // Main Container Layout
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',
@@ -164,8 +219,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 40,
   },
-
-  // Header Progress Navigation
   headerNav: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -177,11 +230,6 @@ const styles = StyleSheet.create({
   backButton: {
     paddingVertical: 4,
     paddingRight: 16,
-  },
-  backArrow: {
-    fontSize: 24,
-    color: '#1E3A8A',
-    fontWeight: '600',
   },
   stepIndicator: {
     fontSize: 14,
@@ -197,16 +245,15 @@ const styles = StyleSheet.create({
   },
   progressBarActive: {
     flex: 1,
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#1E3A8A',
     borderRadius: 2,
+    marginRight: 8,
   },
   progressBarInactive: {
     flex: 1,
     backgroundColor: '#E2E8F0',
     borderRadius: 2,
   },
-
-  // Typography Elements
   titleSection: {
     marginBottom: 24,
   },
@@ -214,17 +261,14 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '800',
     color: '#1E3A8A',
-    marginBottom: 8,
+    marginBottom: 6,
     letterSpacing: -0.5,
   },
   screenSubtitle: {
     fontSize: 15,
     color: '#64748B',
     fontWeight: '500',
-    lineHeight: 22,
   },
-
-  // Form Field Components
   formContainer: {
     width: '100%',
   },
@@ -240,6 +284,21 @@ const styles = StyleSheet.create({
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    height: 56,
+    paddingHorizontal: 16,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  dropdownTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
     height: 56,
     paddingHorizontal: 16,
@@ -253,19 +312,17 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 1,
   },
+  dropdownTriggerText: {
+    fontSize: 15,
+    color: '#1F2937',
+    fontWeight: '500',
+  },
   input: {
     flex: 1,
     fontSize: 15,
     color: '#1F2937',
     fontWeight: '500',
-  },
-  placeholderText: {
-    color: '#94A3B8',
-  },
-  dropdownArrow: {
-    fontSize: 11,
-    color: '#64748B',
-    paddingLeft: 8,
+    height: '100%',
   },
   errorText: {
     fontSize: 12,
@@ -274,15 +331,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     marginLeft: 4,
   },
-
-  // Action Buttons
   continueBtn: {
     width: '100%',
     height: 56,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 16,
+    marginTop: 20,
     backgroundColor: '#1E3A8A',
     shadowColor: '#1E3A8A',
     shadowOffset: { width: 0, height: 4 },
@@ -296,23 +351,9 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     letterSpacing: 0.2,
   },
-
-  // Centered Intermediate Back Button
-  goBackCenterBtn: {
-    alignItems: 'center',
-    marginTop: 20,
-    paddingVertical: 8,
-  },
-  goBackCenterText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1E2937',
-  },
-
-  // Footer Navigation
   loginFooterBtn: {
     alignItems: 'center',
-    marginTop: 16,
+    marginTop: 24,
     paddingVertical: 8,
   },
   loginFooterText: {
@@ -321,7 +362,48 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   loginFooterLink: {
-    color: '#3B82F6',
+    color: '#1E3A8A',
+    fontWeight: '700',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.3)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '50%',
+    paddingTop: 20,
+    paddingBottom: 40,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1E3A8A',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  modalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  modalItemSelected: {
+    backgroundColor: '#F8FAFC',
+  },
+  modalItemText: {
+    fontSize: 15,
+    color: '#334155',
+    fontWeight: '500',
+  },
+  modalItemTextSelected: {
+    color: '#1E3A8A',
     fontWeight: '700',
   },
 })
