@@ -19,6 +19,7 @@ dotenv.config();
 connectDB();
 const app = express();
 const server = http.createServer(app);
+app.set('trust proxy', 1);
 
 app.use(helmet());
 app.use(cors());

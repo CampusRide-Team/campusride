@@ -5,10 +5,8 @@ import { Platform } from "react-native";
 // LIVE BACKEND ROUTING ENGINE
 const getBaseUrl = () => {
   if (__DEV__) {
-    // Android Emulator bridges on loopback 10.0.2.2, iOS Simulator handles localhost cleanly
-    return Platform.OS === "android"
-      ? "http://10.0.2.2:5000/api/v1"
-      : "http://localhost:5000/api/v1";
+    // Standardized network binding for local environments
+    return "https://eb793f91-8f72-4b48-ba54-5404c64c1696-00-3tbfonmau7mqf.riker.replit.dev/api/v1";
   }
   return "https://your-live-backend-url.university.edu/api/v1";
 };
