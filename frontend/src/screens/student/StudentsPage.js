@@ -1,3 +1,4 @@
+// studentpage.js
 import React, { useState } from 'react'; 
 import {
   View,
@@ -37,7 +38,7 @@ const MAP_URI = 'https://images.unsplash.com/photo-1524661135-423995f22d0b?w=120
 export default function HomeScreen({ onLogout }) {
   const [activeTab, setActiveTab] = useState('home');
 
-  // Navigation Routing Handler
+  // Unified Centralized Navigation Routing Engine
   if (activeTab === 'profile') {
     return (
       <ProfileScreen 
@@ -62,8 +63,13 @@ export default function HomeScreen({ onLogout }) {
       />
     );
   }
+
   if (activeTab === 'support') {
-  return <HelpSupportScreen onNavigate={(tab) => setActiveTab(tab)} />;
+    return (
+      <HelpSupportScreen 
+        onNavigate={(tab) => setActiveTab(tab)} 
+      />
+    );
   }
 
   return (
@@ -141,7 +147,7 @@ export default function HomeScreen({ onLogout }) {
         </View>
       </ScrollView>
 
-      {/* Unified App Footer Tab Bar */}
+      {/* Unified App Footer Tab Bar Navigation Controls */}
       <View style={styles.tabBar}>
         <TabItem icon={<Ionicons name="home" size={22} color={BLUE} />} label="Home" active={true} />
         <TabItem icon={<FontAwesome5 name="car" size={18} color={MUTED} />} label="Rides" onPress={() => setActiveTab('history')} />

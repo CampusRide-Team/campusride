@@ -192,29 +192,16 @@ const RootNavigator = () => {
     )
   }
 
-  // 11. Core Portal Dashboard
+  // 11. Core Portal Dashboard (Fixed to launch Student Portal Interface)
   if (screen === 'home') {
     const handleLogout = () => {
       logout()
       setScreen('role-selection')
     }
 
-    return (
-      <DriverHome 
-        driverData={driverProfileData} 
-        onLogout={handleLogout} 
-        onViewRequests={() => setScreen('active-requests')}
-        onChangeTab={(targetTab) => {
-          if (targetTab === 'trips') setScreen('active-requests')
-          if (targetTab === 'profile') setScreen('driver-profile')
-        }}
-      />
-    )
+    return <StudentsPage onLogout={handleLogout} />
   }
 
-<<<<<<< HEAD
-    return <StudentsPage onLogout={handleLogout} />
-=======
   // 12. Incoming Ride Requests Dashboard Queue Screen Layout
   if (screen === 'active-requests') {
     return (
@@ -414,7 +401,6 @@ const RootNavigator = () => {
         }}
       />
     )
->>>>>>> 8bea6f7619f0c1e8c24deb65799e9a9311f886b3
   }
 
   return null
