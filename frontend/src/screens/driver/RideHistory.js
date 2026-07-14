@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -6,330 +6,487 @@ import {
   TouchableOpacity,
   ScrollView,
   Dimensions,
-} from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
-import { StatusBar } from 'expo-status-bar'
-import { MaterialCommunityIcons } from '@expo/vector-icons'
+  ActivityIndicator,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { StatusBar } from "expo-status-bar";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useTheme } from "../../context/ThemeContext";  
+import api from "../../api/axios"; 
 
-const { width } = Dimensions.get('window')
+const { width } = Dimensions.get("window");
 
-const RideHistory = ({ onBack, onNavigate, onChangeTab }) => {
+const RideHistory = ({ onBack, onChangeTab }) => {
+  const { theme, darkModeEnabled } = useTheme();  
+  const [historyData, setHistoryData] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [activeFilter, setActiveFilter] = useState("completed");
+  const [showFilterMenu, setShowFilterMenu] = useState(false);
 
-  // TODO: BACKEND INTEGRATION — Switch static mock array into a managed database state variable setup
-  // const [historyData, setHistoryData] = useState([])
-  // const [isLoading, setIsLoading] = useState(true)
+  const formatRideDate = (dateString) => {
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch (err) {
+      return "Recent Trip";
+    }
+  };
 
-  // TODO: BACKEND INTEGRATION — Pull real-time completed travel ledgers on screen frame focus mounting
-  // useEffect(() => {
-  //   const fetchRideHistory = async () => {
-  //     try {
-  //       const token = await AsyncStorage.getItem('token')
-  //       const response = await fetch('https://your-api-url/api/v1/drivers/me/trips?status=COMPLETED', {
-  //         headers: { 'Authorization': `Bearer ${token}` }
-  //       })
-  //       const json = await response.json()
-  //       setHistoryData(json.data)
-  //     } catch (err) { console.error("Error fetching trip archives:", err) }
-  //     finally { setIsLoading(false) }
-  //   }
-  //   fetchRideHistory()
-  // }, [])
+  const fetchRideHistory = async () => {
+    setIsLoading(true);
+    try {
+      const response = await api.get("/driver/earnings");
 
-  const mockHistoryData = [
-    {
-      id: 'CR2026001',
-      date: 'Today, 2:30 PM',
-      status: 'Completed',
-      type: 'Shared',
-      pickup: 'Student Center',
-      destination: 'Engineering Building',
-    },
-    {
-      id: 'CR2026000',
-      date: 'Yesterday, 6:45 PM',
-      status: 'Completed',
-      type: 'Private',
-      pickup: 'Library',
-      destination: 'Downtown Campus',
-    },
-    {
-      id: 'CR2025999',
-      date: 'Jun 15, 11:20 AM',
-      status: 'Completed',
-      type: 'Shared',
-      pickup: 'Dormitory A',
-      destination: 'Sports Complex',
-    },
-    {
-      id: 'CR2025998',
-      date: 'Jun 14, 3:15 PM',
-      status: 'Completed',
-      type: 'Shared',
-      pickup: 'Medical Center',
-      destination: 'Student Center',
-    },
-    {
-      id: 'CR2025997',
-      date: 'Jun 13, 8:30 AM',
-      status: 'Completed',
-      type: 'Private',
-      pickup: 'Parking Lot C',
-      destination: 'Business School',
-    },
-  ]
+      if (response.data?.success && response.data?.data?.recentTrips) {
+        setHistoryData(response.data.data.recentTrips);
+      } else if (response.data?.success && Array.isArray(response.data.data)) {
+        setHistoryData(response.data.data);
+      }
+    } catch (err) {
+      console.error("Error fetching trip archives from backend:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRideHistory();
+  }, []);
+
+  const filteredRides = historyData.filter(
+    (ride) =>
+      (ride.status || "completed").toLowerCase() === activeFilter.toLowerCase(),
+  );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <StatusBar style="dark" />
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={["top", "bottom"]}>
+      <StatusBar style={theme.statusBar} />
 
       {/* Top Bar Navbar Section */}
-      <View style={styles.topBar}>
-        <TouchableOpacity onPress={onBack} activeOpacity={0.7} style={styles.topBarButton}>
-          <MaterialCommunityIcons name="arrow-left" size={24} color="#1E3A8A" />
+      <View style={[styles.topBar, { backgroundColor: theme.background, borderBottomColor: theme.tabBarBorder }]}>
+        <TouchableOpacity
+          onPress={onBack}
+          activeOpacity={0.7}
+          style={styles.topBarButton}
+        >
+          <MaterialCommunityIcons name="arrow-left" size={24} color={theme.iconColor} />
         </TouchableOpacity>
-        <Text style={styles.topBarTitle}>Ride History</Text>
-        <TouchableOpacity activeOpacity={0.7} style={styles.topBarButton}>
-          <MaterialCommunityIcons name="filter-variant" size={24} color="#1E3A8A" />
+        <Text style={[styles.topBarTitle, { color: theme.iconColor }]}>Ride History</Text>
+        <TouchableOpacity
+          activeOpacity={0.7}
+          style={[
+            styles.topBarButton,
+            showFilterMenu && [styles.activeFilterBtn, { backgroundColor: theme.cardBackground }],
+          ]}
+          onPress={() => setShowFilterMenu(!showFilterMenu)}
+        >
+          <MaterialCommunityIcons
+            name="filter-variant"
+            size={24}
+            color={theme.iconColor}
+          />
         </TouchableOpacity>
       </View>
 
-      {/* History List Content Cards Module Layer */}
-      <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-        {mockHistoryData.map((ride) => (
-          <View key={ride.id} style={styles.historyCard}>
+      {/* Inline Filter Drawer Dropdown Option */}
+      {showFilterMenu && (
+        <View style={[styles.filterDrawer, { backgroundColor: theme.cardBackground, borderBottomColor: theme.borderColor }]}>
+          <TouchableOpacity
+            style={[
+              styles.filterOption,
+              { backgroundColor: darkModeEnabled ? "#334155" : "#E2E8F0" },
+              activeFilter === "completed" && { backgroundColor: theme.iconColor },
+            ]}
+            onPress={() => {
+              setActiveFilter("completed");
+              setShowFilterMenu(false);
+            }}
+          >
+            <Text
+              style={[
+                styles.filterOptionText,
+                { color: theme.subText },
+                activeFilter === "completed" && styles.selectedFilterText,
+              ]}
+            >
+              Completed Trips
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.filterOption,
+              { backgroundColor: darkModeEnabled ? "#334155" : "#E2E8F0" },
+              activeFilter === "cancelled" && { backgroundColor: theme.iconColor },
+            ]}
+            onPress={() => {
+              setActiveFilter("cancelled");
+              setShowFilterMenu(false);
+            }}
+          >
+            <Text
+              style={[
+                styles.filterOptionText,
+                { color: theme.subText },
+                activeFilter === "cancelled" && styles.selectedFilterText,
+              ]}
+            >
+              Cancelled Trips
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
-            {/* Metadata Header Meta Row */}
-            <View style={styles.cardHeaderRow}>
-              <View style={styles.headerLeftMeta}>
-                <Text style={styles.dateText}>{ride.date}</Text>
-                <Text style={styles.statusText}>{ride.status}</Text>
+      {/* Core Dynamic Content Switching Context Area */}
+      {isLoading ? (
+        <View style={styles.loaderContainer}>
+          <ActivityIndicator size="large" color={theme.iconColor} />
+          <Text style={[styles.loadingText, { color: theme.subText }]}>Retrieving transit ledger...</Text>
+        </View>
+      ) : filteredRides.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <MaterialCommunityIcons name="car-off" size={64} color={theme.subText} />
+          <Text style={[styles.emptyText, { color: theme.subText }]}>
+            No {activeFilter} rides recorded yet
+          </Text>
+        </View>
+      ) : (
+        <ScrollView
+          contentContainerStyle={[styles.scrollContainer, { backgroundColor: theme.background }]}
+          showsVerticalScrollIndicator={false}
+        >
+          {filteredRides.map((ride) => (
+            <View key={ride._id || ride.id} style={[styles.historyCard, { backgroundColor: theme.cardBackground, borderColor: theme.borderColor }]}>
+              {/* Metadata Header Meta Row */}
+              <View style={styles.cardHeaderRow}>
+                <View style={styles.headerLeftMeta}>
+                  <Text style={[styles.dateText, { color: theme.subText }]}>
+                    {formatRideDate(ride.createdAt || ride.updatedAt)}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.statusText,
+                      ride.status === "cancelled" && { color: "#EF4444" },
+                    ]}
+                  >
+                    {ride.status
+                      ? ride.status.charAt(0).toUpperCase() +
+                        ride.status.slice(1)
+                      : "Completed"}
+                  </Text>
+                </View>
+
+                {/* Ride Type Pill Badge Indicator */}
+                <View
+                  style={[
+                    styles.typeTagCapsule,
+                    (ride.type || "Shared") === "Shared"
+                      ? styles.sharedBackground
+                      : [styles.privateBackground, { backgroundColor: theme.iconWrap, borderColor: theme.tabBarBorder }],
+                  ]}
+                >
+                  <Text style={[styles.typeTagText, { color: (ride.type || "Shared") === "Shared" ? "#1E3A8A" : theme.iconColor }]}>
+                    {(ride.type || "Shared").toUpperCase()}
+                  </Text>
+                </View>
               </View>
 
-              <View style={[
-                styles.typeTagCapsule,
-                ride.type === 'Shared' ? styles.sharedBackground : styles.privateBackground
-              ]}>
-                <Text style={styles.typeTagText}>
-                  {ride.type?.toUpperCase()}
+              {/* Vertical Routing Visual Stack */}
+              <View style={styles.routeContainer}>
+                <View style={styles.timelineIndicatorsColumn}>
+                  <MaterialCommunityIcons
+                    name="circle"
+                    size={10}
+                    color={theme.iconColor}
+                  />
+                  <View style={[styles.verticalLinkConnector, { backgroundColor: theme.borderColor }]} />
+                  <MaterialCommunityIcons
+                    name="map-marker"
+                    size={14}
+                    color="#A3E635"
+                  />
+                </View>
+
+                <View style={styles.routeLabelsColumn}>
+                  <Text style={[styles.locationText, { color: theme.mainText }]} numberOfLines={1}>
+                    {ride.pickupLocation?.address ||
+                      ride.pickup ||
+                      "Campus Pickup"}
+                  </Text>
+                  <Text style={[styles.locationText, { color: theme.mainText }]} numberOfLines={1}>
+                    {ride.destinationLocation?.address ||
+                      ride.destination ||
+                      "Campus Destination"}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Footer Row Block Module with Trip Fare details */}
+              <View style={[styles.cardFooterRow, { borderTopColor: theme.borderColor }]}>
+                <Text style={[styles.rideIdLabel, { color: theme.subText }]}>
+                  ID: #{(ride._id || ride.id).substring(0, 8).toUpperCase()}
+                </Text>
+                <Text style={[styles.fareLabel, { color: theme.iconColor }]}>
+                  GH₵ {(ride.fare || 0).toFixed(2)}
                 </Text>
               </View>
             </View>
-
-            {/* Vertical Routing Visual Stack */}
-            <View style={styles.routeContainer}>
-              <View style={styles.timelineIndicatorsColumn}>
-                <MaterialCommunityIcons name="circle" size={10} color="#1E3A8A" />
-                <View style={styles.verticalLinkConnector} />
-                <MaterialCommunityIcons name="map-marker" size={14} color="#A3E635" />
-              </View>
-
-              <View style={styles.routeLabelsColumn}>
-                <Text style={styles.locationText} numberOfLines={1}>{ride.pickup}</Text>
-                <Text style={styles.locationText} numberOfLines={1}>{ride.destination}</Text>
-              </View>
-            </View>
-
-            {/* Footer Row Block Module */}
-            <View style={styles.cardFooterRow}>
-              <Text style={styles.rideIdLabel}>Ride ID: #{ride.id}</Text>
-            </View>
-
-          </View>
-        ))}
-      </ScrollView>
+          ))}
+        </ScrollView>
+      )}
 
       {/* Persistent App Footer Bottom Nav Tabs Menu */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem} onPress={() => onChangeTab && onChangeTab('home')} activeOpacity={0.7}>
+      <View style={[styles.bottomNav, { backgroundColor: theme.background, borderTopColor: theme.tabBarBorder }]}>
+        <TouchableOpacity
+          style={styles.navItem}
+          onPress={() => onChangeTab && onChangeTab("home")}
+          activeOpacity={0.7}
+        >
           <View style={styles.tabIconBackground}>
-            <MaterialCommunityIcons name="home-outline" size={24} color="#94A3B8" />
+            <MaterialCommunityIcons
+              name="home-outline"
+              size={24}
+              color="#94A3B8"
+            />
           </View>
           <Text style={styles.navLabel}>Home</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.navItem} onPress={() => onChangeTab && onChangeTab('trips')} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={styles.navItem}
+          onPress={() => onChangeTab && onChangeTab("trips")}
+          activeOpacity={0.7}
+        >
           <View style={styles.tabIconBackground}>
-            <MaterialCommunityIcons name="car-multiple" size={24} color="#94A3B8" />
+            <MaterialCommunityIcons
+              name="car-multiple"
+              size={24}
+              color="#94A3B8"
+            />
           </View>
           <Text style={styles.navLabel}>Trips</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.navItem} onPress={() => onBack && onBack()} activeOpacity={0.7}>
-          <View style={[styles.tabIconBackground, styles.activeTabIconBackground]}>
-            <MaterialCommunityIcons name="account-circle" size={24} color="#1E3A8A" />
+        <TouchableOpacity
+          style={styles.navItem}
+          onPress={() => onBack && onBack()}
+          activeOpacity={0.7}
+        >
+          <View
+            style={[
+              styles.tabIconBackground,
+              !darkModeEnabled && styles.activeTabIconBackground,
+              darkModeEnabled && { backgroundColor: "#334155" },
+            ]}
+          >
+            <MaterialCommunityIcons
+              name="account-circle"
+              size={24}
+              color={theme.iconColor}
+            />
           </View>
-          <Text style={styles.navLabelActive}>Profile</Text>
+          <Text style={[styles.navLabelActive, { color: theme.iconColor }]}>Profile</Text>
         </TouchableOpacity>
       </View>
-
     </SafeAreaView>
-  )
-}
+  );
+};
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
+  activeFilterBtn: {
+    opacity: 0.9,
   },
-  scrollContainer: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 24,
-    backgroundColor: '#FFFFFF',
+  activeTabIconBackground: {
+    backgroundColor: "#F1F5F9",
   },
-  topBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+  bottomNav: {
+    borderTopWidth: 1,
+    flexDirection: "row",
+    height: 74,
   },
-  topBarButton: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  topBarTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#1E3A8A',
-    letterSpacing: -0.5,
-  },
-  historyCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.02,
-    shadowRadius: 8,
-    elevation: 2,
+  cardFooterRow: {
+    alignItems: "center",
+    borderTopWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingTop: 12,
   },
   cardHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginBottom: 16,
   },
-  headerLeftMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+  container: {
+    flex: 1,
   },
   dateText: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#64748B',
+    fontWeight: "600",
   },
-  statusText: {
+  emptyContainer: {
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: 40,
+  },
+  emptyText: {
+    fontSize: 15,
+    fontWeight: "700",
+    textAlign: "center",
+    marginTop: 16,
+  },
+  fareLabel: {
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  filterDrawer: {
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    gap: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+  },
+  filterOption: {
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  filterOptionText: {
     fontSize: 13,
-    fontWeight: '700',
-    color: '#16A34A',
+    fontWeight: "600",
   },
-  typeTagCapsule: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+  headerLeftMeta: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+  },
+  historyCard: {
+    borderRadius: 16,
     borderWidth: 1,
+    elevation: 2,
+    marginBottom: 16,
+    padding: 20,
   },
-  sharedBackground: {
-    backgroundColor: '#A3E635',
-    borderColor: '#1E3A8A',
+  loaderContainer: {
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "center",
+  },
+  loadingText: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginTop: 12,
+  },
+  locationText: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  navItem: {
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "center",
+  },
+  navLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  navLabelActive: {
+    fontSize: 11,
+    fontWeight: "700",
   },
   privateBackground: {
-    backgroundColor: '#EFF6FF',
-    borderColor: '#DBEAFE',
+    borderStyle: "solid",
   },
-  typeTagText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#1E3A8A',
-    letterSpacing: 0.5,
+  rideIdLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    letterSpacing: 0.3,
   },
   routeContainer: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
+    alignItems: "stretch",
+    flexDirection: "row",
     marginBottom: 16,
     paddingLeft: 2,
-  },
-  timelineIndicatorsColumn: {
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: 16,
-    marginRight: 14,
-    paddingVertical: 4,
-  },
-  verticalLinkConnector: {
-    flex: 1,
-    width: 2,
-    backgroundColor: '#F1F5F9',
-    marginVertical: 4,
   },
   routeLabelsColumn: {
     flex: 1,
     gap: 14,
-    justifyContent: 'center',
+    justifyContent: "center",
   },
-  locationText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#1E2937',
+  scrollContainer: {
+    flexGrow: 1,
+    paddingBottom: 24,
+    paddingHorizontal: 24,
+    paddingTop: 16,
   },
-  cardFooterRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
+  selectedFilterText: {
+    color: "#FFFFFF",
   },
-  rideIdLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#94A3B8',
-    letterSpacing: 0.3,
+  sharedBackground: {
+    backgroundColor: "#A3E635",
+    borderColor: "#1E3A8A",
   },
-  bottomNav: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-    height: 74,
-  },
-  navItem: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+  statusText: {
+    color: "#16A34A",
+    fontSize: 13,
+    fontWeight: "700",
   },
   tabIconBackground: {
+    alignItems: "center",
+    borderRadius: 16,
+    justifyContent: "center",
+    marginBottom: 2,
     paddingHorizontal: 20,
     paddingVertical: 4,
-    borderRadius: 16,
-    marginBottom: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  activeTabIconBackground: {
-    backgroundColor: '#F1F5F9',
+  timelineIndicatorsColumn: {
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginRight: 14,
+    paddingVertical: 4,
+    width: 16,
   },
-  navLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#94A3B8',
+  topBar: {
+    alignItems: "center",
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 24,
+    paddingVertical: 14,
   },
-  navLabelActive: {
-    fontSize: 11,
-    color: '#1E3A8A',
-    fontWeight: '700',
+  topBarButton: {
+    alignItems: "center",
+    borderRadius: 8,
+    height: 40,
+    justifyContent: "center",
+    width: 40,
   },
-})
+  topBarTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    letterSpacing: -0.5,
+  },
+  typeTagCapsule: {
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  typeTagText: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+  verticalLinkConnector: {
+    flex: 1,
+    marginVertical: 4,
+    width: 2,
+  },
+});
 
-export default RideHistory
+export default RideHistory;

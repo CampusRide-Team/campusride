@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
-import api from "../../api/axios"; // 🔌 Import your configured Axios instance
+import api from "../../api/axios";  
 
 const InputField = ({
   label,
@@ -71,9 +71,9 @@ const DriverLogin = ({
   onSupport,
   onBack,
 }) => {
-  const [email, setEmail] = useState(""); // ✉️ Swapped from phone to align with authRoutes.js validateLogin requirements
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("");  
   const [showPassword, setShowPassword] = useState(false);
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
 
@@ -101,7 +101,7 @@ const DriverLogin = ({
     setErrors({});
 
     try {
-      // 🚀 TRANSMIT SECURE CREDENTIAL SIGNATURES DIRECT TO THE BACKEND
+      // TRANSMIT SECURE CREDENTIAL SIGNATURES DIRECT TO THE BACKEND
       const response = await api.post("/auth/login", {
         email: email.trim().toLowerCase(),
         password: password,
@@ -177,7 +177,7 @@ const DriverLogin = ({
 
           <InputField
             label="Email Address"
-            placeholder="yourname@gmail.com"
+            placeholder="example@gmail.com"
             value={email}
             onChangeText={(v) => {
               setEmail(v);
@@ -220,7 +220,7 @@ const DriverLogin = ({
             {loading ? (
               <ActivityIndicator color="#FFFFFF" size="small" />
             ) : (
-              <Text style={styles.loginBtnText}>Login →</Text>
+              <Text style={styles.loginBtnText}>Login </Text>
             )}
           </TouchableOpacity>
 

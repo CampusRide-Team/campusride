@@ -121,3 +121,18 @@ export const updateRideStatus = async (req, res, next) => {
     session.endSession();
   }
 };
+export const getPendingCampusRequests = async (req, res, next) => {
+  try {
+    // Fetch active, unassigned rides where status is 'pending'
+    const pendingRides = await Ride.find({ 
+      status: "pending" 
+    }).sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      data: pendingRides,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

@@ -11,7 +11,6 @@ const authLimiter = rateLimit({
   message: { success: false, error: { code: 'RATE_LIMIT_EXCEEDED', message: 'Too many authentication attempts. Please try again in 15 minutes.' } }
 });
 
-router.post('/register', authLimiter, validateRegister, checkValidation, register);
-router.post('/login', authLimiter, validateLogin, checkValidation, login);
-
+router.post('/login', validateLogin, checkValidation, login);
+router.post('/register', validateRegister, checkValidation, register);
 export default router;
