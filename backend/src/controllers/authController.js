@@ -16,13 +16,20 @@ export const register = async (req, res, next) => {
 
     const user = await User.create({ fullName, email, phoneNumber, password, role });
 
-    res.status(201).json({
-      success: true,
-      data: {
-        user: { id: user._id, fullName: user.fullName, email: user.email, role: user.role },
-        token: generateToken(user._id)
-      }
-    });
+    res.json({
+  success: true,
+  data: {
+    user: { 
+      id: user._id, 
+      fullName: user.fullName, 
+      email: user.email, 
+      role: user.role,
+      avatarUri: user.avatarUri || user.avatarUrl || null,  
+      avatarUrl: user.avatarUrl || user.avatarUri || null   
+    },
+    token: generateToken(user._id)
+  }
+});
   } catch (error) { next(error); }
 };
 
@@ -37,10 +44,26 @@ export const login = async (req, res, next) => {
         return res.status(403).json({ success: false, error: { code: 'PENDING_APPROVAL', message: 'Driver account is pending Admin approval.' } });
       }
 
+      // Determine host and protocol to format the avatar path dynamically
+      const host = req.get('host');
+      const protocol = req.protocol;
+      
+      let formattedAvatarUri = user.avatarUri || user.avatarUrl || null;
+      if (formattedAvatarUri && !formattedAvatarUri.startsWith('http')) {
+        formattedAvatarUri = `${protocol}://${host}/${formattedAvatarUri}`;
+      }
+
       res.json({
         success: true,
         data: {
-          user: { id: user._id, fullName: user.fullName, email: user.email, role: user.role },
+          user: { 
+            id: user._id, 
+            fullName: user.fullName, 
+            email: user.email, 
+            role: user.role,
+            avatarUri: formattedAvatarUri,  
+            avatarUrl: formattedAvatarUri
+          },
           token: generateToken(user._id)
         }
       });

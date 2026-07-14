@@ -20,6 +20,10 @@ const userSchema = new mongoose.Schema(
       enum: ["student", "driver", "admin"],
       default: "student",
     },
+    
+     avatarUri: { type: String, default: null },
+    avatarUrl: { type: String, default: null },
+
     isOnline: { type: Boolean, default: false },
     currentLocation: {
       type: { type: String, enum: ["Point"], default: "Point" },
