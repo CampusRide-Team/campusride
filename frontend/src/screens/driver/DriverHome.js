@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,94 +7,273 @@ import {
   Switch,
   Dimensions,
   Platform,
+  ActivityIndicator,
+  Image,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaView } from "react-native-safe-area-context";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
+import * as Location from "expo-location";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useTheme } from "../../context/ThemeContext";  
+import api from "../../api/axios";
 
 const { width, height } = Dimensions.get("window");
 
 const DriverHome = ({ driverData, onLogout, onViewRequests, onChangeTab }) => {
+  const { theme, darkModeEnabled } = useTheme();  
   const [isOnline, setIsOnline] = useState(true);
+  const [analytics, setAnalytics] = useState({ dailyTrips: 0, totalTrips: 0 });
+  const [nearbyRequests, setNearbyRequests] = useState([]);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(true);
+  
+  //  Added: Unread notification state tracker
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
-  const toggleOnlineStatus = () => setIsOnline((prev) => !prev);
-
-  // Default coordinate viewport framing Legon UG Campus territory
-  const ugCampusRegion = {
+  const [driverLocation, setDriverLocation] = useState({
     latitude: 5.6506,
     longitude: -0.1873,
     latitudeDelta: 0.015,
     longitudeDelta: 0.012,
+  });
+
+  const toggleOnlineStatus = () => setIsOnline((prev) => !prev);
+
+  // Added: Fetch and track live unread notification badge metrics
+  useEffect(() => {
+    const fetchNotificationBadgeCount = async () => {
+      try {
+        const response = await api.get("/driver/notifications");
+        if (response.data?.success) {
+          setUnreadNotifications(response.data.unreadCount || 0);
+        }
+      } catch (err) {
+        console.error("Failed to parse notifications data logs stream:", err);
+      }
+    };
+
+    fetchNotificationBadgeCount();
+    // Synchronize count context along a 10-second polling frame
+    const badgeSyncInterval = setInterval(fetchNotificationBadgeCount, 10000);
+    return () => clearInterval(badgeSyncInterval);
+  }, []);
+
+  // Added: Formatter helper to cleanly display double-digit overflows
+  const formatBadgeText = (count) => {
+    if (count <= 0) return "";
+    return count > 9 ? "9+" : `${count}`;
   };
 
-  const mockPassengerRequests = [
-    {
-      id: "req_1",
-      latitude: 5.6542,
-      longitude: -0.1915,
-      label: "Balme Library",
-    },
-    {
-      id: "req_2",
-      latitude: 5.6481,
-      longitude: -0.1812,
-      label: "Night Market",
-    },
-    {
-      id: "req_3",
-      latitude: 5.651,
-      longitude: -0.185,
-      label: "Commonwealth Hall",
-    },
+  useEffect(() => {
+    const fetchDriverStats = async () => {
+      try {
+        setLoadingAnalytics(true);
+        const response = await api.get("/driver/analytics");
+        if (response.data?.success && response.data?.data) {
+          setAnalytics({
+            dailyTrips: response.data.data.dailyTrips || 0,
+            totalTrips: response.data.data.totalTrips || 0,
+          });
+        }
+      } catch (error) {
+        console.error("Failed to sync metrics from analytics gateway:", error);
+      } finally {
+        setLoadingAnalytics(false);
+      }
+    };
+
+    fetchDriverStats();
+  }, []);
+
+  useEffect(() => {
+    const fetchNearbyFares = async () => {
+      if (!isOnline) {
+        setNearbyRequests([]);
+        return;
+      }
+      try {
+        const response = await api.get("/rides/pending");
+        if (response.data?.success && response.data?.data) {
+          setNearbyRequests(response.data.data);
+        }
+      } catch (error) {
+        console.error("Error streaming nearby campus dispatches:", error);
+      }
+    };
+
+    fetchNearbyFares();
+    const mapSyncInterval = setInterval(fetchNearbyFares, 5000);
+
+    return () => clearInterval(mapSyncInterval);
+  }, [isOnline]);
+
+  useEffect(() => {
+    let locationSubscription;
+
+    const startLocationTracking = async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+          console.warn(
+            "Location permission denied. Using default campus fallbacks.",
+          );
+          return;
+        }
+
+        const initialLoc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+
+        setDriverLocation((prev) => ({
+          ...prev,
+          latitude: initialLoc.coords.latitude,
+          longitude: initialLoc.coords.longitude,
+        }));
+
+        locationSubscription = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.High,
+            timeInterval: 8000,
+            distanceInterval: 10,
+          },
+          (updatedLoc) => {
+            setDriverLocation((prev) => ({
+              ...prev,
+              latitude: updatedLoc.coords.latitude,
+              longitude: updatedLoc.coords.longitude,
+            }));
+          },
+        );
+      } catch (err) {
+        console.error("Location tracking engine initialization error:", err);
+      }
+    };
+
+    if (isOnline) {
+      startLocationTracking();
+    }
+
+    return () => {
+      if (locationSubscription) {
+        locationSubscription.remove();
+      }
+    };
+  }, [isOnline]);
+
+  const darkMapStyle = [
+    { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
+    { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
+    { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
+    { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+    { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+    { featureType: "road", elementType: "geometry", stylers: [{ color: "#38414e" }] },
+    { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#212a37" }] },
+    { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#9ca5b3" }] },
+    { featureType: "water", elementType: "geometry", stylers: [{ color: "#17263c" }] },
   ];
 
   return (
-    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
-      <StatusBar style="dark" />
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: theme.background }]}
+      edges={["top", "bottom"]}
+    >
+      <StatusBar style={theme.statusBar} />
 
       {/* Top Header App Bar */}
-      <View style={styles.header}>
-        <Text style={styles.logoText}>CampusRide</Text>
+      <View
+        style={[
+          styles.header,
+          {
+            backgroundColor: theme.background,
+            borderBottomColor: theme.tabBarBorder,
+          },
+        ]}
+      >
+        <Text style={[styles.logoText, { color: theme.iconColor }]}>
+          CampusRide
+        </Text>
         <View style={styles.headerRight}>
-          <Text style={styles.driverName}>
+          <Text style={[styles.driverName, { color: theme.mainText }]}>
             {driverData?.fullName?.split(" ")[0] || "Driver"}
           </Text>
+
           <TouchableOpacity
             activeOpacity={0.8}
             onPress={() => onChangeTab("profile")}
             style={styles.avatarContainer}
           >
-            <View style={styles.avatarFallback}>
-              <MaterialCommunityIcons
-                name="account"
-                size={20}
-                color="#1E3A8A"
+            {driverData?.avatarUri || driverData?.avatar ? (
+              <Image
+                source={{ uri: driverData.avatarUri || driverData.avatar }}
+                style={styles.avatarImage}
               />
-            </View>
+            ) : (
+              <View
+                style={[
+                  styles.avatarFallback,
+                  {
+                    backgroundColor: theme.cardBackground,
+                    borderColor: theme.borderColor,
+                  },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name="account"
+                  size={20}
+                  color={theme.iconColor}
+                />
+              </View>
+            )}
           </TouchableOpacity>
+
+          {/* Updated: Wrapped in a positioned container badge layout and linked to redirects */}
           <TouchableOpacity
             style={styles.notificationBtn}
             activeOpacity={0.7}
-            onPress={() => onChangeTab("profile")}
+            onPress={() => onChangeTab("notifications")}
           >
-            <MaterialCommunityIcons
-              name="bell-outline"
-              size={22}
-              color="#1E3A8A"
-            />
+            <View style={styles.iconBadgeWrapper}>
+              <MaterialCommunityIcons
+                name="bell-outline"
+                size={24}
+                color={theme.iconColor}
+              />
+              {unreadNotifications > 0 && (
+                <View style={styles.badgePillContainer}>
+                  <Text style={styles.badgeText}>
+                    {formatBadgeText(unreadNotifications)}
+                  </Text>
+                </View>
+              )}
+            </View>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Dynamic Go Online Switch Card */}
-      <View style={styles.toggleCardContainer}>
-        <View style={styles.toggleCard}>
-          <View style={styles.toggleCardTextColumn}>
-            <Text style={styles.toggleCardTitle}>
+      {/* Go Online Switch Card */}
+      <View
+        style={[
+          styles.toggleCardContainer,
+          { backgroundColor: theme.background },
+        ]}
+      >
+        <View
+          style={[
+            styles.toggleCard,
+            {
+              backgroundColor: theme.cardBackground,
+              borderColor: theme.borderColor,
+            },
+          ]}
+        >
+          <View style={styles.toggleCardTextColumn} prefix="toggle">
+            <Text style={[styles.toggleCardTitle, { color: theme.mainText }]}>
               {isOnline ? "Go Offline" : "Go Online"}
             </Text>
-            <Text style={styles.toggleCardSubtitle} numberOfLines={1}>
+            <Text
+              style={[styles.toggleCardSubtitle, { color: theme.subText }]}
+              numberOfLines={1}
+            >
               {isOnline
                 ? "Ready to accept ride requests"
                 : "Stay offline to pause requests"}
@@ -110,43 +289,67 @@ const DriverHome = ({ driverData, onLogout, onViewRequests, onChangeTab }) => {
         </View>
       </View>
 
-      {/* Live Map Viewport Area */}
+      {/* Map Viewport Area */}
       <View style={styles.mapViewportContainer}>
-        {/* TODO: BACKEND INTEGRATION — Initialize background polling or WebSockets to update live client locations */}
         <MapView
           provider={Platform.OS === "android" ? PROVIDER_GOOGLE : null}
           style={StyleSheet.absoluteFillObject}
-          initialRegion={ugCampusRegion}
+          region={driverLocation}
           showsCompass={false}
           showsPointsOfInterest={true}
+          customMapStyle={darkModeEnabled ? darkMapStyle : []}
         >
           {isOnline && (
             <>
-              {/* TODO: BACKEND INTEGRATION — Swap placeholder device coordinate structures with live geolocation hooks */}
-              <Marker coordinate={{ latitude: 5.6506, longitude: -0.1873 }}>
-                <View style={styles.driverPulseOuter}>
-                  <View style={styles.driverPulseInner} />
+              <Marker
+                coordinate={{
+                  latitude: driverLocation.latitude,
+                  longitude: driverLocation.longitude,
+                }}
+              >
+                <View
+                  style={[
+                    styles.driverPulseOuter,
+                    { borderColor: theme.borderColor },
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.driverPulseInner,
+                      { backgroundColor: theme.iconColor },
+                    ]}
+                  />
                 </View>
               </Marker>
 
-              {mockPassengerRequests.map((request) => (
-                <Marker
-                  key={request.id}
-                  coordinate={{
-                    latitude: request.latitude,
-                    longitude: request.longitude,
-                  }}
-                  title={request.label}
-                >
-                  <View style={styles.passengerPin}>
-                    <MaterialCommunityIcons
-                      name="account"
-                      size={14}
-                      color="#FFFFFF"
-                    />
-                  </View>
-                </Marker>
-              ))}
+              {nearbyRequests.map((request) => {
+                const reqId = request.id || request._id;
+                const lat = parseFloat(request.latitude);
+                const lng = parseFloat(request.longitude);
+
+                if (isNaN(lat) || isNaN(lng)) return null;
+
+                return (
+                  <Marker
+                    key={reqId}
+                    coordinate={{ latitude: lat, longitude: lng }}
+                    title={request.pickup || "Ride Request"}
+                  >
+                    <View
+                      style={[
+                        styles.passengerPin,
+                        { backgroundColor: theme.iconColor },
+                      ]}
+                    >
+                      <MaterialCommunityIcons
+                        name="account"
+                        size={14}
+                        color="#FFFFFF"
+                      />
+                    </View>
+                  </Marker>
+                );
+              })}
             </>
           )}
         </MapView>
@@ -155,19 +358,22 @@ const DriverHome = ({ driverData, onLogout, onViewRequests, onChangeTab }) => {
         <View
           style={[
             styles.mapStatusBadge,
-            { backgroundColor: isOnline ? "#EFF6FF" : "#F1F5F9" },
+            {
+              backgroundColor: isOnline ? theme.iconWrap : theme.cardBackground,
+              borderColor: theme.borderColor,
+            },
           ]}
         >
           <View
             style={[
               styles.statusDot,
-              { backgroundColor: isOnline ? "#1E3A8A" : "#94A3B8" },
+              { backgroundColor: isOnline ? "#A3E635" : theme.subText },
             ]}
           />
           <Text
             style={[
               styles.mapStatusBadgeText,
-              { color: isOnline ? "#1E3A8A" : "#64748B" },
+              { color: isOnline ? theme.iconColor : theme.subText },
             ]}
           >
             {isOnline ? "ONLINE" : "OFFLINE"}
@@ -175,32 +381,78 @@ const DriverHome = ({ driverData, onLogout, onViewRequests, onChangeTab }) => {
         </View>
 
         {/* Floating Context Summary Drawer */}
-        <View style={styles.floatingStatusDrawer}>
+        <View
+          style={[
+            styles.floatingStatusDrawer,
+            {
+              backgroundColor: theme.cardBackground,
+              borderColor: theme.borderColor,
+            },
+          ]}
+        >
           <View style={styles.drawerHeaderRow}>
             <View style={styles.drawerTextBlock}>
-              <Text style={styles.drawerMainStatusTitle}>
+              <Text
+                style={[
+                  styles.drawerMainStatusTitle,
+                  { color: theme.mainText },
+                ]}
+              >
                 {isOnline ? "You are online" : "You are offline"}
               </Text>
-              <Text style={styles.drawerSubStatusTitle}>
+              <Text
+                style={[styles.drawerSubStatusTitle, { color: theme.subText }]}
+                numberOfLines={1}
+              >
                 {isOnline
-                  ? `${mockPassengerRequests.length} requests nearby`
+                  ? `${nearbyRequests.length} requests nearby`
                   : "Toggle online status to start tracking"}
               </Text>
             </View>
-            <View style={styles.drawerIconSquare}>
-              <MaterialCommunityIcons name="routes" size={22} color="#1E3A8A" />
+            <View
+              style={[
+                styles.drawerIconSquare,
+                {
+                  backgroundColor: theme.background,
+                  borderColor: theme.borderColor,
+                },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name="routes"
+                size={22}
+                color={theme.iconColor}
+              />
             </View>
           </View>
 
-          {/* TODO: BACKEND INTEGRATION — GET /api/v1/drivers/analytics-summary */}
-          <Text style={styles.metricsTextLine}>
-            Trips today: <Text style={styles.metricsBoldValue}>5</Text> • Total
-            trips: <Text style={styles.metricsBoldValue}>42</Text>
-          </Text>
+          {loadingAnalytics ? (
+            <ActivityIndicator
+              size="small"
+              color={theme.iconColor}
+              style={styles.analyticsLoader}
+            />
+          ) : (
+            <Text style={[styles.metricsTextLine, { color: theme.subText }]}>
+              Trips today:{" "}
+              <Text
+                style={[styles.metricsBoldValue, { color: theme.mainText }]}
+              >
+                {analytics.dailyTrips}
+              </Text>{" "}
+              • Total trips:{" "}
+              <Text
+                style={[styles.metricsBoldValue, { color: theme.mainText }]}
+              >
+                {analytics.totalTrips}
+              </Text>
+            </Text>
+          )}
 
           <TouchableOpacity
             style={[
               styles.actionButton,
+              { backgroundColor: theme.iconColor },
               !isOnline && styles.disabledActionButton,
             ]}
             activeOpacity={0.85}
@@ -212,25 +464,44 @@ const DriverHome = ({ driverData, onLogout, onViewRequests, onChangeTab }) => {
         </View>
       </View>
 
-      {/* App Base System Tab Nav Bar Component */}
-      <View style={styles.tabBarContainer}>
-        {/* Home Tab */}
+      {/* Bottom App Nav Tab Bar Component */}
+      <View
+        style={[
+          styles.tabBarContainer,
+          {
+            backgroundColor: theme.background,
+            borderTopColor: theme.tabBarBorder,
+          },
+        ]}
+      >
         <TouchableOpacity
           style={styles.tabItem}
           onPress={() => onChangeTab("home")}
           activeOpacity={0.7}
         >
           <View
-            style={[styles.tabIconBackground, styles.activeTabIconBackground]}
+            style={[
+              styles.tabIconBackground,
+              !darkModeEnabled && styles.activeTabIconBackground,
+              darkModeEnabled && { backgroundColor: "#334155" },
+            ]}
           >
-            <MaterialCommunityIcons name="home" size={24} color="#1E3A8A" />
+            <MaterialCommunityIcons
+              name="home"
+              size={24}
+              color={theme.iconColor}
+            />
           </View>
-          <Text style={[styles.tabLabelText, styles.activeTabLabelText]}>
+          <Text
+            style={[
+              styles.tabLabelText,
+              { color: theme.iconColor, fontWeight: "700" },
+            ]}
+          >
             Home
           </Text>
         </TouchableOpacity>
 
-        {/* Trips Tab */}
         <TouchableOpacity
           style={styles.tabItem}
           onPress={() => onChangeTab("trips")}
@@ -246,7 +517,6 @@ const DriverHome = ({ driverData, onLogout, onViewRequests, onChangeTab }) => {
           <Text style={styles.tabLabelText}>Trips</Text>
         </TouchableOpacity>
 
-        {/* Profile Tab */}
         <TouchableOpacity
           style={styles.tabItem}
           onPress={() => onChangeTab("profile")}
@@ -267,92 +537,75 @@ const DriverHome = ({ driverData, onLogout, onViewRequests, onChangeTab }) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-  },
+  container: { flex: 1 },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 24,
     paddingVertical: 14,
-    backgroundColor: "#FFFFFF",
     borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
   },
-  logoText: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#1E3A8A",
-    letterSpacing: -0.5,
-  },
-  headerRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  driverName: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#1E2937",
-  },
+  logoText: { fontSize: 22, fontWeight: "800", letterSpacing: -0.5 },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: 12 },
+  driverName: { fontSize: 14, fontWeight: "700" },
   avatarContainer: {
     width: 36,
     height: 36,
     borderRadius: 18,
     overflow: "hidden",
   },
+  avatarImage: { width: "100%", height: "100%", borderRadius: 18 },
   avatarFallback: {
     width: "100%",
     height: "100%",
-    backgroundColor: "#F1F5F9",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
   },
   notificationBtn: {
     padding: 2,
     alignItems: "center",
     justifyContent: "center",
   },
-  toggleCardContainer: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    backgroundColor: "#FFFFFF",
+   iconBadgeWrapper: {
+    position: "relative",
+    padding: 2,
   },
+  badgePillContainer: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    backgroundColor: "#EF4444",
+    borderRadius: 9,
+    minWidth: 18,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: "#FFFFFF",
+  },
+  badgeText: {
+    color: "#FFFFFF",
+    fontSize: 9,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+  toggleCardContainer: { paddingHorizontal: 24, paddingVertical: 12 },
   toggleCard: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#FFFFFF",
     paddingHorizontal: 16,
     paddingVertical: 16,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
   },
-  toggleCardTextColumn: {
-    flex: 1,
-    paddingRight: 8,
-  },
-  toggleCardTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#1E2937",
-    marginBottom: 2,
-  },
-  toggleCardSubtitle: {
-    fontSize: 13,
-    color: "#64748B",
-    fontWeight: "500",
-  },
-  mapViewportContainer: {
-    flex: 1,
-    backgroundColor: "#E2E8F0",
-    position: "relative",
-  },
+  toggleCardTextColumn: { flex: 1, paddingRight: 8 },
+  toggleCardTitle: { fontSize: 16, fontWeight: "700", marginBottom: 2 },
+  toggleCardSubtitle: { fontSize: 13, fontWeight: "500" },
+  mapViewportContainer: { flex: 1, position: "relative" },
   mapStatusBadge: {
     position: "absolute",
     top: 20,
@@ -363,37 +616,19 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
     gap: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 2,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    elevation: 2,
   },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  mapStatusBadgeText: {
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-  },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
+  mapStatusBadgeText: { fontSize: 12, fontWeight: "800", letterSpacing: 0.5 },
   passengerPin: {
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: "#1E3A8A",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2.5,
     borderColor: "#FFFFFF",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
     elevation: 3,
   },
   driverPulseOuter: {
@@ -403,35 +638,19 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 4,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    elevation: 4,
   },
-  driverPulseInner: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: "#1E3A8A",
-  },
+  driverPulseInner: { width: 14, height: 14, borderRadius: 7 },
   floatingStatusDrawer: {
     position: "absolute",
     bottom: 24,
     left: 24,
     right: 24,
-    backgroundColor: "#FFFFFF",
     borderRadius: 16,
     padding: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 12,
-    elevation: 4,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    elevation: 4,
   },
   drawerHeaderRow: {
     flexDirection: "row",
@@ -439,76 +658,36 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     marginBottom: 8,
   },
-  drawerTextBlock: {
-    flex: 1,
-    paddingRight: 12,
-  },
+  drawerTextBlock: { flex: 1, paddingRight: 12 },
   drawerMainStatusTitle: {
     fontSize: 20,
     fontWeight: "800",
-    color: "#1E2937",
     marginBottom: 4,
     letterSpacing: -0.5,
   },
-  drawerSubStatusTitle: {
-    fontSize: 14,
-    color: "#64748B",
-    fontWeight: "500",
-  },
+  drawerSubStatusTitle: { fontSize: 14, fontWeight: "500" },
   drawerIconSquare: {
     width: 44,
     height: 44,
-    backgroundColor: "#F8FAFC",
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
   },
-  metricsTextLine: {
-    fontSize: 13,
-    color: "#94A3B8",
-    fontWeight: "500",
-    marginBottom: 16,
-  },
-  metricsBoldValue: {
-    color: "#475569",
-    fontWeight: "700",
-  },
+  metricsTextLine: { fontSize: 13, fontWeight: "500", marginBottom: 16 },
+  metricsBoldValue: { fontWeight: "700" },
+  analyticsLoader: { alignSelf: "flex-start", marginBottom: 16 },
   actionButton: {
-    backgroundColor: "#1E3A8A",
     height: 56,
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#1E3A8A",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
     elevation: 3,
   },
-  disabledActionButton: {
-    backgroundColor: "#CBD5E1",
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  actionButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  tabBarContainer: {
-    flexDirection: "row",
-    height: 74,
-    backgroundColor: "#FFFFFF",
-    borderTopWidth: 1,
-    borderTopColor: "#F1F5F9",
-  },
-  tabItem: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  disabledActionButton: { backgroundColor: "#CBD5E1", elevation: 0 },
+  actionButtonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
+  tabBarContainer: { flexDirection: "row", height: 74, borderTopWidth: 1 },
+  tabItem: { flex: 1, alignItems: "center", justifyContent: "center" },
   tabIconBackground: {
     paddingHorizontal: 20,
     paddingVertical: 4,
@@ -518,18 +697,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  activeTabIconBackground: {
-    backgroundColor: "#F1F5F9",
-  },
-  tabLabelText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#94A3B8",
-  },
-  activeTabLabelText: {
-    color: "#1E3A8A",
-    fontWeight: "700",
-  },
+  activeTabIconBackground: { backgroundColor: "#F1F5F9" },
+  tabLabelText: { fontSize: 11, fontWeight: "600", color: "#94A3B8" },
 });
 
 export default DriverHome;

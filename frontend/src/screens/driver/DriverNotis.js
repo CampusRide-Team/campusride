@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -7,127 +7,182 @@ import {
   ScrollView,
   Dimensions,
   Modal,
-} from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
-import { StatusBar } from 'expo-status-bar'
-import { MaterialCommunityIcons } from '@expo/vector-icons'
+  ActivityIndicator,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { StatusBar } from "expo-status-bar";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useTheme } from "../../context/ThemeContext";  
+import api from "../../api/axios"; 
 
-const { width } = Dimensions.get('window')
+const { width } = Dimensions.get("window");
 
 const DriverNotis = ({ onBack, onChangeTab }) => {
-  const [selectedNotif, setSelectedNotif] = useState(null)
-  const [mockNotifications, setMockNotifications] = useState([
-    {
-      id: 'notif_1',
-      title: 'New ride request nearby',
-      description: 'Sarah requested a Shared ride from the main gate. Tap to review.',
-      time: '2 minutes ago',
-      icon: 'check',
-      iconBg: '#EFF6FF',
-      iconColor: '#1E3A8A',
-      unread: true,
-    },
-    {
-      id: 'notif_2',
-      title: 'Documents verified successfully',
-      description: 'Your campus driver permit and vehicle registration logs have been approved by the housing division.',
-      time: '1 hour ago',
-      icon: 'file-document-outline',
-      iconBg: '#EFF6FF',
-      iconColor: '#1E3A8A',
-      unread: false,
-    },
-    {
-      id: 'notif_3',
-      title: 'High demand near Balme Library',
-      description: 'Lecture blocks are closing soon. Head toward the central circle loop for immediate passenger requests.',
-      time: '3 hours ago',
-      icon: 'lightning-bolt-outline',
-      iconBg: '#EFF6FF',
-      iconColor: '#1E3A8A',
-      unread: false,
-    },
-    {
-      id: 'notif_4',
-      title: 'System update complete',
-      description: 'New optimization features added! Check out our improved route matching maps algorithms.',
-      time: 'Yesterday',
-      icon: 'bell-outline',
-      iconBg: '#F1F5F9',
-      iconColor: '#64748B',
-      unread: false,
-    },
-    {
-      id: 'notif_5',
-      title: 'Ride request cancelled',
-      description: 'The Private ride request to Downtown Campus has been cancelled by the student.',
-      time: '2 days ago',
-      icon: 'alert-circle-outline',
-      iconBg: '#FEE2E2',
-      iconColor: '#EF4444',
-      unread: false,
-    },
-    {
-      id: 'notif_6',
-      title: 'Passenger rating submitted',
-      description: 'Alex left you feedback note: \"Great driving, very polite!\"',
-      time: '3 days ago',
-      icon: 'star-outline',
-      iconBg: '#EFF6FF',
-      iconColor: '#1E3A8A',
-      unread: false,
-    },
-  ])
+  const { theme, darkModeEnabled } = useTheme();  
+  const [selectedNotif, setSelectedNotif] = useState(null);
+  const [notifications, setNotifications] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Handle card click, marking as read and opening detailed overlay modal
-  const handleOpenNotification = (notif) => {
-    setSelectedNotif(notif)
-    setMockNotifications(prev =>
-      prev.map(n => n.id === notif.id ? { ...n, unread: false } : n)
-    )
-  }
+  // Dynamic Icon & Design Map Configuration Based on Notification Type (Integrated with Dark Theme Parameters)
+  const getNotificationTheme = (type) => {
+    switch (type) {
+      case "ride_request":
+        return { icon: "car", bg: darkModeEnabled ? "#1E3A8A" : "#EFF6FF", color: darkModeEnabled ? "#60A5FA" : "#1E3A8A" };
+      case "rating":
+        return { icon: "star-outline", bg: darkModeEnabled ? "#78350F" : "#FEF08A", color: darkModeEnabled ? "#FDE047" : "#A16207" };
+      case "verification":
+        return { icon: "file-check-outline", bg: darkModeEnabled ? "#064E3B" : "#DCFCE7", color: darkModeEnabled ? "#4ADE80" : "#15803D" };
+      case "cancelled":
+        return { icon: "alert-circle-outline", bg: darkModeEnabled ? "#7F1D1D" : "#FEE2E2", color: darkModeEnabled ? "#FCA5A5" : "#EF4444" };
+      default:
+        return { icon: "bell-outline", bg: theme.background, color: theme.subText };
+    }
+  };
+
+  const formatTimeStr = (dateString) => {
+    try {
+      const date = new Date(dateString);
+      const now = new Date();
+      const diffMs = now - date;
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMins / 60);
+
+      if (diffMins < 1) return "Just now";
+      if (diffMins < 60) return `${diffMins}m ago`;
+      if (diffHours < 24) return `${diffHours}h ago`;
+      return date.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+      });
+    } catch {
+      return "Recent";
+    }
+  };
+
+  const fetchNotifications = async () => {
+    try {
+      setIsLoading(true);
+      const response = await api.get("/driver/notifications");
+      if (response.data?.success && Array.isArray(response.data.data)) {
+        setNotifications(response.data.data);
+      }
+    } catch (err) {
+      console.error("Error fetching dynamic notification logs:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+  }, []);
+
+  const handleOpenNotification = async (notif) => {
+    setSelectedNotif(notif);
+
+    setNotifications((prev) =>
+      prev.map((n) => (n._id === notif._id ? { ...n, isRead: true } : n)),
+    );
+
+    try {
+      await api.patch(`/driver/notifications/${notif._id}/read`);
+    } catch (err) {
+      console.error("Failed to sync notification read state with database:", err);
+    }
+  };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <StatusBar style="dark" />
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={["top", "bottom"]}>
+      <StatusBar style={theme.statusBar} />
 
       {/* Top Bar Navbar Section */}
-      <View style={styles.topBar}>
-        <TouchableOpacity onPress={onBack} activeOpacity={0.7} style={styles.topBarButton}>
-          <MaterialCommunityIcons name="arrow-left" size={24} color="#1E3A8A" />
+      <View style={[styles.topBar, { backgroundColor: theme.background, borderBottomColor: theme.tabBarBorder }]}>
+        <TouchableOpacity
+          onPress={onBack}
+          activeOpacity={0.7}
+          style={styles.topBarButton}
+        >
+          <MaterialCommunityIcons name="arrow-left" size={24} color={theme.iconColor} />
         </TouchableOpacity>
-        <Text style={styles.topBarTitle}>Notifications</Text>
+        <Text style={[styles.topBarTitle, { color: theme.iconColor }]}>Notifications</Text>
         <TouchableOpacity activeOpacity={0.7} style={styles.topBarButton}>
-          <MaterialCommunityIcons name="dots-vertical" size={24} color="#1E3A8A" />
+          <MaterialCommunityIcons
+            name="dots-vertical"
+            size={24}
+            color={theme.iconColor}
+          />
         </TouchableOpacity>
       </View>
 
-      {/* Notifications List Container */}
-      <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-        {mockNotifications.map((item) => (
-          <TouchableOpacity 
-            key={item.id} 
-            style={styles.notifCard}
-            activeOpacity={0.75}
-            onPress={() => handleOpenNotification(item)}
-          >
-            {/* Round Avatar Icon Graphic Box */}
-            <View style={[styles.iconContainer, { backgroundColor: item.iconBg }]}>
-              <MaterialCommunityIcons name={item.icon} size={22} color={item.iconColor} />
-            </View>
+      {/* Core Dynamic Screen Layout Conditional Rendering Block */}
+      {isLoading ? (
+        <View style={styles.loaderContainer}>
+          <ActivityIndicator size="large" color={theme.iconColor} />
+          <Text style={[styles.loadingText, { color: theme.subText }]}>Syncing message logs...</Text>
+        </View>
+      ) : notifications.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <MaterialCommunityIcons
+            name="bell-off-outline"
+            size={64}
+            color={theme.subText}
+          />
+          <Text style={[styles.emptyText, { color: theme.subText }]}>Inbox completely clean!</Text>
+        </View>
+      ) : (
+        <ScrollView
+          contentContainerStyle={[styles.scrollContainer, { backgroundColor: theme.background }]}
+          showsVerticalScrollIndicator={false}
+        >
+          {notifications.map((item) => {
+            const notifTheme = getNotificationTheme(item.type);
+            return (
+              <TouchableOpacity
+                key={item._id}
+                style={[
+                  styles.notifCard,
+                  { backgroundColor: theme.cardBackground, borderColor: theme.borderColor },
+                  !item.isRead && [styles.unreadCardTint, { backgroundColor: darkModeEnabled ? "#334155" : "#F8FAFC", borderColor: theme.borderColor }],
+                ]}
+                activeOpacity={0.75}
+                onPress={() => handleOpenNotification(item)}
+              >
+                {/* Round Avatar Icon Graphic Box */}
+                <View style={[styles.iconContainer, { backgroundColor: notifTheme.bg }]}>
+                  <MaterialCommunityIcons
+                    name={notifTheme.icon}
+                    size={22}
+                    color={notifTheme.color}
+                  />
+                </View>
 
-            {/* Notification Information Main Block Column */}
-            <View style={styles.textBlock}>
-              <View style={styles.titleRow}>
-                <Text style={styles.notifTitle} numberOfLines={1}>{item.title}</Text>
-                {item.unread && <View style={styles.unreadStatusDot} />}
-              </View>
-              <Text style={styles.notifDescription} numberOfLines={2}>{item.description}</Text>
-              <Text style={styles.timeText}>{item.time}</Text>
-            </View>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+                {/* Notification Information Main Block Column */}
+                <View style={styles.textBlock}>
+                  <View style={styles.titleRow}>
+                    <Text
+                      style={[
+                        styles.notifTitle,
+                        { color: theme.subText },
+                        !item.isRead && [styles.boldText, { color: theme.mainText }],
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {item.title}
+                    </Text>
+                    {!item.isRead && <View style={[styles.unreadStatusDot, { borderColor: theme.borderColor }]} />}
+                  </View>
+                  <Text style={[styles.notifDescription, { color: theme.subText }]} numberOfLines={2}>
+                    {item.body || item.description}
+                  </Text>
+                  <Text style={[styles.timeText, { color: theme.subText }]}>
+                    {formatTimeStr(item.createdAt)}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      )}
 
       {/* Detailed Message Reader Overlay Modal */}
       <Modal
@@ -136,18 +191,31 @@ const DriverNotis = ({ onBack, onChangeTab }) => {
         visible={selectedNotif !== null}
         onRequestClose={() => setSelectedNotif(null)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContentCard}>
-            <View style={[styles.modalIconContainer, { backgroundColor: selectedNotif?.iconBg }]}>
-              <MaterialCommunityIcons name={selectedNotif?.icon || 'bell'} size={28} color={selectedNotif?.iconColor} />
-            </View>
-            <Text style={styles.modalTitle}>{selectedNotif?.title}</Text>
-            <Text style={styles.modalTime}>{selectedNotif?.time}</Text>
-            <Text style={styles.modalDescription}>{selectedNotif?.description}</Text>
+        <View style={[styles.modalOverlay, { backgroundColor: darkModeEnabled ? "rgba(15, 23, 42, 0.8)" : "rgba(30, 58, 138, 0.4)" }]}>
+          <View style={[styles.modalContentCard, { backgroundColor: theme.cardBackground, borderColor: theme.borderColor }]}>
+            {(() => {
+              const notifTheme = getNotificationTheme(selectedNotif?.type);
+              return (
+                <View style={[styles.modalIconContainer, { backgroundColor: notifTheme.bg }]}>
+                  <MaterialCommunityIcons
+                    name={notifTheme.icon}
+                    size={28}
+                    color={notifTheme.color}
+                  />
+                </View>
+              );
+            })()}
+            <Text style={[styles.modalTitle, { color: theme.mainText }]}>{selectedNotif?.title}</Text>
+            <Text style={[styles.modalTime, { color: theme.subText }]}>
+              {formatTimeStr(selectedNotif?.createdAt)}
+            </Text>
+            <Text style={[styles.modalDescription, { color: theme.subText }]}>
+              {selectedNotif?.body || selectedNotif?.description}
+            </Text>
 
-            <TouchableOpacity 
-              style={styles.modalCloseButton} 
-              activeOpacity={0.8} 
+            <TouchableOpacity
+              style={[styles.modalCloseButton, { backgroundColor: theme.iconColor }]}
+              activeOpacity={0.8}
               onPress={() => setSelectedNotif(null)}
             >
               <Text style={styles.modalCloseButtonText}>Close Message</Text>
@@ -157,214 +225,247 @@ const DriverNotis = ({ onBack, onChangeTab }) => {
       </Modal>
 
       {/* Persistent App Footer Bottom Nav Tabs Menu */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem} onPress={() => onChangeTab && onChangeTab('home')} activeOpacity={0.7}>
+      <View style={[styles.bottomNav, { backgroundColor: theme.background, borderTopColor: theme.tabBarBorder }]}>
+        <TouchableOpacity
+          style={styles.navItem}
+          onPress={() => onChangeTab && onChangeTab("home")}
+          activeOpacity={0.7}
+        >
           <View style={styles.tabIconBackground}>
-            <MaterialCommunityIcons name="home-outline" size={24} color="#94A3B8" />
+            <MaterialCommunityIcons
+              name="home-outline"
+              size={24}
+              color="#94A3B8"
+            />
           </View>
-          <Text style={styles.navLabel}>Home</Text>
+          <Text style={[styles.navLabel, { color: "#94A3B8" }]}>Home</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.navItem} onPress={() => onChangeTab && onChangeTab('trips')} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={styles.navItem}
+          onPress={() => onChangeTab && onChangeTab("trips")}
+          activeOpacity={0.7}
+        >
           <View style={styles.tabIconBackground}>
-            <MaterialCommunityIcons name="car-multiple" size={24} color="#94A3B8" />
+            <MaterialCommunityIcons
+              name="car-multiple"
+              size={24}
+              color="#94A3B8"
+            />
           </View>
-          <Text style={styles.navLabel}>Trips</Text>
+          <Text style={[styles.navLabel, { color: "#94A3B8" }]}>Trips</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.navItem} onPress={() => onBack && onBack()} activeOpacity={0.7}>
-          <View style={[styles.tabIconBackground, styles.activeTabIconBackground]}>
-            <MaterialCommunityIcons name="account-circle" size={24} color="#1E3A8A" />
+        <TouchableOpacity
+          style={styles.navItem}
+          onPress={() => onBack && onBack()}
+          activeOpacity={0.7}
+        >
+          <View
+            style={[
+              styles.tabIconBackground,
+              !darkModeEnabled && styles.activeTabIconBackground,
+              darkModeEnabled && { backgroundColor: "#334155" },
+            ]}
+          >
+            <MaterialCommunityIcons
+              name="account-circle"
+              size={24}
+              color={theme.iconColor}
+            />
           </View>
-          <Text style={styles.navLabelActive}>Profile</Text>
+          <Text style={[styles.navLabelActive, { color: theme.iconColor }]}>Profile</Text>
         </TouchableOpacity>
       </View>
-
     </SafeAreaView>
-  )
-}
+  );
+};
 
 const styles = StyleSheet.create({
+  activeTabIconBackground: {
+    backgroundColor: "#F1F5F9",
+  },
+  boldText: {
+    fontWeight: "700",
+  },
+  bottomNav: {
+    borderTopWidth: 1,
+    flexDirection: "row",
+    height: 74,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
   },
-  scrollContainer: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 24,
-    backgroundColor: '#FFFFFF',
+  emptyContainer: {
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "center",
   },
-  topBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-  },
-  topBarButton: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  topBarTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#1E3A8A',
-    letterSpacing: -0.5,
-  },
-  notifCard: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    alignItems: 'flex-start',
+  emptyText: {
+    fontSize: 15,
+    fontWeight: "600",
+    marginTop: 12,
   },
   iconContainer: {
-    width: 44,
-    height: 44,
+    alignItems: "center",
     borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
+    height: 44,
+    justifyContent: "center",
     marginRight: 14,
+    width: 44,
   },
-  textBlock: {
+  loaderContainer: {
+    alignItems: "center",
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: "center",
   },
-  titleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-    paddingRight: 4,
-  },
-  notifTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1E2937',
-    flex: 1,
-  },
-  unreadStatusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#A3E635',
-    marginLeft: 8,
-    borderWidth: 0.5,
-    borderColor: '#1E3A8A',
-  },
-  notifDescription: {
+  loadingText: {
     fontSize: 14,
-    color: '#64748B',
-    lineHeight: 18,
-    fontWeight: '500',
-    marginBottom: 6,
+    fontWeight: "600",
+    marginTop: 12,
   },
-  timeText: {
-    fontSize: 12,
-    color: '#94A3B8',
-    fontWeight: '600',
+  modalCloseButton: {
+    alignItems: "center",
+    borderRadius: 16,
+    height: 56,
+    justifyContent: "center",
+    width: "100%",
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(30, 58, 138, 0.4)', // Themed deep blue backdrop tint
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
+  modalCloseButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "700",
   },
   modalContentCard: {
-    width: '100%',
-    backgroundColor: '#FFFFFF',
+    alignItems: "center",
     borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    padding: 24,
+    width: "100%",
+  },
+  modalDescription: {
+    fontSize: 15,
+    fontWeight: "500",
+    lineHeight: 22,
+    marginBottom: 24,
+    textAlign: "center",
   },
   modalIconContainer: {
-    width: 64,
-    height: 64,
+    alignItems: "center",
     borderRadius: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
+    height: 64,
+    justifyContent: "center",
+    marginBottom: 16,
+    width: 64,
+  },
+  modalOverlay: {
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "center",
+    padding: 24,
+  },
+  modalTime: {
+    fontSize: 12,
+    fontWeight: "600",
     marginBottom: 16,
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: '800',
-    color: '#1E2937',
-    textAlign: 'center',
+    fontWeight: "800",
     marginBottom: 6,
-  },
-  modalTime: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#94A3B8',
-    marginBottom: 16,
-  },
-  modalDescription: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: '#64748B',
-    lineHeight: 22,
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  modalCloseButton: {
-    width: '100%',
-    height: 56,
-    backgroundColor: '#1E3A8A',
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalCloseButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  bottomNav: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-    height: 74,
+    textAlign: "center",
   },
   navItem: {
+    alignItems: "center",
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tabIconBackground: {
-    paddingHorizontal: 20,
-    paddingVertical: 4,
-    borderRadius: 16,
-    marginBottom: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  activeTabIconBackground: {
-    backgroundColor: '#F1F5F9',
+    justifyContent: "center",
   },
   navLabel: {
     fontSize: 11,
-    fontWeight: '600',
-    color: '#94A3B8',
+    fontWeight: "600",
   },
   navLabelActive: {
     fontSize: 11,
-    color: '#1E3A8A',
-    fontWeight: '700',
+    fontWeight: "700",
   },
-})
+  notifCard: {
+    alignItems: "flex-start",
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: "row",
+    marginBottom: 12,
+    padding: 16,
+  },
+  notifDescription: {
+    fontSize: 14,
+    fontWeight: "500",
+    lineHeight: 18,
+    marginBottom: 6,
+  },
+  notifTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  scrollContainer: {
+    flexGrow: 1,
+    paddingBottom: 24,
+    paddingHorizontal: 24,
+    paddingTop: 16,
+  },
+  tabIconBackground: {
+    alignItems: "center",
+    borderRadius: 16,
+    justifyContent: "center",
+    marginBottom: 2,
+    paddingHorizontal: 20,
+    paddingVertical: 4,
+  },
+  textBlock: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  timeText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  titleRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 4,
+    paddingRight: 4,
+  },
+  topBar: {
+    alignItems: "center",
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+  },
+  topBarButton: {
+    alignItems: "center",
+    height: 40,
+    justifyContent: "center",
+    width: 40,
+  },
+  topBarTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    letterSpacing: -0.5,
+  },
+  unreadCardTint: {
+    borderWidth: 1,
+  },
+  unreadStatusDot: {
+    backgroundColor: "#A3E635",
+    borderRadius: 4,
+    borderWidth: 0.5,
+    height: 8,
+    marginLeft: 8,
+    width: 8,
+  },
+});
 
-export default DriverNotis
+export default DriverNotis;

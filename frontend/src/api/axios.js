@@ -1,18 +1,9 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Platform } from "react-native";
-
-// LIVE BACKEND ROUTING ENGINE
-const getBaseUrl = () => {
-  if (__DEV__) {
-    // Standardized network binding for local environments
-    return "https://eb793f91-8f72-4b48-ba54-5404c64c1696-00-3tbfonmau7mqf.riker.replit.dev/api/v1";
-  }
-  return "https://your-live-backend-url.university.edu/api/v1";
-};
 
 const api = axios.create({
-  baseURL: getBaseUrl(),
+  // ALWAYS double-check this matches your active Ports tab domain!
+  baseURL: "https://orange-fiesta-wrrvpqgqgxw53x65-5000.app.github.dev/",
   timeout: 15000,
   headers: {
     "Content-Type": "application/json",
@@ -20,47 +11,33 @@ const api = axios.create({
   },
 });
 
-// Request Interceptor: Injects active JWT token structures into header signatures
+// Request Interceptor: Automatically handles sub-paths and attaches JWT tokens
+// Request Interceptor: Automatically handles sub-paths cleanly
 api.interceptors.request.use(
   async (config) => {
     try {
+      // 1. Strip out any existing leading "/api/v1" or "/" to normalize the path
+      let cleanUrl = config.url || "";
+      if (cleanUrl.startsWith("/api/v1")) {
+        cleanUrl = cleanUrl.replace("/api/v1", "");
+      }
+      if (cleanUrl.startsWith("/")) {
+        cleanUrl = cleanUrl.substring(1);
+      }
+
+      // 2. Set the clean, unified path with the /api/v1 prefix
+      config.url = `/api/v1/${cleanUrl}`;
+
       const token = await AsyncStorage.getItem("token");
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }
     } catch (error) {
-      console.error(
-        "Failed to retrieve authentication token from storage:",
-        error
-      );
+      console.error("Failed to retrieve token:", error);
     }
     return config;
   },
   (error) => Promise.reject(error)
-);
-
-// Response Interceptor: Catches server eviction flags and safely resets session bounds
-api.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
-
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-      try {
-        await AsyncStorage.multiRemove(["token", "user"]);
-        console.warn(
-          "Session expired or unauthorized. Cleared local auth state caches."
-        );
-      } catch (clearError) {
-        console.error(
-          "Failed to flush storage keys on session eviction:",
-          clearError
-        );
-      }
-    }
-    return Promise.reject(error);
-  }
 );
 
 export default api;
