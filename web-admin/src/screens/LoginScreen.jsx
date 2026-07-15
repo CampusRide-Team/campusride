@@ -12,22 +12,28 @@ export default function LoginScreen({ onLoginSuccess }) {
     setError('')
     setLoading(true)
 
+    // Set this to true once you hook up your actual backend database
+    const isProductionReady = false; 
+
     try {
-      // 💡 BACKEND TODO: Dispatches credentials payload to authentication API routes
-      // const response = await axios.post('/api/v1/auth/login', { email, password })
-      // if (response.status === 200) { onLoginSuccess() }
-
-      // Staging Mock Successful Timeout Handshake
-      setTimeout(() => {
-        if (email === 'admin@st.ug.edu.gh' && password === 'admin123') {
-          onLoginSuccess?.()
-        } else {
-          setError('Invalid institutional credentials payload or cryptographic token mismatch.')
-          setLoading(false)
-        }
-      }, 1200)
-
+      if (isProductionReady) {
+         // const response = await api.post('/admin/auth/login', { email, password })
+        // if (response.data?.success) {
+        //   onLoginSuccess?.(response.data.user)
+        // }
+      } else {
+        //  Hardcoded Development Credentials Handshake (admin1@gmail.com / 24680)
+        setTimeout(() => {
+          if (email.trim() === 'admin1@gmail.com' && password === '24680') {
+            onLoginSuccess?.()
+          } else {
+            setError('Invalid administrative credentials payload or cryptographic token mismatch.')
+            setLoading(false)
+          }
+        }, 1000)
+      }
     } catch (err) {
+      console.error("Secure auth handshake exception:", err)
       setError('Network validation failure. Failed executing secure auth socket handshake.')
       setLoading(false)
     }
@@ -46,7 +52,7 @@ export default function LoginScreen({ onLoginSuccess }) {
           <p style={lgStyles.brandSubTitle}>ADMIN SECURE ACCESS GATEWAY</p>
         </div>
 
-        {/* REACTIONARY DISCIPLINARY ERROR BLOCK */}
+        {/* REACTIONARY ERROR BLOCK */}
         {error && (
           <div style={lgStyles.errorMessageBoxBanner}>
             <span style={lgStyles.errorTextFont}>{error}</span>
@@ -56,12 +62,12 @@ export default function LoginScreen({ onLoginSuccess }) {
         {/* AUTHENTICATION INPUT INTERFACE FORM */}
         <form onSubmit={handleFormSubmit} style={lgStyles.formStackLayout}>
           <div style={lgStyles.inputUnitBlock}>
-            <label style={lgStyles.inputLabelFieldTitle}>Institutional Email</label>
+            <label style={lgStyles.inputLabelFieldTitle}>Administrative Email</label>
             <div style={lgStyles.inputFieldWrapperRow}>
               <Mail size={16} color="#94A3B8" style={lgStyles.inputContextIcon} />
               <input 
                 type="email" 
-                placeholder="e.g. j.vance@st.ug.edu.gh"
+                placeholder="e.g. admin1@gmail.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -106,21 +112,19 @@ export default function LoginScreen({ onLoginSuccess }) {
   )
 }
 
-// ── ARRANGED MASTER LOGIN SCREEN CSS STYLESHEET ──────────────────────────────
 const lgStyles = {
   viewportShellWrapper: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'fixed', // 🌟 Locks position parameter coordinate context layer
-    inset: 0,          // 🌟 Forces tight 0-pixel bounding boxes on all browser corners
+    position: 'fixed',
+    inset: 0,
     height: '100vh',
     width: '100vw',
     backgroundColor: '#F8FAFC',
     boxSizing: 'border-box',
-    overflowX: 'hidden', // 🌟 Explicitly bans swiping left or right outside view limits
-    overflowY: 'hidden', // 🌟 Explicitly bans swiping up or down outside view limits
-    touchAction: 'none', // 🌟 Directs touchscreen devices to entirely suppress gesture pans
+    overflow: 'hidden',
+    touchAction: 'none',
     fontFamily: 'Inter, sans-serif',
     margin: 0,
     padding: 0

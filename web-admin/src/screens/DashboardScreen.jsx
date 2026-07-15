@@ -1,59 +1,242 @@
-import React, { useState, useEffect } from 'react'
-import { Car, UserCheck, Users, ShieldCheck } from 'lucide-react'
+import React, { useState, useEffect, useRef } from 'react'
+import { Car, UserCheck, Users, ShieldCheck, ShieldAlert } from 'lucide-react'
+import api from '../api/axios'
+import L from 'leaflet'
+import io from 'socket.io-client'
+
+const MapStyles = () => (
+  <style>{`
+    @import url('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
+    .leaflet-container {
+      width: 100%;
+      height: 100%;
+      border-radius: 16px;
+    }
+    .leaflet-marker-icon {
+      transition: transform 1.2s cubic-bezier(0.25, 1, 0.5, 1);
+    }
+    .pulse-marker {
+      background: #1E3A8A;
+      border: 2px solid #ffffff;
+      border-radius: 50%;
+      box-shadow: 0 0 0 0 rgba(30, 58, 138, 0.7);
+      animation: mapPulse 1.8s infinite ease-in-out;
+    }
+    @keyframes mapPulse {
+      0% {
+        box-shadow: 0 0 0 0 rgba(30, 58, 138, 0.7);
+      }
+      70% {
+        box-shadow: 0 0 0 8px rgba(30, 58, 138, 0);
+      }
+      100% {
+        box-shadow: 0 0 0 0 rgba(30, 58, 138, 0);
+      }
+    }
+    .hotspot-dot {
+      border: 2.5px solid #ffffff;
+      border-radius: 50%;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    }
+  `}</style>
+)
 
 export default function DashboardScreen() {
-  // Operational Dynamic Dynamic Real-time States
   const [stats, setStats] = useState([])
   const [topDrivers, setTopDrivers] = useState([])
   const [recentActivity, setRecentActivity] = useState([])
   const [chartData, setChartData] = useState([])
+  const [hotspots, setHotspots] = useState([])
+  const [currentWeek, setCurrentWeek] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  const mapRef = useRef(null)
+  const mapInstanceRef = useRef(null)
+  const markerGroupRef = useRef(null)
+  const heatZonesGroupRef = useRef(null)
+  const socketRef = useRef(null)
+  const driverLocationsRef = useRef({})
+
+  const iconMap = {
+    'Active Rides Now': { icon: Car, color: '#1E3A8A', bg: '#DBEAFE' },
+    'Drivers Online': { icon: UserCheck, color: '#1E3A8A', bg: '#DCFCE7' },
+    'Drivers Registered': { icon: ShieldAlert, color: '#1E3A8A', bg: '#EFF6FF' }, // 💡 Added driver mapping
+    'Riders Registered': { icon: Users, color: '#1E3A8A', bg: '#EFF6FF' },
+    'Pending Verification': { icon: ShieldCheck, color: '#991B1B', bg: '#FEE2E2' }
+  }
+
+  // Renders Active Online Driver Pins
+  const updateMapMarkers = () => {
+    if (!markerGroupRef.current || !mapInstanceRef.current) return
+    markerGroupRef.current.clearLayers()
+
+    Object.values(driverLocationsRef.current).forEach(driver => {
+      if (!driver.lat || !driver.lng) return
+
+      const customIcon = L.divIcon({
+        className: 'pulse-marker',
+        iconSize: [12, 12],
+        iconAnchor: [6, 6]
+      })
+
+      const marker = L.marker([driver.lat, driver.lng], { icon: customIcon })
+        .bindPopup(`
+          <div style="font-family: Inter, sans-serif; font-size: 11px; padding: 2px;">
+            <strong style="color: #1E3A8A;">${driver.name || 'Driver'}</strong><br/>
+            Status: <span style="font-weight: 700; color: #15803D">Active Online</span>
+          </div>
+        `)
+      
+      markerGroupRef.current.addLayer(marker)
+    })
+  }
+
+  // Renders minimal elegant solid dot demand markers
+  const drawHeatmapZones = (zonesList) => {
+    if (!heatZonesGroupRef.current || !mapInstanceRef.current) return
+    heatZonesGroupRef.current.clearLayers()
+
+    const targets = zonesList && zonesList.length > 0 ? zonesList : hotspots
+
+    targets.forEach(zone => {
+      const customIcon = L.divIcon({
+        className: 'hotspot-dot',
+        html: '',
+        iconSize: [12, 12],
+        iconAnchor: [6, 6]
+      })
+
+      const marker = L.marker([zone.lat, zone.lng], { icon: customIcon })
+        .bindPopup(`
+          <div style="font-family: Inter, sans-serif; font-size: 11px;">
+            <strong>${zone.name}</strong><br/>
+            Density: <strong style="color: ${zone.color};">${zone.level}</strong> (${zone.activeRequests} active reqs)
+          </div>
+        `)
+
+      marker.on('add', (e) => {
+        const el = e.target.getElement()
+        if (el) el.style.backgroundColor = zone.color
+      })
+
+      heatZonesGroupRef.current.addLayer(marker)
+    })
+  }
+
+  const fetchLiveLocationsAndDemand = async () => {
+    try {
+      const [locationsRes, demandRes] = await Promise.all([
+        api.get('/admin/drivers/pending'),
+        api.get('/admin/dashboard/demand')
+      ])
+      
+      const updatedDrivers = locationsRes.data?.data || []
+      driverLocationsRef.current = updatedDrivers.reduce((acc, curr) => {
+        if (curr._id && curr.currentLatitude && curr.currentLongitude) {
+          acc[curr._id] = {
+            driverId: curr._id,
+            name: curr.fullName,
+            lat: curr.currentLatitude,
+            lng: curr.currentLongitude
+          }
+        }
+        return acc
+      }, {})
+
+      updateMapMarkers()
+
+      if (demandRes.data?.success && demandRes.data?.data) {
+        setHotspots(demandRes.data.data)
+        drawHeatmapZones(demandRes.data.data)
+      }
+    } catch (err) {
+      console.warn("Telemetry polling skip:", err)
+    }
+  }
 
   useEffect(() => {
-    const fetchDashboardAggregations = async () => {
+    const hydrateDashboardData = async () => {
       try {
-        setLoading(false)
+        setLoading(true)
+        setError(null)
 
-        // 💡 BACKEND TODO: Assemble global initialization data lookups via Promise.all
-        // const [statsRes, driversRes, feedRes, chartRes] = await Promise.all([
-        //   axios.get('/api/v1/admin/dashboard/stats'),
-        //   axios.get('/api/v1/admin/drivers/leaderboard'),
-        //   axios.get('/api/v1/admin/dashboard/activity-stream'),
-        //   axios.get('/api/v1/admin/dashboard/volume-charts')
-        // ])
-
-        setStats([
-          { label: 'Active Rides Now', value: '27', change: '+12%', icon: Car, color: '#1E3A8A', bg: '#DBEAFE', changeColor: '#15803D' },
-          { label: 'Drivers Online', value: '128', change: '+5%', icon: UserCheck, color: '#1E3A8A', bg: '#DCFCE7', changeColor: '#15803D' },
-          { label: 'Riders Registered', value: '4,892', change: '+24%', icon: Users, color: '#1E3A8A', bg: '#EFF6FF', changeColor: '#15803D' },
-          { label: 'Pending Verification', value: '3', change: 'Action Req.', icon: ShieldCheck, color: '#991B1B', bg: '#FEE2E2', changeColor: '#991B1B' },
+        const [dashboardRes] = await Promise.all([
+          api.get('/admin/dashboard')
         ])
 
-        setTopDrivers([
-          { name: 'Kwame Evans Mensah', rating: '4.98', trips: 142, initials: 'KM' },
-          { name: 'Emmanuel Kofi Boateng', rating: '4.95', trips: 138, initials: 'EB' },
-          { name: 'Samuel Yaw Addo', rating: '4.89', trips: 125, initials: 'SA' },
-        ])
+        if (dashboardRes.data?.success && dashboardRes.data?.data) {
+          const { stats: rawStats, topDrivers, recentActivity, chartData, currentWeek: serverWeek } = dashboardRes.data.data
 
-        setRecentActivity([
-          { title: 'New Rider Signup', desc: 'Julian Vance verified his institutional database token.', time: '2 MINS AGO', circleColor: '#3B82F6' },
-          { title: 'Ride Completed', desc: 'Emmanuel Kofi Boateng reached Main Gate terminal cluster.', time: '15 MINS AGO', circleColor: '#22C55E' },
-          { title: 'Dispute Flagged', desc: 'Rider passenger submitted delay alert entry for Ride #78.', time: '42 MINS AGO', circleColor: '#EF4444' },
-        ])
+          const hydratedStats = rawStats.map(item => ({
+            ...item,
+            icon: iconMap[item.label]?.icon || Car,
+            color: iconMap[item.label]?.color || '#1E3A8A',
+            bg: iconMap[item.label]?.bg || '#DBEAFE'
+          }))
 
-        setChartData([35, 45, 55, 90, 75, 30, 20])
+          setStats(hydratedStats)
+          setTopDrivers(topDrivers || [])
+          setRecentActivity(recentActivity || [])
+          setChartData(chartData || [0, 0, 0, 0, 0, 0, 0])
+          setCurrentWeek(serverWeek)
+        }
 
+        await fetchLiveLocationsAndDemand()
       } catch (err) {
-        console.error("Failed fetching structural administrative dashboard states:", err)
+        console.error("Dashboard hydration error:", err)
+        setError('Server Connection Error. Check Node service & database states.')
+      } finally {
+        setLoading(false)
       }
     }
 
-    fetchDashboardAggregations()
+    hydrateDashboardData()
 
-    // 💡 BACKEND TODO: Connect client to active socket stream channel layers
-    // socket.on('trip_status_updated', (data) => { updateLocalStatsCounters(data) })
-    // return () => socket.off('trip_status_updated')
+    // 2-second high-frequency refresh cycle
+    const liveGPSPollingTimer = setInterval(fetchLiveLocationsAndDemand, 2000)
+
+    const socketUrl = api.defaults.baseURL ? api.defaults.baseURL.split('/api/v1')[0] : 'https://orange-fiesta-wrrvpqgqgxw53x65-5000.app.github.dev'
+    socketRef.current = io(socketUrl, {
+      transports: ['websocket', 'polling']
+    })
+
+    socketRef.current.on('driver_location_update', (data) => {
+      if (data && data.driverId) {
+        driverLocationsRef.current[data.driverId] = data
+        updateMapMarkers()
+      }
+    })
+
+    return () => {
+      clearInterval(liveGPSPollingTimer)
+      if (socketRef.current) socketRef.current.disconnect()
+    }
   }, [])
+
+  useEffect(() => {
+    if (loading || error || !mapRef.current) return
+
+    if (!mapInstanceRef.current) {
+      const map = L.map(mapRef.current, {
+        zoomControl: false,
+        attributionControl: false
+      }).setView([5.6506, -0.1870], 15)
+
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        maxZoom: 19
+      }).addTo(map)
+
+      L.control.zoom({ position: 'bottomright' }).addTo(map)
+
+      mapInstanceRef.current = map
+      markerGroupRef.current = L.layerGroup().addTo(map)
+      heatZonesGroupRef.current = L.layerGroup().addTo(map)
+      
+      updateMapMarkers()
+      drawHeatmapZones()
+    }
+  }, [loading, error, hotspots])
 
   if (loading) {
     return (
@@ -63,8 +246,25 @@ export default function DashboardScreen() {
     )
   }
 
+  if (error) {
+    return (
+      <div style={styles.loadingWrapperFrame}>
+        <div style={{ textAlign: 'center' }}>
+          <p style={{ ...styles.loadingText, color: '#EF4444' }}>{error}</p>
+          <button 
+            style={{ marginTop: '12px', padding: '8px 16px', borderRadius: '8px', border: '1px solid #EF4444', background: 'transparent', cursor: 'pointer', fontWeight: 600, color: '#EF4444' }} 
+            onClick={() => window.location.reload()}
+          >
+            Reconnect
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={styles.container}>
+      <MapStyles />
 
       {/* 1. TOP METRICS GRID ROW */}
       <div style={styles.metricsGrid}>
@@ -76,7 +276,11 @@ export default function DashboardScreen() {
                 <span style={styles.statLabelText}>{card.label}</span>
                 <div style={styles.statNumberGroup}>
                   <span style={styles.statNumberText}>{card.value}</span>
-                  <span style={{ ...styles.statTrendText, color: card.changeColor }}>{card.change}</span>
+                  {card.change && (
+                    <span style={{ ...styles.statTrendText, color: card.changeColor }}>
+                      {card.change}
+                    </span>
+                  )}
                 </div>
               </div>
               <div style={{ ...styles.statIconBadge, backgroundColor: card.bg }}>
@@ -87,35 +291,43 @@ export default function DashboardScreen() {
         })}
       </div>
 
-      {/* 2. MIDDLE AREA: LIVE RADAR MAP AND ACTIVITY FEED */}
+      {/* 2. MIDDLE AREA: MAP & RECENT ACTIVITY */}
       <div style={styles.middleSection}>
-        <div style={styles.mapContainer}>
-          <div style={styles.liveLabel}>
-            <span style={styles.pingDot} /> LIVE CAMPUS ACTIVITY
+        <div style={styles.mapCard}>
+          <div style={styles.mapHeaderRow}>
+            <div style={styles.liveLabel}>
+              <span style={styles.pingDot} /> LIVE CAMPUS DENSITIES
+            </div>
+            <span style={styles.campusTargetLabel}>University of Ghana, Legon Campus</span>
           </div>
 
-          <div style={styles.mapVisualFrame}>
-            <div style={styles.mapGridLineHorizontal} />
-            <div style={styles.mapGridLineVertical} />
-            <div style={styles.liveDriverNodeGreen} />
-            <div style={styles.liveDriverNodeBlue} />
-            <div style={styles.liveDriverNodeRed} />
-          </div>
-
-          <div style={styles.mapLegendBox}>
-            <div style={styles.legendItem}>
-              <span style={styles.legendDotGreen} /> Available Drivers
-            </div>
-            <div style={styles.legendItem}>
-              <span style={styles.legendDotBlue} /> Rides In Progress
-            </div>
-            <div style={styles.legendItem}>
-              <span style={styles.legendDotRed} /> High Demand Zones
+          <div style={styles.mapWrapper}>
+            <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
+            
+            {/* 📍 FANCY CORNER DEMAND CARD WITH SOLID COLORS */}
+            <div style={styles.mapLegendCard}>
+              <span style={styles.legendHeader}>DEMAND FORECAST</span>
+              <div style={styles.legendList}>
+                {hotspots.map((hotspot, idx) => (
+                  <div key={idx} style={styles.legendItem}>
+                    <div style={styles.legendItemLeft}>
+                      <span style={{ ...styles.legendDot, backgroundColor: hotspot.color }} />
+                      <span style={styles.legendName}>{hotspot.name.split(" ")[0]}</span>
+                    </div>
+                    <span style={{ 
+                      ...styles.legendBadge, 
+                      backgroundColor: hotspot.color + '15', 
+                      color: hotspot.color 
+                    }}>
+                      {hotspot.level.split(" ")[0]}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Recent Activity Panel */}
         <div style={styles.activityPanel}>
           <div style={styles.panelHeader}>
             <h3 style={styles.panelTitle}>Recent Activity Feed</h3>
@@ -136,12 +348,12 @@ export default function DashboardScreen() {
         </div>
       </div>
 
-      {/* 3. BOTTOM AREA: PERFORMANCE LEADERBOARD AND CHART */}
+      {/* 3. BOTTOM AREA: LEADERBOARD & RIDE VOLUME */}
       <div style={styles.bottomSection}>
         <div style={styles.tableCard}>
           <div style={styles.panelHeader}>
             <h3 style={styles.panelTitle}>Top Operators This Week</h3>
-            <span style={styles.weekBadge}>WEEK 42</span>
+            <span style={styles.weekBadge}>WEEK {currentWeek || '...'}</span>
           </div>
           <table style={styles.table}>
             <thead>
@@ -152,16 +364,34 @@ export default function DashboardScreen() {
               </tr>
             </thead>
             <tbody>
-              {topDrivers.map((drv, i) => (
-                <tr key={i} style={styles.tableRow}>
-                  <td style={styles.tdNameCell}>
-                    <div style={styles.tableAvatarMock}>{drv.initials}</div>
-                    <span style={styles.driverNameText}>{drv.name}</span>
+              {topDrivers.length > 0 ? (
+                topDrivers.map((drv, i) => (
+                  <tr key={i} style={styles.tableRow}>
+                    <td style={styles.tdNameCell}>
+                      {drv.profilePicture ? (
+                        <img 
+                          src={drv.profilePicture} 
+                          alt={drv.name} 
+                          style={styles.tableAvatarImage} 
+                          onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                        />
+                      ) : null}
+                      <div style={{ ...styles.tableAvatarMock, display: drv.profilePicture ? 'none' : 'flex' }}>
+                        {drv.initials}
+                      </div>
+                      <span style={styles.driverNameText}>{drv.name}</span>
+                    </td>
+                    <td style={styles.tdRatingCell}>{drv.rating}</td>
+                    <td style={styles.tdTripsCell}>{drv.trips}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="3" style={styles.emptyTableStateCell}>
+                    No rides completed on campus yet this week.
                   </td>
-                  <td style={styles.tdRatingCell}>★ {drv.rating}</td>
-                  <td style={styles.tdTripsCell}>{drv.trips}</td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
@@ -181,10 +411,10 @@ export default function DashboardScreen() {
           </div>
         </div>
       </div>
-
     </div>
   )
 }
+
 const styles = {
   container: {
     display: 'flex',
@@ -195,14 +425,14 @@ const styles = {
   },
   metricsGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-    gap: '20px',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(185px, 1fr))',
+    gap: '16px',
     width: '100%'
   },
   middleSection: {
     display: 'flex',
     gap: '32px',
-    minHeight: '340px',
+    minHeight: '380px',
     alignItems: 'stretch'
   },
   bottomSection: {
@@ -215,11 +445,10 @@ const styles = {
     backgroundColor: '#ffffff',
     borderRadius: '16px',
     border: '1px solid #E2E8F0',
-    padding: '20px',
+    padding: '16px',
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    boxShadow: '0 1px 2px rgba(0,0,0,0.01)'
+    alignItems: 'center'
   },
   statBodyBlock: {
     display: 'flex',
@@ -228,101 +457,126 @@ const styles = {
     textAlign: 'left'
   },
   statLabelText: {
-    fontSize: '12px',
+    fontSize: '11px',
     color: '#64748B',
     fontWeight: 600
   },
   statNumberGroup: {
     display: 'flex',
     alignItems: 'baseline',
-    gap: '8px'
+    gap: '6px'
   },
   statNumberText: {
-    fontSize: '24px',
+    fontSize: '20px',
     fontWeight: 800,
     color: '#0F172A'
   },
   statTrendText: {
-    fontSize: '11px',
+    fontSize: '10px',
     fontWeight: 700
   },
   statIconBadge: {
-    width: '36px',
-    height: '36px',
-    borderRadius: '12px',
+    width: '32px',
+    height: '32px',
+    borderRadius: '10px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center'
   },
-  mapContainer: {
-    backgroundColor: '#0B1329',
+  mapCard: {
+    backgroundColor: '#ffffff',
     borderRadius: '20px',
     padding: '20px',
     display: 'flex',
     flexDirection: 'column',
-    justifyContent: 'space-between',
+    gap: '16px',
     flex: 2,
+    border: '1px solid #E2E8F0',
+    boxSizing: 'border-box'
+  },
+  mapHeaderRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%'
+  },
+  campusTargetLabel: {
+    fontSize: '11px',
+    fontWeight: 700,
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: '0.3px'
+  },
+  mapWrapper: {
+    flex: 1,
+    borderRadius: '16px',
+    border: '1px solid #E2E8F0',
+    overflow: 'hidden',
     position: 'relative',
-    border: '1px solid #1E293B',
-    overflow: 'hidden'
+    backgroundColor: '#F8FAFC',
+    minHeight: '280px'
   },
-  mapVisualFrame: {
+  mapLegendCard: {
     position: 'absolute',
-    inset: 0,
-    width: '100%',
-    height: '100%',
-    pointerEvents: 'none'
+    bottom: '16px',
+    right: '16px',
+    width: '180px',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    border: '1px solid #E2E8F0',
+    borderRadius: '14px',
+    padding: '12px',
+    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
+    zIndex: 1000,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+    backdropFilter: 'blur(8px)'
   },
-  mapGridLineHorizontal: {
-    position: 'absolute',
-    top: '50%',
-    left: 0,
-    width: '100%',
-    height: '1px',
-    borderTop: '1px dashed rgba(30, 41, 59, 0.4)'
+  legendHeader: {
+    fontSize: '9px',
+    fontWeight: 800,
+    color: '#94A3B8',
+    letterSpacing: '0.8px',
+    textTransform: 'uppercase'
   },
-  mapGridLineVertical: {
-    position: 'absolute',
-    left: '50%',
-    top: 0,
-    width: '1px',
-    height: '100%',
-    borderLeft: '1px dashed rgba(30, 41, 59, 0.4)'
+  legendList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px'
   },
-  liveDriverNodeGreen: {
-    position: 'absolute',
+  legendItem: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  legendItemLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px'
+  },
+  legendDot: {
     width: '8px',
     height: '8px',
     borderRadius: '50%',
-    top: '35%',
-    left: '25%',
-    backgroundColor: '#22C55E',
-    boxShadow: '0 0 12px #22C55E'
+    display: 'inline-block',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
   },
-  liveDriverNodeBlue: {
-    position: 'absolute',
-    width: '8px',
-    height: '8px',
-    borderRadius: '50%',
-    top: '60%',
-    left: '70%',
-    backgroundColor: '#2563EB',
-    boxShadow: '0 0 12px #2563EB'
+  legendName: {
+    fontSize: '11px',
+    fontWeight: 700,
+    color: '#334155'
   },
-  liveDriverNodeRed: {
-    position: 'absolute',
-    width: '8px',
-    height: '8px',
-    borderRadius: '50%',
-    top: '20%',
-    left: '55%',
-    backgroundColor: '#EF4444',
-    boxShadow: '0 0 12px #EF4444'
+  legendBadge: {
+    fontSize: '9px',
+    fontWeight: 800,
+    padding: '2px 6px',
+    borderRadius: '6px',
+    textTransform: 'uppercase'
   },
   liveLabel: {
-    backgroundColor: 'rgba(15, 23, 42, 0.75)',
-    border: '1px solid #1E293B',
-    color: '#ffffff',
+    backgroundColor: '#F8FAFC',
+    border: '1px solid #E2E8F0',
+    color: '#1E3A8A',
     fontSize: '11px',
     fontWeight: 800,
     padding: '6px 12px',
@@ -330,52 +584,13 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    width: 'max-content',
-    zIndex: 2
+    width: 'max-content'
   },
   pingDot: {
     width: '6px',
     height: '6px',
     backgroundColor: '#22C55E',
     borderRadius: '50%'
-  },
-  mapLegendBox: {
-    backgroundColor: 'rgba(11, 19, 41, 0.95)',
-    border: '1px solid #1E293B',
-    padding: '12px',
-    borderRadius: '12px',
-    width: '170px',
-    alignSelf: 'flex-end',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-    zIndex: 2
-  },
-  legendItem: {
-    fontSize: '11px',
-    color: '#94A3B8',
-    fontWeight: 600,
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px'
-  },
-  legendDotGreen: {
-    width: '6px',
-    height: '6px',
-    borderRadius: '50%',
-    backgroundColor: '#22C55E'
-  },
-  legendDotBlue: {
-    width: '6px',
-    height: '6px',
-    borderRadius: '50%',
-    backgroundColor: '#2563EB'
-  },
-  legendDotRed: {
-    width: '6px',
-    height: '6px',
-    borderRadius: '50%',
-    backgroundColor: '#EF4444'
   },
   activityPanel: {
     backgroundColor: '#ffffff',
@@ -385,7 +600,6 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     flex: 1,
-    boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
     boxSizing: 'border-box'
   },
   panelHeader: {
@@ -456,7 +670,6 @@ const styles = {
     borderRadius: '20px',
     padding: '20px',
     flex: 3,
-    boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
     boxSizing: 'border-box'
   },
   weekBadge: {
@@ -521,6 +734,13 @@ const styles = {
     color: '#1E293B',
     fontSize: '13px'
   },
+  tableAvatarImage: {
+    width: '28px',
+    height: '28px',
+    borderRadius: '50%',
+    objectFit: 'cover',
+    border: '1px solid #E2E8F0'
+  },
   tableAvatarMock: {
     width: '28px',
     height: '28px',
@@ -533,6 +753,13 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     border: '1px solid #E2E8F0'
+  },
+  emptyTableStateCell: {
+    textAlign: 'center',
+    padding: '32px',
+    color: '#94A3B8',
+    fontSize: '13px',
+    fontWeight: 600
   },
   driverNameText: {
     fontSize: '13px',
@@ -548,7 +775,6 @@ const styles = {
     flexDirection: 'column',
     justifyContent: 'space-between',
     flex: 2,
-    boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
     boxSizing: 'border-box'
   },
   chartTrack: {

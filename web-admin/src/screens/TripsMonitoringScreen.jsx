@@ -10,80 +10,89 @@ import {
   LogOut,
   Car
 } from 'lucide-react'
+import api from '../api/axios'
 
 export default function TripsMonitoringScreen() {
   const [activeRightTab, setActiveRightTab] = useState('trips')
-  const [selectedDriverId, setSelectedDriverId] = useState('DRV-88')
+  const [selectedDriverId, setSelectedDriverId] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  // Real-time Platform Operations States
+  // Live Operations States
   const [metrics, setMetrics] = useState([])
   const [activeTrips, setActiveTrips] = useState([])
   const [routePerformance, setRoutePerformance] = useState([])
   const [driverRoster, setDriverRoster] = useState([])
   const [eventsLog, setEventsLog] = useState([])
 
-  useEffect(() => {
-    const fetchLiveTrackingState = async () => {
-      try {
-        setLoading(true)
+  const fetchLiveTrackingState = async (isInitial = false) => {
+    try {
+      if (isInitial) setLoading(true)
+      
+      const res = await api.get('/admin/monitoring/snapshot')
+      if (res.data?.success && res.data?.data) {
+        const { metrics: rawMetrics, activeTrips: rawTrips, routePerformance: rawRoute, driverRoster: rawRoster } = res.data.data
+        
+        // Hydrate metrics with frontend lucide-react icons
+        const iconMapping = [
+          { icon: <Users size={18} color="#1E3A8A" /> },
+          { icon: <CheckCircle size={18} color="#1E3A8A" /> },
+          { icon: <Clock size={18} color="#CA8A04" /> },
+          { icon: <AlertTriangle size={18} color="#DC2626" /> }
+        ]
 
-        // 💡 BACKEND TODO: Batch fetch current real-time platform snapshots via REST endpoints
-        // const [metricsRes, tripsRes, zonesRes, rosterRes, logsRes] = await Promise.all([
-        //   axios.get('/api/v1/admin/monitoring/metrics'),
-        //   axios.get('/api/v1/admin/monitoring/active-trips'),
-        //   axios.get('/api/v1/admin/monitoring/zone-density'),
-        //   axios.get('/api/v1/admin/monitoring/driver-roster'),
-        //   axios.get('/api/v1/admin/monitoring/system-logs')
-        // ])
+        setMetrics(rawMetrics.map((item, idx) => ({
+          ...item,
+          icon: iconMapping[idx]?.icon || <Users size={18} />
+        })))
 
-        setMetrics([
-          { id: 1, label: 'Active Rides', value: '34', change: 'Live On-Map', icon: <Users size={18} color="#1E3A8A" />, bg: '#DBEAFE', color: '#16A34A' },
-          { id: 2, label: 'Completed Today', value: '210', change: '+ 18% vs yesterday', icon: <CheckCircle size={18} color="#2563EB" />, bg: '#E2E8F0', color: '#16A34A' },
-          { id: 3, label: 'Unmatched Pings', value: '2', change: 'High Proximity Demand', icon: <Clock size={18} color="#CA8A04" />, bg: '#FEF9C3', color: '#CA8A04' },
-          { id: 4, label: 'Reported Disputes', value: '1', change: 'Immediate Overlook', icon: <AlertTriangle size={18} color="#DC2626" />, bg: '#FEE2E2', color: '#DC2626' }
-        ])
+        setActiveTrips(rawTrips)
+        setRoutePerformance(rawRoute)
+        setDriverRoster(rawRoster)
 
-        setActiveTrips([
-          { id: 'RIDE-78', studentName: 'Alex Johnson', driverName: 'Emmanuel Kofi Boateng', route: 'Pent Hall → Main Gate', status: 'En Route', statusBg: '#EFF6FF', statusColor: '#1E40AF', vehicle: 'Toyota Vitz (GW-2831-24)' },
-          { id: 'RIDE-79', studentName: 'Michael Thompson', driverName: 'Kwame Evans Mensah', route: 'Night Market → Balme Library', status: 'At Pickup', statusBg: '#FFFBEB', statusColor: '#854D0E', vehicle: 'Hyundai i10 (GT-9011-25)' }
-        ])
+        if (rawRoster.length > 0 && !selectedDriverId) {
+          setSelectedDriverId(rawRoster[0].id)
+        }
 
-        setRoutePerformance([
-          { name: 'Pentagon / Evandy Cluster', activeDrivers: 15, avgEta: '3 mins', load: 'High Demand', loadColor: '#DC2626' },
-          { name: 'Night Market Hub Area', activeDrivers: 11, avgEta: '5 mins', load: 'Optimal', loadColor: '#16A34A' },
-          { name: 'Balme Library / Central Campus', activeDrivers: 5, avgEta: '9 mins', load: 'Light Supply', loadColor: '#2563EB' },
-          { name: 'Main Gate Transit Line', activeDrivers: 3, avgEta: '12 mins', load: 'Surge Warning', loadColor: '#CA8A04' }
-        ])
-
-        setDriverRoster([
-          { id: 'DRV-88', name: 'Kojo Antwi Forson', vehicle: 'Toyota Vitz (GW-8821-25)', status: 'AVAILABLE', statusColor: '#15803D', statusBg: '#DCFCE7', details: 'Online • Near Commonwealth Hall', lifetimeTrips: { completed: 840, canceled: 12 }, infractionsLog: [{ type: 'Speed Warning', date: 'June 10', details: 'Clocked at 55km/h on Central Campus Loop (Limit 40)' }] },
-          { id: 'DRV-14', name: 'Francis Osei Tutu', vehicle: 'Hyundai i10 (GT-5541-26)', status: 'BUSY', statusColor: '#2563EB', statusBg: '#EFF6FF', details: 'On Trip • Connected to RIDE-78', lifetimeTrips: { completed: 1420, canceled: 45 }, infractionsLog: [{ type: 'Route Deviation', date: 'May 28', details: 'Bypassed tracking pathway without passenger consent' }, { type: 'Low Rating Alert', date: 'June 02', details: 'Received three consecutive 1-star passenger reviews' }] },
-          { id: 'DRV-56', name: 'Ebenezer Mensah', vehicle: 'Kia Picanto (GE-1092-24)', status: 'ON BREAK', statusColor: '#475569', statusBg: '#E2E8F0', details: 'Offline • Paused inside driver application app toggle', lifetimeTrips: { completed: 412, canceled: 8 }, infractionsLog: [] },
-          { id: 'DRV-99', name: 'Prince Darko', vehicle: 'Toyota Belta (GW-3310-23)', status: 'RESTRICTED', statusColor: '#991B1B', statusBg: '#FEE2E2', details: 'Suspended • Flagged for off-app transit matching solicitation', lifetimeTrips: { completed: 92, canceled: 19 }, infractionsLog: [{ type: 'App Disconnection', date: 'June 01', details: 'Repeatedly turned off tracking mid-trip with rider.' }] }
-        ])
-
-        setEventsLog([
-          { id: 1, title: 'Ride request matched', desc: 'Algorithm paired passenger with closest driver (DRV-14).', time: '02:41 PM', color: '#2563EB' },
-          { id: 2, title: 'Handshake completed', desc: 'Driver arrived at pickup coordinates.', time: '02:38 PM', color: '#16A34A' }
-        ])
-
-      } catch (err) {
-        console.error("Failed executing core synchronization for monitoring room:", err)
-      } finally {
-        setLoading(false)
+        // Maintain log track of state changes
+        if (rawTrips.length > 0) {
+          setEventsLog([
+            { id: 1, title: 'Dispatches Synchronized', desc: `Operations matched with ${rawTrips.length} current active runs.`, time: 'LIVE', color: '#16A34A' },
+            { id: 2, title: 'Geospatial Heartbeat Active', desc: 'Rerouting indices recalculated across Legon campus zones.', time: 'LIVE', color: '#2563EB' }
+          ])
+        } else {
+          setEventsLog([
+            { id: 1, title: 'Systems Live & Listening', desc: 'Awaiting active campus ride matching signals...', time: 'LIVE', color: '#3B82F6' }
+          ])
+        }
       }
+    } catch (err) {
+      console.error("Monitoring screen telemetry sync failure:", err)
+    } finally {
+      if (isInitial) setLoading(false)
     }
+  }
 
-    fetchLiveTrackingState()
-  }, [])
+  useEffect(() => {
+    fetchLiveTrackingState(true)
+    
+    // High-frequency 3-second operational room sync polling
+    const liveTelemetryPoller = setInterval(() => {
+      fetchLiveTrackingState(false)
+    }, 3000)
+
+    return () => clearInterval(liveTelemetryPoller)
+  }, [selectedDriverId])
 
   const handleDriverAction = async (driverId, commandType) => {
     try {
-      // 💡 BACKEND TODO: Send server intervention payloads directly via API calls
-      console.log(`System command [${commandType.toUpperCase()}] targeted at driver token: ${driverId}`)
+      const res = await api.post(`/admin/monitoring/driver/${driverId}/action`, { action: commandType })
+      if (res.data?.success) {
+        alert(`Successfully executed command: ${commandType.toUpperCase()}`)
+        fetchLiveTrackingState(false)
+      }
     } catch (err) {
-      console.error("Failed transmitting operator protocol modification command:", err)
+      console.error("Action transmission failure:", err)
+      alert("Failed executing operations action.")
     }
   }
 
@@ -99,6 +108,7 @@ export default function TripsMonitoringScreen() {
 
   return (
     <div style={tmStyles.workspaceWrapperContainer}>
+      <MapStyles />
 
       {/* 1. UPPER OVERVIEW METRICS GRID */}
       <div style={tmStyles.metricsGrid}>
@@ -142,7 +152,7 @@ export default function TripsMonitoringScreen() {
                   <span style={tmStyles.routeMetricsText}>{route.activeDrivers} cars roaming</span>
                   <span style={tmStyles.routeMetricsText}>{route.avgEta}</span>
                   <div style={tmStyles.flexRightAlignWrapper}>
-                    <span style={{ ...tmStyles.loadStatusPill, backgroundColor: route.loadColor }}>
+                    <span style={{ ...tmStyles.loadStatusPill, backgroundColor: route.color }}>
                       {route.load}
                     </span>
                   </div>
@@ -171,47 +181,55 @@ export default function TripsMonitoringScreen() {
 
           <div style={tmStyles.tripsScrollContainer}>
             {activeRightTab === 'trips' ? (
-              activeTrips.map((t, idx) => (
-                <div key={idx} style={tmStyles.tripCleanLayoutItemBlock}>
-                  <div style={tmStyles.tripCardTopHeaderLine}>
-                    <span style={tmStyles.tripIdIdentifierLabelText}>{t.id}</span>
-                    <span style={{ ...tmStyles.liveStatusBadgeMarkup, backgroundColor: t.statusBg, color: t.statusColor }}>{t.status}</span>
-                  </div>
-
-                  <div style={tmStyles.tripIdentityDetailsGridContainer}>
-                    <div style={tmStyles.identityEntityDataStackLeft}>
-                      <span style={tmStyles.cleanMetaMicroTitleFieldLabel}>RIDER</span>
-                      <span style={tmStyles.cleanMetaFieldValueStrongText}>{t.studentName}</span>
+              activeTrips.length > 0 ? (
+                activeTrips.map((t, idx) => (
+                  <div key={idx} style={tmStyles.tripCleanLayoutItemBlock}>
+                    <div style={tmStyles.tripCardTopHeaderLine}>
+                      <span style={tmStyles.tripIdIdentifierLabelText}>{t.id}</span>
+                      <span style={{ ...tmStyles.liveStatusBadgeMarkup, backgroundColor: t.statusBg, color: t.statusColor }}>{t.status}</span>
                     </div>
-                    <div style={tmStyles.identityEntityDataStackLeft}>
-                      <span style={tmStyles.cleanMetaMicroTitleFieldLabel}>MATCHED DRIVER</span>
-                      <span style={tmStyles.cleanMetaFieldValueStrongText}>{t.driverName}</span>
+
+                    <div style={tmStyles.tripIdentityDetailsGridContainer}>
+                      <div style={tmStyles.identityEntityDataStackLeft}>
+                        <span style={tmStyles.cleanMetaMicroTitleFieldLabel}>RIDER</span>
+                        <span style={tmStyles.cleanMetaFieldValueStrongText}>{t.studentName}</span>
+                      </div>
+                      <div style={tmStyles.identityEntityDataStackLeft}>
+                        <span style={tmStyles.cleanMetaMicroTitleFieldLabel}>MATCHED DRIVER</span>
+                        <span style={tmStyles.cleanMetaFieldValueStrongText}>{t.driverName}</span>
+                      </div>
+                    </div>
+
+                    <div style={tmStyles.tripCardBaseRouteTrackingFootprintBar}>
+                      <div style={tmStyles.inlineMicroFlexRowAssetField}><MapPin size={12} color="#94A3B8" /><span style={tmStyles.microFooterValueDataText}>{t.route}</span></div>
+                      <div style={tmStyles.inlineMicroFlexRowAssetField}><Car size={12} color="#94A3B8" /><span style={tmStyles.microFooterValueDataText}>{t.vehicle}</span></div>
                     </div>
                   </div>
-
-                  <div style={tmStyles.tripCardBaseRouteTrackingFootprintBar}>
-                    <div style={tmStyles.inlineMicroFlexRowAssetField}><MapPin size={12} color="#94A3B8" /><span style={tmStyles.microFooterValueDataText}>{t.route}</span></div>
-                    <div style={tmStyles.inlineMicroFlexRowAssetField}><Car size={12} color="#94A3B8" /><span style={tmStyles.microFooterValueDataText}>{t.vehicle}</span></div>
-                  </div>
-                </div>
-              ))
+                ))
+              ) : (
+                <div style={tmStyles.emptyStateTextWrapper}>No active runs on campus right now.</div>
+              )
             ) : (
-              driverRoster.map((driver, idx) => (
-                <div 
-                  key={idx} 
-                  onClick={() => setSelectedDriverId(driver.id)} 
-                  style={{ ...tmStyles.driverRosterLayoutCardBlock, border: selectedDriverId === driver.id ? '2px solid #1E3A8A' : '1px solid #E2E8F0' }}
-                >
-                  <div style={tmStyles.driverRosterHeaderFlexRow}>
-                    <div style={tmStyles.driverIdentityTextStack}>
-                      <span style={tmStyles.driverRosterNameTitle}>{driver.name}</span>
-                      <span style={tmStyles.driverRosterSubAssetLabel}>{driver.id} • {driver.vehicle}</span>
+              driverRoster.length > 0 ? (
+                driverRoster.map((driver, idx) => (
+                  <div 
+                    key={idx} 
+                    onClick={() => setSelectedDriverId(driver.id)} 
+                    style={{ ...tmStyles.driverRosterLayoutCardBlock, border: selectedDriverId === driver.id ? '2px solid #1E3A8A' : '1px solid #E2E8F0' }}
+                  >
+                    <div style={tmStyles.driverRosterHeaderFlexRow}>
+                      <div style={tmStyles.driverIdentityTextStack}>
+                        <span style={tmStyles.driverRosterNameTitle}>{driver.name}</span>
+                        <span style={tmStyles.driverRosterSubAssetLabel}>{driver.id.substring(18)} • {driver.vehicle}</span>
+                      </div>
+                      <span style={{ ...tmStyles.statusBadgeIndicatorPillMarkup, backgroundColor: driver.statusBg, color: driver.statusColor }}>{driver.status}</span>
                     </div>
-                    <span style={{ ...tmStyles.statusBadgeIndicatorPillMarkup, backgroundColor: driver.statusBg, color: driver.statusColor }}>{driver.status}</span>
+                    <p style={tmStyles.driverLiveActivityLogDetailsDescriptionText}>{driver.details}</p>
                   </div>
-                  <p style={tmStyles.driverLiveActivityLogDetailsDescriptionText}>{driver.details}</p>
-                </div>
-              ))
+                ))
+              ) : (
+                <div style={tmStyles.emptyStateTextWrapper}>No registered drivers on platform.</div>
+              )
             )}
           </div>
         </div>
@@ -223,7 +241,7 @@ export default function TripsMonitoringScreen() {
         {/* LOWER GRID WINDOW LEFT: ACTIVE OPERATOR DETAILS DETECTOR */}
         <div style={tmStyles.driverHistoryLedgerCard}>
           <div style={tmStyles.panelHeadingRowFlexHeader}>
-            <h3 style={tmStyles.containerBlockTitle}>Driver Audit Blueprint: <span style={tmStyles.auditedDriverInlineHeadingText}>{auditedDriver?.name} ({auditedDriver?.id})</span></h3>
+            <h3 style={tmStyles.containerBlockTitle}>Driver Audit Blueprint: <span style={tmStyles.auditedDriverInlineHeadingText}>{auditedDriver?.name}</span></h3>
           </div>
 
           <div style={tmStyles.driverHistorySplitGridContainers}>
@@ -252,7 +270,7 @@ export default function TripsMonitoringScreen() {
           </div>
 
           {/* Active Operator Control Access Layout Context */}
-          {activeRightTab === 'driver-roster' && (
+          {activeRightTab === 'driver-roster' && auditedDriver && (
             <div style={tmStyles.driverRosterActionButtonsClusterRow}>
               <button style={tmStyles.driverRosterFlagActionButton} onClick={() => handleDriverAction(auditedDriver.id, 'flag')}>
                 <ShieldAlert size={12} /> Flag Operator Account
@@ -270,8 +288,8 @@ export default function TripsMonitoringScreen() {
             <h3 style={tmStyles.containerBlockTitle}>Ride-Matching System Timeline Logs</h3>
           </div>
           <div style={tmStyles.verticalFlexStackLayoutContainer}>
-            {eventsLog.map((log) => (
-              <div key={log.id} style={tmStyles.logEventRowStrip}>
+            {eventsLog.map((log, idx) => (
+              <div key={idx} style={tmStyles.logEventRowStrip}>
                 <div style={tmStyles.logEventLeftStatusCluster}>
                   <div style={{ ...tmStyles.logStatusNodePoint, backgroundColor: log.color }} />
                   <div style={tmStyles.logTextStackTextGroup}>
@@ -290,8 +308,13 @@ export default function TripsMonitoringScreen() {
   )
 }
 
-// ── ARRANGED CSS SYSTEM STYLESHEETS MATRIX ──────────────────────────────────
-const smStyles = {
+const MapStyles = () => (
+  <style>{`
+    @import url('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
+  `}</style>
+)
+
+ const smStyles = {
   statBodyBlock: { 
     display: 'flex', 
     flexDirection: 'column', 
@@ -811,5 +834,12 @@ const tmStyles = {
     fontSize: '14px', 
     color: '#1E3A8A', 
     fontWeight: 700 
+  },
+  emptyStateTextWrapper: { 
+    padding: '24px', 
+    textAlign: 'center', 
+    color: '#94A3B8', 
+    fontSize: '12px', 
+    fontWeight: 600 
   }
 }

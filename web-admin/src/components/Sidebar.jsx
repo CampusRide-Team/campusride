@@ -30,24 +30,45 @@ export default function Sidebar({ activePage = 'dashboard', onNavigate }) {
     initials: '..'
   })
 
-  // 1. 💡 BACKEND TODO: Authenticated Session Context Ingestion Layer
-  useEffect(() => {
-    // axios.get('/api/v1/auth/session')
-    //   .then(res => {
-    //     setAdminUser({
-    //       name: res.data.user.fullName,
-    //       role: res.data.user.roleTitle,
-    //       initials: res.data.user.initialsToken
-    //     })
-    //   })
-    //   .catch(err => console.error("Session missing or token expired:", err))
+  // Helper function to dynamically generate initials from any Full Name string
+  const getInitials = (name) => {
+    if (!name || typeof name !== 'string') return '..'
+    const parts = name.trim().split(/\s+/)
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+  }
 
-    // Staging Mock Session Document Tally
-    setAdminUser({
-      name: 'Dr. Julian Vance',
-      role: 'System Administrator',
-      initials: 'JV'
-    })
+  useEffect(() => {
+    // FLIP THIS TO TRUE ONCE YOUR MONGODB ACCESS IS APPROVED!
+    const isProductionReady = false
+
+    if (isProductionReady) {
+      const fetchAdminSession = async () => {
+        try {
+          // Replace with your exact axios/api client instance
+          const res = await api.get('/admin/auth/session')
+          if (res.data?.success && res.data?.user) {
+            const user = res.data.user
+            setAdminUser({
+              name: user.fullName,
+              role: user.roleTitle || 'System Administrator',
+              initials: getInitials(user.fullName)
+            })
+          }
+        } catch (err) {
+          console.error("Session missing or token expired:", err)
+        }
+      }
+      fetchAdminSession()
+    } else {
+      // Staging Mock Session Document Tally
+      const mockName = 'Dr. Julian Vance'
+      setAdminUser({
+        name: mockName,
+        role: 'System Administrator',
+        initials: getInitials(mockName)
+      })
+    }
   }, [])
 
   return (
@@ -111,7 +132,7 @@ export default function Sidebar({ activePage = 'dashboard', onNavigate }) {
           ...styles.adminSectionButton,
           backgroundColor: isProfileHovered ? '#F1F5F9' : 'transparent'
         }}
-        onClick={() => onNavigate?.('admin-profile')} // 🌟 Modified token value string key to point to the dedicated blueprint profile component canvas view
+        onClick={() => onNavigate?.('admin-profile')}  
         onMouseEnter={() => setIsProfileHovered(true)}
         onMouseLeave={() => setIsProfileHovered(false)}
       >
@@ -125,7 +146,6 @@ export default function Sidebar({ activePage = 'dashboard', onNavigate }) {
   )
 }
 
-// ── ARRANGED CSS STYLESHEET MAP OBJECT WITH CLEAN INDENTS ────────────────────
 const styles = {
   sidebar: { 
     width: '240px', 
