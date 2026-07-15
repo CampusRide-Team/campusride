@@ -9,6 +9,7 @@ import {
   RefreshCw,
   LogOut
 } from 'lucide-react'
+import api from '../api/axios'
 
 export default function SettingsScreen({ onLogout }) {
   const [loading, setLoading] = useState(false)
@@ -33,40 +34,71 @@ export default function SettingsScreen({ onLogout }) {
   const [colorTheme, setColorTheme] = useState('light') 
   const [interfaceDensity, setInterfaceDensity] = useState('comfortable') 
 
-  // 💡 BACKEND TODO: Fetch active admin system configuration documents from database
-  useEffect(() => {
-    const fetchGlobalSettings = async () => {
-      try {
-        setLoading(true)
-        setPlatformName('CampusRide Admin Portal')
-        setOperatingHours('06:00 AM - 11:59 PM')
-        setRideRadius('5 Miles')
-      } catch (err) {
-        console.error("Failed downloading master architecture settings profile:", err)
-      } finally {
-        setLoading(false)
+  const fetchGlobalSettings = async () => {
+    try {
+      setLoading(true)
+      const res = await api.get('/admin/settings')
+      if (res.data?.success && res.data?.data) {
+        const d = res.data.data
+        setPlatformName(d.platformName || 'CampusRide Admin Portal')
+        setOperatingHours(d.operatingHours || '06:00 AM - 11:59 PM')
+        setRideRadius(d.rideRadius || '5 Miles')
+        setEnableRideNotifications(d.enableRideNotifications !== false)
+        setTwoFactorAuth(!!d.twoFactorAuth)
+        setSessionTimeout(d.sessionTimeout || '30 Minutes of inactivity')
+        setDriverVerificationAlerts(d.driverVerificationAlerts !== false)
+        setRideActivityAlerts(d.rideActivityAlerts !== false)
+        setRiderActivityAlerts(!!d.riderActivityAlerts)
+        setSystemMaintenanceAlerts(d.systemMaintenanceAlerts !== false)
+        setColorTheme(d.colorTheme || 'light')
+        setInterfaceDensity(d.interfaceDensity || 'comfortable')
       }
+    } catch (err) {
+      console.error("Failed downloading master architecture settings profile:", err)
+    } finally {
+      setLoading(false)
     }
+  }
 
+  useEffect(() => {
     fetchGlobalSettings()
   }, [])
 
   const handleSaveChanges = async () => {
     try {
       setLoading(true)
-      console.log("Global application settings saved successfully.")
+      const payload = {
+        platformName,
+        operatingHours,
+        rideRadius,
+        enableRideNotifications,
+        twoFactorAuth,
+        sessionTimeout,
+        driverVerificationAlerts,
+        rideActivityAlerts,
+        riderActivityAlerts,
+        systemMaintenanceAlerts,
+        colorTheme,
+        interfaceDensity
+      }
+      
+      const res = await api.put('/admin/settings', payload)
+      if (res.data?.success) {
+        alert("Global platform parameter modifications applied successfully.")
+      }
     } catch (err) {
       console.error("Failed persisting system parameters payload:", err)
+      alert("Error persisting database configurations row parameter validations.")
     } finally {
       setLoading(false)
     }
   }
 
-  // 💡 BACKEND TODO: Trigger local cookie clearing and dispatch redirect state
   const handleImmediateLogout = () => {
     if (!window.confirm("Are you sure you want to end your session and log out of the CampusRide Admin Portal?")) return
-
-    // Clear tokens here (localStorage.removeItem('token'), clear cookies, etc.)
+    
+    // Clear tokens and credentials storage state
+    localStorage.removeItem('token')
     onLogout?.()
   }
 
@@ -316,7 +348,6 @@ export default function SettingsScreen({ onLogout }) {
         </div>
 
         <div style={seStyles.dangerButtonsClusterRowAlignContainer}>
-          {/* 🌟 REDESIGNED POWER COMPONENT LAYER: EXPLICIT IMMEDIATE LOCAL ACCOUNT SESSION TERMINATOR */}
           <button style={seStyles.dangerPrimaryActionButtonMarkup} onClick={handleImmediateLogout}>
             <LogOut size={12} /> Exit Portal Session
           </button>
@@ -327,16 +358,15 @@ export default function SettingsScreen({ onLogout }) {
       {/* MASTER SAVE CHANGE FOOTER TOOLBAR */}
       <div style={seStyles.masterActionToolbarFooterRowBase}>
         <button onClick={handleSaveChanges} disabled={loading} style={seStyles.masterSaveActionButtonMarkup}>
-          {loading ? <RefreshCw size={14} style={seStyles.spinAnimationClassAsset} /> : 'Save Changes'}
+          {loading ? 'Saving...' : 'Save Changes'}
         </button>
-        <button style={seStyles.masterCancelActionButtonMarkup}>Cancel</button>
+        <button onClick={fetchGlobalSettings} style={seStyles.masterCancelActionButtonMarkup}>Cancel</button>
       </div>
 
     </div>
   )
 }
 
-// ── ARRANGED MASTER SETTINGS SYSTEM STYLESHEET ──────────────────────────────
 const seStyles = {
   workspaceWrapperContainer: { 
     display: 'flex', 
@@ -472,7 +502,7 @@ const seStyles = {
   },
   dropdownOverlayIconChevron: { 
     position: 'absolute', 
-    right: '14px',
+    right: '14px', 
     pointerEvents: 'none' 
   },
   interactiveToggleRowStrip: { 
@@ -643,20 +673,20 @@ const seStyles = {
     alignItems: 'center', 
     flexShrink: 0 
   },
-  dangerPrimaryActionButtonMarkup: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    backgroundColor: '#E11D48',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: '10px',
-    padding: '10px 16px',
-    fontSize: '12px',
-    fontWeight: 700,
-    cursor: 'pointer',
-    outline: 'none',
-    boxShadow: '0 2px 4px rgba(225,29,72,0.1)'
+  dangerPrimaryActionButtonMarkup: { 
+    display: 'flex', 
+    alignItems: 'center', 
+    gap: '6px', 
+    backgroundColor: '#E11D48', 
+    color: '#ffffff', 
+    border: 'none', 
+    borderRadius: '10px', 
+    padding: '10px 16px', 
+    fontSize: '12px', 
+    fontWeight: 700, 
+    cursor: 'pointer', 
+    outline: 'none', 
+    boxShadow: '0 2px 4px rgba(225,29,72,0.1)' 
   },
   dangerSecondaryActionButtonMarkup: { 
     backgroundColor: '#FEE2E2', 
@@ -705,8 +735,5 @@ const seStyles = {
     fontWeight: 700, 
     cursor: 'pointer', 
     outline: 'none' 
-  },
-  spinAnimationClassAsset: { 
-    animation: 'spin 1s linear infinite' 
   }
 }

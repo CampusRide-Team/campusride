@@ -1,170 +1,238 @@
 import React, { useState, useEffect } from 'react'
 import { 
-  User, 
-  Shield, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  Activity, 
-  Key, 
-  Monitor, 
-  History 
+  BarChart3, 
+  Clock, 
+  TrendingUp, 
+  Zap, 
+  Star
 } from 'lucide-react'
+import api from '../api/axios'
 
-export default function AdminProfileScreen() {
+export default function AnalyticsScreen() {
+  const [metrics, setMetrics] = useState([])
+  const [popularZones, setPopularZones] = useState([])
+  const [driverPerformance, setDriverPerformance] = useState([])
+  const [chartData, setChartData] = useState([])
+  const [activityOverview, setActivityOverview] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [profileData, setProfileData] = useState(null)
-  const [auditLogs, setAuditLogs] = useState([])
-  const [activeSessions, setActiveSessions] = useState([])
 
   useEffect(() => {
-    const fetchAdminProfileData = async () => {
+    const fetchAnalyticsData = async () => {
       try {
         setLoading(true)
+        const res = await api.get('/admin/analytics/snapshot')
+        
+        if (res.data?.success && res.data?.data) {
+          const { metrics: rawMetrics, popularZones: rawZones, driverPerformance: rawDrivers, chartData: rawChart, activityOverview: rawOverview } = res.data.data
 
-        // 💡 BACKEND TODO: Batch load individual administrator identity states & immutable logs
-        // const [profileRes, logsRes, sessionsRes] = await Promise.all([
-        //   axios.get('/api/v1/admin/profile'),
-        //   axios.get('/api/v1/admin/profile/audit-logs'),
-        //   axios.get('/api/v1/admin/profile/active-sessions')
-        // ])
+          const iconLookup = {
+            barChart: <BarChart3 size={18} color="#1E3A8A" />,
+            clock: <Clock size={18} color="#1E3A8A" />,
+            zap: <Zap size={18} color="#1E3A8A" />,
+            trendingUp: <TrendingUp size={18} color="#CA8A04" />
+          }
 
-        setProfileData({
-          name: 'Dr. Julian Vance',
-          role: 'System Administrator',
-          clearance: 'Level 5 (Full Read/Write/Override)',
-          department: 'Campus Logistics & Security Operations',
-          email: 'j.vance@st.ug.edu.gh',
-          phone: '+233 24 112 9901',
-          joinedDate: 'January 10, 2026'
-        })
+          setMetrics(rawMetrics.map(item => ({
+            ...item,
+            icon: iconLookup[item.icon] || <BarChart3 size={18} />
+          })))
 
-        setAuditLogs([
-          { id: 1, action: 'Global Broadcast Dispatched', details: 'Transmitted system maintenance warning to all platform users.', time: 'Today • 14:45', status: 'SUCCESS', color: '#16A34A' },
-          { id: 2, action: 'Operator Account Suspended', details: 'Force-terminated active dispatch tokens for Driver ID-99.', time: 'Yesterday • 09:12', status: 'SUCCESS', color: '#16A34A' },
-          { id: 3, action: 'Driver Document Vetting', details: 'Approved commercial license credential registry for Emmanuel Kofi Boateng.', time: 'June 16, 2026', status: 'SUCCESS', color: '#16A34A' }
-        ])
-
-        setActiveSessions([
-          { id: 'S1', device: 'Chrome / macOS (Accra, Ghana)', current: true, ip: '192.168.1.104', activity: 'Active Now' },
-          { id: 'S2', device: 'Safari / iPhone 15 Pro', current: false, ip: '102.176.45.12', activity: '2 Hours Ago' }
-        ])
-
-      } catch (err) {
-        console.error("Failed initializing secure administrative account metrics:", err)
+          setPopularZones(rawZones)
+          setDriverPerformance(rawDrivers)
+          setChartData(rawChart)
+          setActivityOverview(rawOverview)
+        }
+      } catch (error) {
+        console.error("Analytics synchronization issue:", error)
       } finally {
         setLoading(false)
       }
     }
 
-    fetchAdminProfileData()
+    fetchAnalyticsData()
   }, [])
 
   if (loading) {
     return (
-      <div style={profStyles.loadingFrame}>
-        <span style={profStyles.loadingText}>Verifying Administrative Clearance Level...</span>
+      <div style={anStyles.loadingFallbackFrame}>
+        <span style={anStyles.loadingSpinnerPlaceholder}>Loading System Metrics...</span>
       </div>
     )
   }
 
-  return (
-    <div style={profStyles.workspaceContainer}>
+  // Find the maximum value in chartData to scale heights proportionally safely
+  const maxVal = Math.max(...chartData.map(d => Math.max(d.standard, d.premium, 1)), 10)
 
-      {/* 1. TOP MASTER PROFILE INFORMATION HEAD CARD */}
-      <div style={profStyles.profileHeaderCard}>
-        <div style={profStyles.avatarSectionRow}>
-          <div style={profStyles.profileAvatarMock}>JV</div>
-          <div style={profStyles.identityTextStackBlock}>
-            <h2 style={profStyles.profileNameTitleText}>{profileData?.name}</h2>
-            <p style={profStyles.profileRoleSubtitleText}>{profileData?.role}</p>
-            <div style={profStyles.clearanceBadgeFlexRowLine}>
-              <Shield size={12} color="#1E3A8A" />
-              <span style={profStyles.clearanceBadgeText}>{profileData?.clearance}</span>
-            </div>
-          </div>
-        </div>
+  return (
+    <div style={anStyles.workspaceWrapperContainer}>
+
+      {/* HEADER SECTION */}
+      <div style={anStyles.screenHeaderRow}>
+        <h2 style={anStyles.screenTitleMainText}>Analytics Overview</h2>
+        <p style={anStyles.screenSubtitleSupportingText}>System-wide transportation insights, behavioral performance indicators, and dispatch activity trends.</p>
       </div>
 
-      {/* 2. SPLIT LAYOUT WORKSPACE CANVAS METRICS */}
-      <div style={profStyles.splitContentRowCanvas}>
-
-        {/* LEFT COLUMN COMPONENT LAYER: GRANULAR METADATA FIELDS */}
-        <div style={profStyles.leftWorkspaceMainColumn}>
-          <div style={profStyles.detailsContainerCard}>
-            <h3 style={profStyles.containerBlockTitle}>Account Blueprint Fields</h3>
-
-            <div style={profStyles.metaDataFieldsVerticalStackContainer}>
-              <div style={profStyles.metaDataFieldUnitRow}>
-                <div style={profStyles.fieldLabelFlexRowLine}><Mail size={14} color="#94A3B8" /><span>Email Identity</span></div>
-                <span style={profStyles.fieldValueStrongText}>{profileData?.email}</span>
-              </div>
-
-              <div style={profStyles.metaDataFieldUnitRow}>
-                <div style={profStyles.fieldLabelFlexRowLine}><Phone size={14} color="#94A3B8" /><span>Contact Number</span></div>
-                <span style={profStyles.fieldValueStrongText}>{profileData?.phone}</span>
-              </div>
-
-              <div style={profStyles.metaDataFieldUnitRow}>
-                <div style={profStyles.fieldLabelFlexRowLine}><MapPin size={14} color="#94A3B8" /><span>Assigned Department</span></div>
-                <span style={profStyles.fieldValueStrongText}>{profileData?.department}</span>
-              </div>
-
-              <div style={profStyles.metaDataFieldUnitRow}>
-                <div style={profStyles.fieldLabelFlexRowLine}><Activity size={14} color="#94A3B8" /><span>Account Hydration Lifecycle</span></div>
-                <span style={profStyles.fieldValueStrongText}>Registered since {profileData?.joinedDate}</span>
+      {/* 1. TOP SUMMARY METRICS GRID */}
+      <div style={anStyles.metricsGrid}>
+        {metrics.map((m) => (
+          <div key={m.id} style={anStyles.statCard}>
+            <div style={anStyles.statBodyBlock}>
+              <span style={anStyles.statLabelText}>{m.label}</span>
+              <div style={anStyles.statNumberGroup}>
+                <span style={anStyles.statNumberText}>{m.value}</span>
+                <span style={anStyles.statTrendText}>{m.change}</span>
               </div>
             </div>
+            <div style={{ ...anStyles.statIconBadge, backgroundColor: m.bg }}>{m.icon}</div>
           </div>
+        ))}
+      </div>
 
-          {/* ACTIVE LOGGED-IN VALIDATION SESSIONS WIDGET */}
-          <div style={profStyles.detailsContainerCard}>
-            <h3 style={profStyles.containerBlockTitle}>Active Login Sessions</h3>
-            <div style={profStyles.sessionsVerticalStackListContainer}>
-              {activeSessions.map((session) => (
-                <div key={session.id} style={profStyles.sessionListItemRowStrip}>
-                  <div style={profStyles.sessionLeftDetailsCluster}>
-                    <Monitor size={16} color="#1E3A8A" />
-                    <div style={profStyles.sessionTextStackGroup}>
-                      <span style={profStyles.sessionDeviceStrongText}>{session.device}</span>
-                      <span style={profStyles.sessionIpSubLabelText}>IP Address: {session.ip}</span>
+      {/* 2. MIDDLE AREA CANVAS */}
+      <div style={anStyles.splitContentRowCanvas}>
+
+        {/* CHART VISUAL CANVAS PANEL */}
+        <div style={anStyles.leftWorkspaceMainColumn}>
+          <div style={anStyles.chartContainerCard}>
+            <div style={anStyles.panelHeaderRowFlexHeader}>
+              <h3 style={anStyles.containerBlockTitle}>Trip Activity Distribution</h3>
+              <span style={anStyles.timeframeBadgeIndicator}>Last 7 Days</span>
+            </div>
+
+            <div style={anStyles.chartBarsTrackViewportFrame}>
+              {chartData.map((data, idx) => {
+                // Proportional bar scaling calculation
+                const standardHeight = (data.standard / maxVal) * 140
+                const premiumHeight = (data.premium / maxVal) * 140
+
+                return (
+                  <div key={idx} style={anStyles.chartColumnTrackWrapper}>
+                    <div style={anStyles.dualBarGroupClusterContainer}>
+                      <div style={{ ...anStyles.chartBarColumnElement, height: `${Math.max(standardHeight, 4)}px`, opacity: data.standard === 0 ? 0.15 : 1 }} title={`Standard: ${data.standard}`} />
+                      <div style={{ ...anStyles.chartBarColumnElementShared, height: `${Math.max(premiumHeight, 4)}px`, opacity: data.premium === 0 ? 0.15 : 1 }} title={`Shared: ${data.premium}`} />
                     </div>
+                    <span style={anStyles.chartAxisDayLabel}>{data.day}</span>
                   </div>
-                  <span style={{ 
-                    ...profStyles.sessionStatusIndicatorTagPillMarkup, 
-                    backgroundColor: session.current ? '#DCFCE7' : '#F1F5F9',
-                    color: session.current ? '#15803D' : '#64748B'
-                  }}>
-                    {session.activity}
-                  </span>
+                )
+              })}
+            </div>
+
+            <div style={anStyles.chartLegendsFlexContainerRow}>
+              <div style={anStyles.legendIndicatorUnitItem}>
+                <span style={anStyles.legendDotBlue} /> Standard Single Rides
+              </div>
+              <div style={anStyles.legendIndicatorUnitItem}>
+                <span style={anStyles.legendDotGreen} /> Shared Group Rides
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* POPULAR PICKUP HUBS SIDEBAR */}
+        <div style={anStyles.rightWorkspaceSidebarPanel}>
+          <div style={anStyles.popularHubsContainerCard}>
+            <h3 style={anStyles.containerBlockTitle}>Popular Pickup Hubs</h3>
+
+            <div style={anStyles.hubsVerticalStackListContainer}>
+              {popularZones.map((zone) => (
+                <div key={zone.rank} style={anStyles.hubListItemBlockStrip}>
+                  <div style={{ ...anStyles.hubRankBadgeCircle, backgroundColor: zone.color, color: zone.textColor }}>
+                    {zone.rank}
+                  </div>
+                  <div style={anStyles.hubTextDetailsMetadataStackGroup}>
+                    <span style={anStyles.hubPrimaryLocationNameTitleText}>{zone.name}</span>
+                    <span style={anStyles.hubSecondaryVolumeCounterText}>{zone.trips}</span>
+                  </div>
+                  <span style={{ ...anStyles.hubStatusIndicatorLabelTagPillMarkup, color: zone.textColor }}>{zone.status}</span>
                 </div>
               ))}
             </div>
           </div>
         </div>
 
-        {/* RIGHT COLUMN COMPONENT LAYER: SECURITY ACTION AUDIT TRAIL */}
-        <div style={profStyles.rightWorkspaceSidebarPanel}>
-          <div style={profStyles.auditTrailContainerCard}>
-            <div style={profStyles.panelHeaderRowFlexHeader}>
-              <History size={16} color="#1E3A8A" />
-              <h3 style={profStyles.containerBlockTitle}>Immutable Administrative Action Logs</h3>
-            </div>
+      </div>
 
-            <div style={profStyles.auditLogsChronologicalVerticalTrackListContainer}>
-              {auditLogs.map((log) => (
-                <div key={log.id} style={profStyles.auditLogEventStripBlock}>
-                  <div style={profStyles.logEventFlexTopHeaderLine}>
-                    <span style={profStyles.logActionHeadingTitleText}>{log.action}</span>
-                    <span style={profStyles.logMicroTimestampLabelText}>{log.time}</span>
-                  </div>
-                  <p style={profStyles.logParagraphDescriptionBodyText}>{log.details}</p>
-                  <span style={{ ...profStyles.logStatusPillMarkup, color: log.color }}>System Verification Status: {log.status}</span>
-                </div>
-              ))}
-            </div>
+      {/* 3. BOTTOM AREA CANVAS */}
+      <div style={anStyles.bottomDoubleGridCanvasRow}>
+
+        {/* DRIVER PERFORMANCE TABLE */}
+        <div style={anStyles.tableWorkspaceCardContainer}>
+          <h3 style={anStyles.containerBlockTitle}>Driver Performance Summary</h3>
+          <div style={anStyles.tableScrollFrameworkWrapper}>
+            {driverPerformance.length > 0 ? (
+              <table style={anStyles.tableStructureMarkup}>
+                <thead>
+                  <tr>
+                    <th style={anStyles.thLeftAligned}>DRIVER OPERATOR NAME</th>
+                    <th style={anStyles.thCenterAligned}>PERFORMANCE RATING</th>
+                    <th style={anStyles.thCenterAligned}>COMPLETED DISPATCHES</th>
+                    <th style={anStyles.thRightAligned}>CURRENT STATUS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {driverPerformance.map((drv, idx) => (
+                    <tr key={idx} style={anStyles.tableDataRowMarkup}>
+                      <td style={anStyles.tdPrimaryDriverNameCellText}>{drv.name}</td>
+                      <td style={anStyles.tdCenterAlignedDataCellRowText}>
+                        <span style={anStyles.ratingStarFlexBadgeLine}>
+                          <Star size={12} fill={drv.rating === 'N/A' ? 'transparent' : '#CA8A04'} color="#CA8A04" /> {drv.rating}
+                        </span>
+                      </td>
+                      <td style={anStyles.tdBoldTripsCounterCellRowText}>{drv.trips} trips</td>
+                      <td style={anStyles.tdRightAlignedDataCellRowText}>
+                        <span style={{ ...anStyles.statusBadgeIndicatorPillMarkup, backgroundColor: drv.statusBg, color: drv.statusColor }}>
+                          {drv.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div style={anStyles.emptyStateTextWrapper}>No performance data logged. Onboarded active drivers array empty.</div>
+            )}
           </div>
         </div>
+
+        {/* RIDER ACTIVITY OVERVIEW */}
+        {activityOverview && (
+          <div style={anStyles.engagementOverviewCardContainer}>
+            <h3 style={anStyles.containerBlockTitle}>Rider Activity Overview</h3>
+
+            <div style={anStyles.engagementMetricsDataSplitRowContainer}>
+              <div style={anStyles.engagementDataColumnBlockStack}>
+                <span style={anStyles.engagementMicroTitleFieldLabel}>REGISTRATION GROWTH</span>
+                <span style={anStyles.engagementMetricPrimaryLargeValueText}>{activityOverview.growth}</span>
+              </div>
+              <div style={anStyles.engagementDataColumnBlockStack}>
+                <span style={anStyles.engagementMicroTitleFieldLabel}>RIDE REQUEST TRENDS</span>
+                <span style={anStyles.engagementMetricPrimaryLargeValueText}>{activityOverview.trends}</span>
+              </div>
+            </div>
+
+            <div style={anStyles.progressionBarsStackTrackContainer}>
+              <div style={anStyles.progressUnitGroupTrackBlock}>
+                <div style={anStyles.progressLabelFlexRowLine}>
+                  <span style={anStyles.progressLabelTitleText}>MORNINGS (7-11 AM)</span>
+                  <span style={anStyles.progressPercentageCounterLabelValueText}>{activityOverview.morningProgress}</span>
+                </div>
+                <div style={anStyles.progressBarBaseTrackLine}>
+                  <div style={{ ...anStyles.progressBarFilledInnerActiveLine, width: activityOverview.morningProgress }} />
+                </div>
+              </div>
+
+              <div style={anStyles.progressUnitGroupTrackBlock}>
+                <div style={anStyles.progressLabelFlexRowLine}>
+                  <span style={anStyles.progressLabelTitleText}>AFTERNOONS (1-5 PM)</span>
+                  <span style={anStyles.progressPercentageCounterLabelValueText}>{activityOverview.afternoonProgress}</span>
+                </div>
+                <div style={anStyles.progressBarBaseTrackLine}>
+                  <div style={{ ...anStyles.progressBarFilledInnerActiveLine, width: activityOverview.afternoonProgress, backgroundColor: '#64748B' }} />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
 
@@ -172,262 +240,452 @@ export default function AdminProfileScreen() {
   )
 }
 
-// ── ARRANGED SECURE ADMINISTRATOR PROFILE VIEWPORT CANVAS STYLESHEET ─────────
-const profStyles = {
-  workspaceContainer: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: '24px', 
-    width: '100%', 
-    boxSizing: 'border-box' 
+ const anStyles = {
+  workspaceWrapperContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '24px',
+    width: '100%',
+    boxSizing: 'border-box'
   },
-  profileHeaderCard: { 
-    backgroundColor: '#ffffff', 
-    borderRadius: '16px', 
-    border: '1px solid #E2E8F0', 
-    padding: '32px', 
-    display: 'flex', 
-    justifyContent: 'flex-start', 
-    alignItems: 'center', 
-    boxShadow: '0 1px 2px rgba(0,0,0,0.01)', 
-    width: '100%', 
-    boxSizing: 'border-box' 
+  screenHeaderRow: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    textAlign: 'left',
+    marginBottom: '4px'
   },
-  avatarSectionRow: { 
-    display: 'flex', 
-    alignItems: 'center', 
-    gap: '24px' 
+  screenTitleMainText: {
+    fontSize: '22px',
+    fontWeight: 800,
+    color: '#1E3A8A',
+    margin: 0
   },
-  profileAvatarMock: { 
-    width: '80px', 
-    height: '80px', 
-    borderRadius: '24px', 
-    backgroundColor: '#1E3A8A', 
-    color: '#ffffff', 
-    fontSize: '28px', 
-    fontWeight: 800, 
-    display: 'flex', 
-    alignItems: 'center', 
-    justifyContent: 'center' 
+  screenSubtitleSupportingText: {
+    fontSize: '13px',
+    color: '#64748B',
+    fontWeight: 500,
+    margin: 0,
+    lineHeight: '1.4'
   },
-  identityTextStackBlock: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: '4px', 
-    textAlign: 'left' 
+  metricsGrid: {
+    display: 'flex',
+    gap: '20px',
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    justifyContent: 'space-between'
   },
-  profileNameTitleText: { 
-    fontSize: '22px', 
-    fontWeight: 900, 
-    color: '#0F172A', 
-    margin: 0 
+  statCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: '16px',
+    border: '1px solid #E2E8F0',
+    padding: '20px',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.01)',
+    flex: 1
   },
-  profileRoleSubtitleText: { 
-    fontSize: '13px', 
-    fontWeight: 600, 
-    color: '#64748B', 
-    margin: 0 
+  statBodyBlock: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    textAlign: 'left'
   },
-  clearanceBadgeFlexRowLine: { 
-    display: 'flex', 
-    alignItems: 'center', 
-    gap: '6px', 
-    marginTop: '2px' 
+  statLabelText: {
+    fontSize: '12px',
+    color: '#64748B',
+    fontWeight: 600
   },
-  clearanceBadgeText: { 
-    fontSize: '11px', 
-    fontWeight: 700, 
-    color: '#1E3A8A', 
-    backgroundColor: '#EFF6FF', 
-    padding: '2px 8px', 
-    borderRadius: '6px' 
+  statNumberGroup: {
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: '8px'
   },
-  splitContentRowCanvas: { 
-    display: 'flex', 
-    gap: '32px', 
-    width: '100%', 
-    boxSizing: 'border-box', 
-    alignItems: 'stretch' 
+  statNumberText: {
+    fontSize: '20px',
+    fontWeight: 800,
+    color: '#0F172A'
   },
-  leftWorkspaceMainColumn: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    flex: 1.4, 
-    gap: '24px', 
-    boxSizing: 'border-box' 
+  statTrendText: {
+    fontSize: '11px',
+    fontWeight: 700,
+    color: '#16A34A'
   },
-  detailsContainerCard: { 
-    backgroundColor: '#ffffff', 
-    borderRadius: '16px', 
-    border: '1px solid #E2E8F0', 
-    padding: '24px', 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: '20px', 
-    boxSizing: 'border-box' 
+  statIconBadge: {
+    width: '36px',
+    height: '36px',
+    borderRadius: '12px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
   },
-  containerBlockTitle: { 
-    fontSize: '13px', 
-    fontWeight: 800, 
-    color: '#1E3A8A', 
-    margin: 0, 
-    textTransform: 'uppercase', 
-    letterSpacing: '0.4px', 
-    textAlign: 'left' 
+  splitContentRowCanvas: {
+    display: 'flex',
+    gap: '32px',
+    width: '100%',
+    boxSizing: 'border-box',
+    alignItems: 'stretch'
   },
-  metaDataFieldsVerticalStackContainer: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    width: '100%' 
+  leftWorkspaceMainColumn: {
+    display: 'flex',
+    flexDirection: 'column',
+    flex: 2.2,
+    boxSizing: 'border-box'
   },
-  metaDataFieldUnitRow: { 
-    display: 'flex', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    padding: '16px 0', 
-    borderBottom: '1px solid #F8FAFC', 
-    gap: '16px' 
+  chartContainerCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: '16px',
+    border: '1px solid #E2E8F0',
+    padding: '24px',
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '24px',
+    boxSizing: 'border-box'
   },
-  fieldLabelFlexRowLine: { 
-    display: 'flex', 
-    alignItems: 'center', 
-    gap: '10px', 
-    fontSize: '12px', 
-    color: '#64748B', 
-    fontWeight: 600 
+  panelHeaderRowFlexHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%'
   },
-  fieldValueStrongText: { 
-    fontSize: '13px', 
-    fontWeight: 700, 
-    color: '#1E293B', 
-    textAlign: 'right' 
+  containerBlockTitle: {
+    fontSize: '14px',
+    fontWeight: 800,
+    color: '#1E3A8A',
+    margin: 0,
+    textTransform: 'uppercase',
+    letterSpacing: '0.4px',
+    textAlign: 'left'
   },
-  sessionsVerticalStackListContainer: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: '12px', 
-    width: '100%' 
+  timeframeBadgeIndicator: {
+    fontSize: '11px',
+    fontWeight: 700,
+    color: '#64748B',
+    backgroundColor: '#F1F5F9',
+    padding: '4px 10px',
+    borderRadius: '6px'
   },
-  sessionListItemRowStrip: { 
-    display: 'flex', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    padding: '12px', 
-    border: '1px solid #F1F5F9', 
-    borderRadius: '12px', 
-    backgroundColor: '#FAFCFF', 
-    gap: '16px' 
+  chartBarsTrackViewportFrame: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    height: '180px',
+    borderBottom: '1px solid #E2E8F0',
+    paddingBottom: '12px',
+    gap: '10px'
   },
-  sessionLeftDetailsCluster: { 
-    display: 'flex', 
-    alignItems: 'center', 
-    gap: '12px', 
-    textAlign: 'left' 
+  chartColumnTrackWrapper: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '10px'
   },
-  sessionTextStackGroup: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: '2px' 
+  dualBarGroupClusterContainer: {
+    display: 'flex',
+    alignItems: 'flex-end',
+    gap: '4px',
+    width: '100%',
+    justifyContent: 'center'
   },
-  sessionDeviceStrongText: { 
-    fontSize: '12px', 
-    fontWeight: 700, 
-    color: '#1E293B' 
+  chartBarColumnElement: {
+    width: '14px',
+    borderRadius: '3px 3px 0 0',
+    transition: 'opacity 0.15s ease',
+    cursor: 'pointer',
+    backgroundColor: '#1E3A8A'
   },
-  sessionIpSubLabelText: { 
-    fontSize: '11px', 
-    color: '#94A3B8', 
-    fontWeight: 500 
+  chartBarColumnElementShared: {
+    width: '14px',
+    borderRadius: '3px 3px 0 0',
+    transition: 'opacity 0.15s ease',
+    cursor: 'pointer',
+    backgroundColor: '#A3E635'
   },
-  sessionStatusIndicatorTagPillMarkup: { 
-    fontSize: '10px', 
-    fontWeight: 800, 
-    padding: '4px 10px', 
-    borderRadius: '6px' 
+  chartAxisDayLabel: {
+    fontSize: '10px',
+    fontWeight: 700,
+    color: '#94A3B8'
   },
-  rightWorkspaceSidebarPanel: { 
-    backgroundColor: '#ffffff', 
-    borderRadius: '16px', 
-    border: '1px solid #E2E8F0', 
-    padding: '24px', 
-    flex: 1.6, 
-    display: 'flex', 
-    flexDirection: 'column', 
-    minWidth: '340px', 
-    boxSizing: 'border-box' 
+  chartLegendsFlexContainerRow: {
+    display: 'flex',
+    gap: '24px',
+    alignItems: 'center',
+    justifyContent: 'flex-start'
   },
-  auditTrailContainerCard: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: '20px', 
-    width: '100%' 
+  legendIndicatorUnitItem: {
+    fontSize: '11px',
+    color: '#64748B',
+    fontWeight: 600,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px'
   },
-  panelHeaderRowFlexHeader: { 
-    display: 'flex', 
-    alignItems: 'center', 
-    gap: '8px', 
-    width: '100%', 
-    borderBottom: '1px solid #F1F5F9', 
-    paddingBottom: '14px' 
+  legendDotBlue: {
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    backgroundColor: '#1E3A8A'
   },
-  auditLogsChronologicalVerticalTrackListContainer: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: '16px', 
-    maxHeight: '520px', 
-    overflowY: 'auto', 
-    paddingRight: '4px' 
+  legendDotGreen: {
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    backgroundColor: '#A3E635'
   },
-  auditLogEventStripBlock: { 
-    padding: '14px', 
-    border: '1px solid #E2E8F0', 
-    borderRadius: '12px', 
-    backgroundColor: '#FAFCFF', 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: '6px', 
-    textAlign: 'left' 
+  rightWorkspaceSidebarPanel: {
+    backgroundColor: '#ffffff',
+    borderRadius: '16px',
+    border: '1px solid #E2E8F0',
+    padding: '24px',
+    flex: 1.2,
+    display: 'flex',
+    flexDirection: 'column',
+    minWidth: '340px',
+    boxSizing: 'border-box'
   },
-  logEventFlexTopHeaderLine: { 
-    display: 'flex', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    width: '100%' 
+  popularHubsContainerCard: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '20px',
+    width: '100%'
   },
-  logActionHeadingTitleText: { 
-    fontSize: '13px', 
-    fontWeight: 700, 
-    color: '#1E293B' 
+  hubsVerticalStackListContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px'
   },
-  logMicroTimestampLabelText: { 
-    fontSize: '11px', 
-    color: '#94A3B8', 
-    fontWeight: 600 
+  hubListItemBlockStrip: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '14px',
+    padding: '12px',
+    border: '1px solid #F1F5F9',
+    borderRadius: '12px',
+    backgroundColor: '#FAFCFF',
+    textAlign: 'left'
   },
-  logParagraphDescriptionBodyText: { 
-    margin: 0, 
-    fontSize: '12px', 
-    color: '#475569', 
-    lineHeight: '1.45', 
-    fontWeight: 500 
+  hubRankBadgeCircle: {
+    width: '28px',
+    height: '28px',
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '12px',
+    fontWeight: 800
   },
-  logStatusPillMarkup: { 
-    fontSize: '10px', 
-    fontWeight: 700, 
-    textTransform: 'uppercase', 
-    letterSpacing: '0.3px', 
-    marginTop: '2px' 
+  hubTextDetailsMetadataStackGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+    flex: 1
   },
-  loadingFrame: { 
-    display: 'flex', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    height: '75vh', 
-    width: '100%' 
+  hubPrimaryLocationNameTitleText: {
+    fontSize: '12px',
+    fontWeight: 700,
+    color: '#1E293B'
   },
-  loadingText: { 
-    fontSize: '14px', 
-    color: '#1E3A8A', 
-    fontWeight: 700 
+  hubSecondaryVolumeCounterText: {
+    fontSize: '11px',
+    fontWeight: 600,
+    color: '#64748B'
+  },
+  hubStatusIndicatorLabelTagPillMarkup: {
+    fontSize: '10px',
+    fontWeight: 800,
+    textTransform: 'uppercase',
+    letterSpacing: '0.3px'
+  },
+  bottomDoubleGridCanvasRow: {
+    display: 'grid',
+    gridTemplateColumns: '1.6fr 1fr',
+    gap: '32px',
+    width: '100%',
+    alignItems: 'stretch'
+  },
+  tableWorkspaceCardContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: '16px',
+    border: '1px solid #E2E8F0',
+    padding: '24px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '20px',
+    boxSizing: 'border-box'
+  },
+  tableScrollFrameworkWrapper: {
+    width: '100%',
+    overflowX: 'auto'
+  },
+  tableStructureMarkup: {
+    width: '100%',
+    borderCollapse: 'collapse'
+  },
+  thLeftAligned: {
+    paddingBottom: '12px',
+    fontSize: '10px',
+    fontWeight: 800,
+    color: '#94A3B8',
+    borderBottom: '1px solid #F1F5F9',
+    letterSpacing: '0.5px',
+    textAlign: 'left'
+  },
+  thCenterAligned: {
+    paddingBottom: '12px',
+    fontSize: '10px',
+    fontWeight: 800,
+    color: '#94A3B8',
+    borderBottom: '1px solid #F1F5F9',
+    letterSpacing: '0.5px',
+    textAlign: 'center'
+  },
+  thRightAligned: {
+    paddingBottom: '12px',
+    fontSize: '10px',
+    fontWeight: 800,
+    color: '#94A3B8',
+    borderBottom: '1px solid #F1F5F9',
+    letterSpacing: '0.5px',
+    textAlign: 'right'
+  },
+  tableDataRowMarkup: {
+    borderBottom: '1px solid #F8FAFC'
+  },
+  tdPrimaryDriverNameCellText: {
+    padding: '14px 0',
+    fontSize: '13px',
+    fontWeight: 700,
+    color: '#1E293B',
+    textAlign: 'left'
+  },
+  tdCenterAlignedDataCellRowText: {
+    padding: '14px 0',
+    fontSize: '12px',
+    fontWeight: 600,
+    color: '#475569',
+    textAlign: 'center'
+  },
+  ratingStarFlexBadgeLine: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    fontWeight: 700
+  },
+  tdBoldTripsCounterCellRowText: {
+    padding: '14px 0',
+    fontSize: '12px',
+    fontWeight: 700,
+    color: '#1E3A8A',
+    textAlign: 'center'
+  },
+  tdRightAlignedDataCellRowText: {
+    padding: '14px 0',
+    textAlign: 'right'
+  },
+  statusBadgeIndicatorPillMarkup: {
+    fontSize: '10px',
+    fontWeight: 800,
+    padding: '4px 10px',
+    borderRadius: '6px',
+    display: 'inline-block'
+  },
+  engagementOverviewCardContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: '16px',
+    border: '1px solid #E2E8F0',
+    padding: '24px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '24px',
+    boxSizing: 'border-box'
+  },
+  engagementMetricsDataSplitRowContainer: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '16px',
+    width: '100%'
+  },
+  engagementDataColumnBlockStack: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+    padding: '14px',
+    border: '1px solid #F1F5F9',
+    borderRadius: '12px',
+    backgroundColor: '#FAFCFF',
+    textAlign: 'left'
+  },
+  engagementMicroTitleFieldLabel: {
+    fontSize: '9px',
+    fontWeight: 800,
+    color: '#94A3B8',
+    letterSpacing: '0.4px'
+  },
+  engagementMetricPrimaryLargeValueText: {
+    fontSize: '22px',
+    fontWeight: 800,
+    color: '#1E293B'
+  },
+  progressionBarsStackTrackContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+    width: '100%'
+  },
+  progressUnitGroupTrackBlock: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px'
+  },
+  progressLabelFlexRowLine: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  progressLabelTitleText: {
+    fontSize: '10px',
+    fontWeight: 800,
+    color: '#64748B',
+    letterSpacing: '0.3px'
+  },
+  progressPercentageCounterLabelValueText: {
+    fontSize: '11px',
+    fontWeight: 700,
+    color: '#1E293B'
+  },
+  progressBarBaseTrackLine: {
+    width: '100%',
+    height: '6px',
+    backgroundColor: '#E2E8F0',
+    borderRadius: '10px',
+    overflow: 'hidden'
+  },
+  progressBarFilledInnerActiveLine: {
+    height: '100%',
+    backgroundColor: '#1E3A8A',
+    borderRadius: '10px'
+  },
+  loadingFallbackFrame: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '80vh',
+    width: '100%'
+  },
+  loadingSpinnerPlaceholder: {
+    fontSize: '14px',
+    color: '#1E3A8A',
+    fontWeight: 700
+  },
+  emptyStateTextWrapper: {
+    padding: '24px',
+    textAlign: 'center',
+    color: '#94A3B8',
+    fontSize: '12px',
+    fontWeight: 600
   }
 }

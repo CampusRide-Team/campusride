@@ -14,8 +14,10 @@ import {
   Globe,
   Send,
   Ban,
-  ShieldAlert
+  ShieldAlert,
+  Car
 } from 'lucide-react'
+import api from '../api/axios'
 
 export default function UserDirectoryScreen() {
   const [activeInspectorTab, setActiveInspectorTab] = useState('info') 
@@ -25,77 +27,63 @@ export default function UserDirectoryScreen() {
   const [metrics, setMetrics] = useState([])
   const [loading, setLoading] = useState(true)
 
-  // 1. 💡 BACKEND TODO: Implement Paginated User Records & Metrics Aggregation Loaders
-  useEffect(() => {
-    const fetchDirectoryState = async () => {
-      try {
-        setLoading(true)
-        // const [metricsRes, directoryRes] = await Promise.all([
-        //   axios.get('/api/v1/admin/users/metrics-summary'),
-        //   axios.get(`/api/v1/admin/users?query=${searchQuery}`)
-        // ])
+  const fetchDirectoryState = async (isInitial = false) => {
+    try {
+      if (isInitial) setLoading(true)
+      const response = await api.get(`/admin/users?query=${searchQuery}`)
+      if (response.data?.success && response.data?.data) {
+        const { metrics: rawMetrics, studentsData: rawUsers } = response.data.data
+        
+        const iconMapping = {
+          users: Users,
+          userCheck: UserCheck,
+          userPlus: UserPlus,
+          alertTriangle: AlertTriangle
+        }
 
-        setMetrics([
-          { id: 1, label: 'Total Accounts', value: '5,420', change: '↑ +12% from last month', icon: Users, color: '#1E3A8A', bg: '#DBEAFE', trendColor: '#15803D' },
-          { id: 2, label: 'Active Today', value: '1,890', change: '● Live Activity', icon: UserCheck, color: '#1E3A8A', bg: '#DCFCE7', trendColor: '#15803D' },
-          { id: 3, label: 'New Registrations', value: '45', change: 'Past 24 hours', icon: UserPlus, color: '#1E3A8A', bg: '#EFF6FF', trendColor: '#64748B' },
-          { id: 4, label: 'Flagged Accounts', value: '12', change: 'Requires Attention', icon: AlertTriangle, color: '#991B1B', bg: '#FEE2E2', trendColor: '#991B1B' }
-        ])
+        setMetrics(rawMetrics.map(item => ({
+          ...item,
+          icon: iconMapping[item.icon] || Users
+        })))
 
-        const stagingMockDirectory = [
-          { 
-            id: '#CR-2823-8842', userType: 'STUDENT', name: 'Alex Johnson', email: 'alex.j@st.ug.edu.gh', regDate: 'Sept 12, 2025', rideCount: 42, status: 'ACTIVE', phone: '+233 24 556 7891', residence: 'Jean Nelson Aka Hall', rideStatus: 'In Transit', image: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=150&h=150&q=80',
-            tripsHistory: [{ id: 'RIDE-78', date: 'June 15', route: 'Pent Hall → Main Gate', driver: 'E. Boateng', state: 'COMPLETED' }, { id: 'RIDE-62', date: 'June 12', route: 'Balme Library → Night Market', driver: 'K. Mensah', state: 'COMPLETED' }, { id: 'RIDE-41', date: 'June 10', route: 'Main Gate → Volta Hall', driver: 'S. Addo', state: 'CANCELED' }],
-            feedbackHistory: [{ rating: 5, comment: 'Very polite driver, clean car.', date: 'June 15' }, { rating: 2, comment: 'Driver took a long route to bypass traffic.', date: 'June 12' }],
-            reportsHistory: [{ type: 'Late for Pickup', reporter: 'Driver K. Mensah', date: 'June 12', details: 'Rider kept vehicle waiting at Balme Library loading zone for over 8 minutes.' }]
-          },
-          { 
-            id: '#CR-GUEST-0931', userType: 'GUEST', name: 'Michael Thompson', email: 'm.thompson92@gmail.com', regDate: 'Sep 05, 2025', rideCount: 14, status: 'ACTIVE', phone: '+233 50 441 0293', residence: 'External • Off-Campus Visitor', rideStatus: 'Offline', image: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150&q=80',
-            tripsHistory: [{ id: 'RIDE-69', date: 'June 14', route: 'Main Gate → Night Market', driver: 'S. Addo', state: 'COMPLETED' }],
-            feedbackHistory: [{ rating: 4, comment: 'Good dynamic drive around campus.', date: 'June 14' }],
-            reportsHistory: []
-          },
-          {
-            id: '#CR-2823-4412', userType: 'STUDENT', name: 'David Chen', email: 'd.chen@st.ug.edu.gh', regDate: 'Oct 15, 2025', rideCount: 2, status: 'FLAGGED', phone: '+233 27 987 6543', residence: 'Limann Hall', rideStatus: 'Offline', image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&h=150&q=80',
-            tripsHistory: [{ id: 'RIDE-12', date: 'April 02', route: 'Limann Hall → Main Gate', driver: 'E. Boateng', state: 'CANCELED' }],
-            feedbackHistory: [{ rating: 1, comment: 'Driver canceled without calling.', date: 'April 02' }],
-            reportsHistory: [{ type: 'Cash Fare Dispute', reporter: 'Driver E. Boateng', date: 'April 02', details: 'Rider refused to pay full standard fare surcharge upon arrival at Limann Hall gateway segment.' }, { type: 'Abusive Language', reporter: 'Driver S. Addo', date: 'March 24', details: 'Argument over vehicle pickup location marker choice.' }]
-          }
-        ]
+        setStudentsData(rawUsers)
 
-        setStudentsData(stagingMockDirectory)
-        setSelectedStudent(stagingMockDirectory[0])
-      } catch (err) {
-        console.error("Critical core error loading user directory payload lines:", err)
-      } finally {
-        setLoading(false)
+        if (rawUsers.length > 0) {
+          const stillExists = rawUsers.find(u => u.id === selectedStudent?.id)
+          setSelectedStudent(stillExists || rawUsers[0])
+        } else {
+          setSelectedStudent(null)
+        }
       }
+    } catch (err) {
+      console.error("Critical error loading directory metrics:", err)
+    } finally {
+      if (isInitial) setLoading(false)
     }
+  }
 
-    fetchDirectoryState()
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(() => {
+      fetchDirectoryState(true)
+    }, 400)
+    return () => clearTimeout(delayDebounceFn)
   }, [searchQuery])
 
-  // 2. 💡 BACKEND TODO: Connect Direct Action Mutators to REST Router Targets
   const handleAccountAction = async (targetId, actionProtocol) => {
     try {
-      // await axios.patch(`/api/v1/admin/users/${targetId}/status`, { action: actionProtocol })
-      console.log(`Dispatched enforcement rule [${actionProtocol.toUpperCase()}] targeting ID: ${targetId}`)
-
-      setStudentsData(prev => prev.map(user => {
-        if (user.id === targetId) {
-          return { ...user, status: actionProtocol === 'suspend' ? 'FLAGGED' : user.status }
-        }
-        return user
-      }))
+      const res = await api.patch(`/admin/users/${targetId}/status`, { action: actionProtocol })
+      if (res.data?.success) {
+        alert(`Action applied successfully: [${actionProtocol.toUpperCase()}]`)
+        fetchDirectoryState(false)
+      }
     } catch (err) {
-      console.error("Enforcement state tracking error:", err)
+      console.error("Enforcement target error:", err)
     }
   }
 
   const getStatusStyle = (status) => {
     switch (status) {
       case 'ACTIVE': return { backgroundColor: '#DCFCE7', color: '#15803D' }
-      case 'INACTIVE': return { backgroundColor: '#E2E8F0', color: '#475569' }
       case 'FLAGGED': return { backgroundColor: '#FEE2E2', color: '#991B1B' }
       default: return { backgroundColor: '#F1F5F9', color: '#64748B' }
     }
@@ -156,71 +144,81 @@ export default function UserDirectoryScreen() {
             </div>
 
             <div style={smStyles.tableScrollFrameworkWrapper}>
-              <table style={smStyles.tableStructureMarkup}>
-                <thead>
-                  <tr>
-                    <th style={{ ...smStyles.th, textAlign: 'left', paddingLeft: '24px' }}>NAME / CONTACT DETAILS</th>
-                    <th style={{ ...smStyles.th, textAlign: 'left' }}>ACCOUNT ROLE</th>
-                    <th style={{ ...smStyles.th, textAlign: 'left' }}>IDENTIFIER ID</th>
-                    <th style={{ ...smStyles.th, textAlign: 'left' }}>RIDE ACTIVITY</th>
-                    <th style={{ ...smStyles.th, textAlign: 'center' }}>STATUS</th>
-                    <th style={{ ...smStyles.th, textAlign: 'right', paddingRight: '24px' }}>ACTION</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {studentsData.map((user) => {
-                    const isSelected = selectedStudent && selectedStudent.id === user.id
-                    return (
-                      <tr 
-                        key={user.id} 
-                        style={{ 
-                          ...smStyles.tableDataRowMarkup, 
-                          backgroundColor: isSelected ? '#F8FAFC' : 'transparent', 
-                          borderLeft: isSelected ? '4px solid #1E3A8A' : '4px solid transparent' 
-                        }} 
-                        onClick={() => { setSelectedStudent(user); setActiveInspectorTab('info'); }}
-                      >
-                        <td style={{ ...smStyles.tdNameCellMarkup, paddingLeft: isSelected ? '20px' : '24px' }}>
-                          <div style={smStyles.avatarContainerNodeRelative}>
-                            <img src={user.image} alt={user.name} style={smStyles.tableRowAvatarImage} />
-                            {user.rideStatus === 'In Transit' && <div style={smStyles.tableRowOnlineStatusDotBadgeNode} />}
-                          </div>
-                          <div style={smStyles.tableNameTextStackGroup}>
-                            <span style={smStyles.studentProfilePrimaryNameText}>{user.name}</span>
-                            <span style={smStyles.studentProfileSecondaryEmailText}>{user.email}</span>
-                          </div>
-                        </td>
-                        <td style={smStyles.tdStandardDataText}>
-                          {user.userType === 'STUDENT' ? (
-                            <span style={smStyles.roleStudentBadge}><GraduationCap size={12} /> Student</span>
-                          ) : (
-                            <span style={smStyles.roleGuestBadge}><Globe size={12} /> Guest</span>
-                          )}
-                        </td>
-                        <td style={smStyles.tdStandardDataText}><span style={smStyles.monospaceIdentifierFont}>{user.id}</span></td>
-                        <td style={smStyles.tdStandardDataText}>
-                          <div style={smStyles.rideActivityStatusBarFlexBlock}>
-                            <div style={smStyles.progressBarTrackBaseLine}>
-                              <div style={{ ...smStyles.progressBarFilledTrackLine, width: `${Math.min(user.rideCount * 2.5, 100)}%` }} />
+              {studentsData.length > 0 ? (
+                <table style={smStyles.tableStructureMarkup}>
+                  <thead>
+                    <tr>
+                      <th style={{ ...smStyles.th, textAlign: 'left', paddingLeft: '24px' }}>NAME / CONTACT DETAILS</th>
+                      <th style={{ ...smStyles.th, textAlign: 'left' }}>ACCOUNT ROLE</th>
+                      <th style={{ ...smStyles.th, textAlign: 'left' }}>IDENTIFIER ID</th>
+                      <th style={{ ...smStyles.th, textAlign: 'left' }}>RIDE ACTIVITY</th>
+                      <th style={{ ...smStyles.th, textAlign: 'center' }}>STATUS</th>
+                      <th style={{ ...smStyles.th, textAlign: 'right', paddingRight: '24px' }}>ACTION</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {studentsData.map((user) => {
+                      const isSelected = selectedStudent && selectedStudent.id === user.id
+                      return (
+                        <tr 
+                          key={user.id} 
+                          style={{ 
+                            ...smStyles.tableDataRowMarkup, 
+                            backgroundColor: isSelected ? '#F8FAFC' : 'transparent', 
+                            borderLeft: isSelected ? '4px solid #1E3A8A' : '4px solid transparent' 
+                          }} 
+                          onClick={() => { setSelectedStudent(user); setActiveInspectorTab('info'); }}
+                        >
+                          <td style={{ ...smStyles.tdNameCellMarkup, paddingLeft: isSelected ? '20px' : '24px' }}>
+                            <div style={smStyles.avatarContainerNodeRelative}>
+                              {user.image ? (
+                                <img src={user.image} alt={user.name} style={smStyles.tableRowAvatarImage} />
+                              ) : (
+                                <div style={smStyles.tableRowAvatarMock}>{user.initials || user.name.slice(0, 2).toUpperCase()}</div>
+                              )}
+                              {user.rideStatus === 'In Transit' && <div style={smStyles.tableRowOnlineStatusDotBadgeNode} />}
                             </div>
-                            <span style={smStyles.rideVolumeTextCounterLabel}>{user.rideCount} rides</span>
-                          </div>
-                        </td>
-                        <td style={{ ...smStyles.tdStandardDataText, textAlign: 'center' }}>
-                          <span style={{ ...smStyles.statusBadgeIndicatorPill, ...getStatusStyle(user.status) }}>{user.status}</span>
-                        </td>
-                        <td style={{ ...smStyles.tdStandardDataText, textAlign: 'right', paddingRight: '24px' }}>
-                          <span style={smStyles.tableInteractiveInlineActionTextBtn}>Inspect</span>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+                            <div style={smStyles.tableNameTextStackGroup}>
+                              <span style={smStyles.studentProfilePrimaryNameText}>{user.name}</span>
+                              <span style={smStyles.studentProfileSecondaryEmailText}>{user.email}</span>
+                            </div>
+                          </td>
+                          <td style={smStyles.tdStandardDataText}>
+                            {user.userType === 'STUDENT' ? (
+                              <span style={smStyles.roleStudentBadge}><GraduationCap size={12} /> Student</span>
+                            ) : user.userType === 'DRIVER' ? (
+                              <span style={{ ...smStyles.roleStudentBadge, backgroundColor: '#DCFCE7', color: '#15803D' }}><Car size={12} /> Driver</span>
+                            ) : (
+                              <span style={smStyles.roleGuestBadge}><Globe size={12} /> Guest</span>
+                            )}
+                          </td>
+                          <td style={smStyles.tdStandardDataText}><span style={smStyles.monospaceIdentifierFont}>{user.id.substring(18)}</span></td>
+                          <td style={smStyles.tdStandardDataText}>
+                            <div style={smStyles.rideActivityStatusBarFlexBlock}>
+                              <div style={smStyles.progressBarTrackBaseLine}>
+                                <div style={{ ...smStyles.progressBarFilledTrackLine, width: `${Math.min(user.rideCount * 2.5, 100)}%` }} />
+                              </div>
+                              <span style={smStyles.rideVolumeTextCounterLabel}>{user.rideCount} runs</span>
+                            </div>
+                          </td>
+                          <td style={{ ...smStyles.tdStandardDataText, textAlign: 'center' }}>
+                            <span style={{ ...smStyles.statusBadgeIndicatorPill, ...getStatusStyle(user.status) }}>{user.status}</span>
+                          </td>
+                          <td style={{ ...smStyles.tdStandardDataText, textAlign: 'right', paddingRight: '24px' }}>
+                            <span style={smStyles.tableInteractiveInlineActionTextBtn}>Inspect</span>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              ) : (
+                <div style={smStyles.emptyFallbackTextWrapper}>No matching profiles found in platform database registry records.</div>
+              )}
             </div>
 
             <div style={smStyles.tableFooterPaginationRow}>
-              <div style={smStyles.tableFooterCount}>Showing {studentsData.length} of 5,420 profiles</div>
+              <div style={smStyles.tableFooterCount}>Showing {studentsData.length} profiles</div>
               <div style={smStyles.paginationButtonCluster}>
                 <button style={smStyles.paginationArrowButton} aria-label="Previous page"><ChevronLeft size={14} strokeWidth={2.5} color="#64748B" /></button>
                 <button style={smStyles.paginationArrowButton} aria-label="Next page"><ChevronRight size={14} strokeWidth={2.5} color="#64748B" /></button>
@@ -236,7 +234,11 @@ export default function UserDirectoryScreen() {
 
               {/* Profile Card Header Summary */}
               <div style={smStyles.inspectorHeaderProfileSummaryBlock}>
-                <img src={selectedStudent.image} alt={selectedStudent.name} style={smStyles.inspectorProfileAvatarMainImage} />
+                {selectedStudent.image ? (
+                  <img src={selectedStudent.image} alt={selectedStudent.name} style={smStyles.inspectorProfileAvatarMainImage} />
+                ) : (
+                  <div style={smStyles.inspectorProfileAvatarMock}>{selectedStudent.name.slice(0, 2).toUpperCase()}</div>
+                )}
                 <h2 style={smStyles.inspectorProfilePrimaryTitleText}>{selectedStudent.name}</h2>
                 <p style={smStyles.inspectorProfileSecondarySubtitleText}>{selectedStudent.id}</p>
               </div>
@@ -254,7 +256,7 @@ export default function UserDirectoryScreen() {
 
                 {activeInspectorTab === 'info' && (
                   <div style={smStyles.tabContentBlock}>
-                    <h4 style={smStyles.inspectorSegmentGroupHeadingTitleText}>CONTACT DETAILS</h4>
+                    <h4 style={smStyles.inspectorSegmentGroupHeadingTitleText}>{selectedStudent.userType === 'DRIVER' ? 'VEHICLE ACCESS INFO' : 'CONTACT DETAILS'}</h4>
                     <div style={smStyles.inspectorMetaContentBlockCard}>
                       <div style={smStyles.inspectorMetaCardRowField}><Mail size={14} color="#94A3B8" /><span style={smStyles.inspectorMetaCardRowValueText}>{selectedStudent.email}</span></div>
                       <div style={smStyles.inspectorMetaCardRowField}><Phone size={14} color="#94A3B8" /><span style={smStyles.inspectorMetaCardRowValueText}>{selectedStudent.phone}</span></div>
@@ -266,31 +268,39 @@ export default function UserDirectoryScreen() {
                 {activeInspectorTab === 'trips' && (
                   <div style={smStyles.tabContentBlock}>
                     <h4 style={smStyles.inspectorSegmentGroupHeadingTitleText}>RIDE HISTORY LEDGER</h4>
-                    {selectedStudent.tripsHistory?.map((trip, i) => (
-                      <div key={i} style={smStyles.historyItemCard}>
-                        <div style={smStyles.historyCardHeader}><span style={smStyles.boldBlueTripIdentifier}>{trip.id}</span><span>{trip.date}</span></div>
-                        <p style={smStyles.historyCardText}><MapPin size={10} /> {trip.route}</p>
-                        <div style={smStyles.historyCardHeader}><span>Driver: {trip.driver}</span><span style={{ ...smStyles.boldTripStateStatus, color: trip.state === 'CANCELED' ? '#991B1B' : '#15803D' }}>{trip.state}</span></div>
-                      </div>
-                    ))}
+                    {selectedStudent.tripsHistory && selectedStudent.tripsHistory.length > 0 ? (
+                      selectedStudent.tripsHistory.map((trip, i) => (
+                        <div key={i} style={smStyles.historyItemCard}>
+                          <div style={smStyles.historyCardHeader}><span style={smStyles.boldBlueTripIdentifier}>{trip.id.substring(18)}</span><span>{trip.date}</span></div>
+                          <p style={smStyles.historyCardText}><MapPin size={10} /> {trip.route}</p>
+                          <div style={smStyles.historyCardHeader}><span>{selectedStudent.userType === 'DRIVER' ? 'Passenger:' : 'Driver:'} {trip.driver}</span><span style={{ ...smStyles.boldTripStateStatus, color: trip.state === 'CANCELED' ? '#991B1B' : '#15803D' }}>{trip.state}</span></div>
+                        </div>
+                      ))
+                    ) : (
+                      <p style={smStyles.emptyFallbackItalicMessageText}>No logged runs found for this account pipeline.</p>
+                    )}
                   </div>
                 )}
 
                 {activeInspectorTab === 'feedback' && (
                   <div style={smStyles.tabContentBlock}>
-                    <h4 style={smStyles.inspectorSegmentGroupHeadingTitleText}>RIDER REVIEWS MATRIX</h4>
-                    {selectedStudent.feedbackHistory?.map((fb, i) => (
-                      <div key={i} style={smStyles.historyItemCard}>
-                        <div style={smStyles.historyCardHeader}><span style={smStyles.starRatingInlineColorRow}>{Array(fb.rating).fill('★').join('')}</span><span>{fb.date}</span></div>
-                        <p style={smStyles.historyCardItalicCommentText}>"{fb.comment}"</p>
-                      </div>
-                    ))}
+                    <h4 style={smStyles.inspectorSegmentGroupHeadingTitleText}>REVIEWS MATRIX</h4>
+                    {selectedStudent.feedbackHistory && selectedStudent.feedbackHistory.length > 0 ? (
+                      selectedStudent.feedbackHistory.map((fb, i) => (
+                        <div key={i} style={smStyles.historyItemCard}>
+                          <div style={smStyles.historyCardHeader}><span style={smStyles.starRatingInlineColorRow}>{Array(fb.rating).fill('★').join('')}</span><span>{fb.date}</span></div>
+                          <p style={smStyles.historyCardItalicCommentText}>"{fb.comment}"</p>
+                        </div>
+                      ))
+                    ) : (
+                      <p style={smStyles.emptyFallbackItalicMessageText}>No recorded ratings entries available.</p>
+                    )}
                   </div>
                 )}
 
                 {activeInspectorTab === 'reports' && (
                   <div style={smStyles.tabContentBlock}>
-                    <h4 style={smStyles.inspectorSegmentGroupHeadingTitleText}>DRIVER-SUBMITTED SYSTEM INCIDENTS</h4>
+                    <h4 style={smStyles.inspectorSegmentGroupHeadingTitleText}>SYSTEM INCIDENTS FILES</h4>
                     {selectedStudent.reportsHistory && selectedStudent.reportsHistory.length > 0 ? (
                       selectedStudent.reportsHistory.map((rep, i) => (
                         <div key={i} style={smStyles.incidentReportRowBlockCard}>
@@ -303,7 +313,7 @@ export default function UserDirectoryScreen() {
                         </div>
                       ))
                     ) : (
-                      <p style={smStyles.emptyFallbackItalicMessageText}>Clean Record. No behavior infractions or incident files generated against this rider account.</p>
+                      <p style={smStyles.emptyFallbackItalicMessageText}>Clean Record. No behavior infractions or incident logs recorded.</p>
                     )}
                   </div>
                 )}
@@ -312,12 +322,12 @@ export default function UserDirectoryScreen() {
               {/* Administrative Security Control Block */}
               <div style={smStyles.inspectorSidebarFooterActionToolbarButtonCluster}>
                 <button style={smStyles.inspectorSidebarMessageActionButton} onClick={() => handleAccountAction(selectedStudent.id, 'warn')}><Send size={14} /> Send Warning Notice</button>
-                <button style={smStyles.inspectorSidebarSuspendAccountActionButton} onClick={() => handleAccountAction(selectedStudent.id, 'suspend')}><Ban size={14} /> Suspend Rider Access</button>
+                <button style={smStyles.inspectorSidebarSuspendAccountActionButton} onClick={() => handleAccountAction(selectedStudent.id, 'suspend')}><Ban size={14} /> Suspend User Access</button>
               </div>
             </div>
           ) : (
             <div style={smStyles.inspectorSidebarEmptyStateContainerFallbackBox}>
-              <h4 style={smStyles.emptyFallbackItalicMessageText}>Select an active directory profile entry to load structural logs blueprint summaries.</h4>
+              <h4 style={smStyles.emptyFallbackItalicMessageText}>Select an entry to load operational summaries logs blueprint fields.</h4>
             </div>
           )}
         </div>
@@ -327,7 +337,6 @@ export default function UserDirectoryScreen() {
   )
 }
 
-// ── DOUBLE-SPACE INDENTED STYLESHEET MATRIX ──────────────────────────────────
 const smStyles = {
   workspaceWrapperContainer: { 
     display: 'flex', 
@@ -489,6 +498,18 @@ const smStyles = {
     objectFit: 'cover', 
     border: '1px solid #E2E8F0' 
   },
+  tableRowAvatarMock: { 
+    width: '34px', 
+    height: '34px', 
+    borderRadius: '50%', 
+    backgroundColor: '#DBEAFE', 
+    color: '#1E3A8A', 
+    fontSize: '12px', 
+    fontWeight: 700, 
+    display: 'flex', 
+    alignItems: 'center', 
+    justifyContent: 'center' 
+  },
   tableRowOnlineStatusDotBadgeNode: { 
     position: 'absolute', 
     bottom: '-1px', 
@@ -649,6 +670,19 @@ const smStyles = {
     border: '2px solid #E2E8F0', 
     marginBottom: '10px' 
   },
+  inspectorProfileAvatarMock: { 
+    width: '64px', 
+    height: '64px', 
+    borderRadius: '50%', 
+    backgroundColor: '#DBEAFE', 
+    color: '#1E3A8A', 
+    fontSize: '18px', 
+    fontWeight: 800, 
+    display: 'flex', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    marginBottom: '10px' 
+  },
   inspectorProfilePrimaryTitleText: { 
     fontSize: '16px', 
     fontWeight: 800, 
@@ -792,21 +826,6 @@ const smStyles = {
     letterSpacing: '0.3px', 
     fontWeight: 700 
   },
-  emptySidebarFallbackContainerBox: { 
-    display: 'flex', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    height: '100%', 
-    width: '100%' 
-  },
-  emptyFallbackItalicMessageText: { 
-    fontSize: '12px', 
-    color: '#64748B', 
-    fontWeight: 500, 
-    fontStyle: 'italic', 
-    lineHeight: '1.5', 
-    textAlign: 'center' 
-  },
   inspectorSidebarFooterActionToolbarButtonCluster: { 
     display: 'flex', 
     flexDirection: 'column', 
@@ -846,6 +865,13 @@ const smStyles = {
     gap: '8px', 
     outline: 'none' 
   },
+  inspectorSidebarEmptyStateContainerFallbackBox: { 
+    display: 'flex', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    height: '100%', 
+    width: '100%' 
+  },
   loadingWrapperContainerFrame: { 
     display: 'flex', 
     alignItems: 'center', 
@@ -857,5 +883,12 @@ const smStyles = {
     fontSize: '14px', 
     color: '#1E3A8A', 
     fontWeight: 700 
+  },
+  emptyFallbackTextWrapper: { 
+    padding: '32px', 
+    textAlign: 'center', 
+    color: '#94A3B8', 
+    fontSize: '13px', 
+    fontWeight: 600 
   }
 }
