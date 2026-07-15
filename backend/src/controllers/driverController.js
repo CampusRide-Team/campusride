@@ -218,3 +218,27 @@ export const getPendingCampusRequests = async (req, res, next) => {
     next(error);
   }
 };
+export const getActiveDriverLocations = async (req, res, next) => {
+  try {
+    // Find all active drivers that have shared latitude/longitude details
+    const onlineDrivers = await User.find({ 
+      role: 'driver', 
+      isApproved: true, 
+      isOnline: true,
+      currentLatitude: { $exists: true },
+      currentLongitude: { $exists: true }
+    }).select('fullName currentLatitude currentLongitude');
+
+    const locations = onlineDrivers.map(drv => ({
+      driverId: drv._id,
+      name: drv.fullName,
+      lat: drv.currentLatitude,
+      lng: drv.currentLongitude,
+      status: 'Active'
+    }));
+
+    res.json({ success: true, data: locations });
+  } catch (error) {
+    next(error);
+  }
+};
