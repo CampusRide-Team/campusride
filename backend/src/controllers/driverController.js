@@ -3,7 +3,7 @@ import Ride from "../models/Ride.js";
 
 export const getDriverProfile = async (req, res, next) => {
   try {
-    const driver = await User.findById(req.user.id).select("-password");
+    const driver = await User.findById(req.user._id).select("-password");
     if (!driver)
       return res
         .status(404)
@@ -19,6 +19,9 @@ export const updateDriverProfile = async (req, res, next) => {
     const allowedUpdates = {};
     if (req.body.fullName) allowedUpdates.fullName = req.body.fullName;
     if (req.body.phoneNumber) allowedUpdates.phoneNumber = req.body.phoneNumber;
+    
+    // Capture expoPushToken payload from mobile app profile sync
+    if (req.body.expoPushToken) allowedUpdates.expoPushToken = req.body.expoPushToken;
 
     if (req.file?.path) {
       // 1. Convert backslashes to forward slashes for URL compatibility
@@ -28,7 +31,7 @@ export const updateDriverProfile = async (req, res, next) => {
       allowedUpdates.avatarUrl = normalizedPath;
     }
 
-    const driver = await User.findByIdAndUpdate(req.user.id, allowedUpdates, {
+    const driver = await User.findByIdAndUpdate(req.user._id, allowedUpdates, {
       returnDocument: "after",
       runValidators: true,
     }).select("-password");
@@ -67,6 +70,8 @@ export const updateDriverProfile = async (req, res, next) => {
         isApproved: driver.isApproved,
         avatarUri: formattedAvatarUri,
         avatarUrl: formattedAvatarUri,
+        // Send the updated token back in the response
+        expoPushToken: driver.expoPushToken, 
       },
     });
   } catch (error) {
@@ -80,9 +85,9 @@ export const getDriverAnalytics = async (req, res, next) => {
     today.setHours(0, 0, 0, 0);
 
     const [totalTrips, dailyTrips] = await Promise.all([
-      Ride.countDocuments({ driver: req.user.id, status: "completed" }),
+      Ride.countDocuments({ driver: req.user._id, status: "completed" }),
       Ride.countDocuments({
-        driver: req.user.id,
+        driver: req.user._id,
         status: "completed",
         updatedAt: { $gte: today },
       }),
@@ -97,7 +102,7 @@ export const getDriverAnalytics = async (req, res, next) => {
 export const getDriverEarnings = async (req, res, next) => {
   try {
     const completedRides = await Ride.find({
-      driver: req.user.id,
+      driver: req.user._id,
       status: "completed",
     }).sort({ createdAt: -1 });
     const today = new Date();
@@ -141,7 +146,7 @@ export const updateDriverPreferences = async (req, res, next) => {
     }
 
     const driver = await User.findByIdAndUpdate(
-      req.user.id,
+      req.user._id,
       {
         $set: {
           "preferences.pushNotifications": preferences.pushNotifications,
@@ -160,17 +165,26 @@ export const updateDriverPreferences = async (req, res, next) => {
 
 export const getDriverNotifications = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.id).select("notifications");
-    const notificationsArray = user?.notifications || [];
-    const unreadCount = notificationsArray.filter((noti) => !noti.isRead).length;
+    // Fetching the active driver by their authenticated session token ID
+    const user = await User.findById(req.user._id).select("notifications");
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: { message: "Driver user record not found" }
+      });
+    }
 
+    const notificationsArray = user.notifications || [];
+    
+    // Sort by newest first
     const sortedNotifications = notificationsArray.sort(
-      (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
     );
 
     res.json({
       success: true,
-      unreadCount,  
+      unreadCount: notificationsArray.filter(n => !n.isRead).length,  
       data: sortedNotifications,
     });
   } catch (error) {
@@ -181,9 +195,9 @@ export const getDriverNotifications = async (req, res, next) => {
 export const markNotificationAsRead = async (req, res, next) => {
   try {
     const user = await User.findOneAndUpdate(
-      { _id: req.user.id, "notifications._id": req.params.id },
+      { _id: req.user._id, "notifications._id": req.params.id },
       { $set: { "notifications.$.isRead": true } },
-      { returnDocument: "after" },
+      { returnDocument: "after" }
     ).select("notifications");
 
     if (!user) {
@@ -218,6 +232,7 @@ export const getPendingCampusRequests = async (req, res, next) => {
     next(error);
   }
 };
+
 export const getActiveDriverLocations = async (req, res, next) => {
   try {
     // Find all active drivers that have shared latitude/longitude details

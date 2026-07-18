@@ -1,6 +1,20 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 
+ const notificationSchema = new mongoose.Schema(
+  {
+    title: { type: String, required: true },
+    body: { type: String, required: true },
+    type: { 
+      type: String,  
+      enum: ["ride_request", "rating", "verification", "cancelled", "general"], 
+      default: "general" 
+    },
+    isRead: { type: Boolean, default: false },
+  },
+  { timestamps: true }
+);
+
 const userSchema = new mongoose.Schema(
   {
     fullName: { type: String, required: true },
@@ -21,8 +35,10 @@ const userSchema = new mongoose.Schema(
       default: "student",
     },
     
-     avatarUri: { type: String, default: null },
+    avatarUri: { type: String, default: null },
     avatarUrl: { type: String, default: null },
+
+    expoPushToken: { type: String, default: null },
 
     isOnline: { type: Boolean, default: false },
     currentLocation: {
@@ -31,6 +47,23 @@ const userSchema = new mongoose.Schema(
     },
     walletBalance: { type: Number, default: 0 },
     isApproved: { type: Boolean, default: false },
+
+    // 💡 SYSTEM SPECIFICATIONS ADDITIONS: Register flat vehicle details keys 
+    vehicleType: { type: String, default: 'Campus Sedan' },
+    vehicleModel: { type: String, default: 'Campus Sedan' },
+    vehicleLicensePlate: { type: String, default: 'GA-2026-X' },
+    vehicleColor: { type: String, default: 'Silver/Gray' },
+    nationalIdNumber: { type: String, default: 'N/A' },
+
+    // Register document file paths fields keys mapping destinations
+    licenseImg: { type: String, default: null },
+    ghanaCardImg: { type: String, default: null },
+    ghanaCardBackImg: { type: String, default: null },
+    insuranceImg: { type: String, default: null },
+    registrationImg: { type: String, default: null },
+
+    // 💡 Persisted notification ledger schema
+    notifications: [notificationSchema],
   },
   { timestamps: true },
 );

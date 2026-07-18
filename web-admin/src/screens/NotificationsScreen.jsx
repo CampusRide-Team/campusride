@@ -4,8 +4,6 @@ import {
   AlertTriangle, 
   UserPlus, 
   Car, 
-  Clock, 
-  CheckCircle2, 
   ShieldAlert, 
   Eye, 
   ChevronLeft, 
@@ -21,7 +19,6 @@ export default function NotificationsScreen() {
   const [notifications, setNotifications] = useState([])
   const [criticalAlerts, setCriticalAlerts] = useState([])
   const [pendingTasks, setPendingTasks] = useState([])
-  const [metrics, setMetrics] = useState([])
   const [loading, setLoading] = useState(true)
 
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -34,27 +31,12 @@ export default function NotificationsScreen() {
   const fetchNotificationsData = async (isInitial = false) => {
     try {
       if (isInitial) setLoading(true)
-      const res = await api.get('/admin/notifications/snapshot')
+      
+      const res = await api.get(`/admin/notifications/snapshot?t=${Date.now()}`)
       
       if (res.data?.success && res.data?.data) {
-        const { metrics: rawMetrics, notifications: rawNotes, pendingTasks: rawTasks } = res.data.data
+        const { metrics = {}, notifications: rawNotes = [] } = res.data.data
 
-        // Map icons dynamically to layout cards while preserving custom badge styling colors
-        const statStyleConfig = {
-          'Unread Notifications': { icon: <Bell size={18} color="#1E3A8A" />, badgeClass: ntStyles.badgeIndicatorGreen, iconClass: ntStyles.statIconBadgeBlue },
-          'System Alerts': { icon: <ShieldAlert size={18} color="#DC2626" />, badgeClass: ntStyles.badgeIndicatorRed, iconClass: ntStyles.statIconBadgeRed },
-          'Verification Updates': { icon: <UserPlus size={18} color="#2563EB" />, badgeClass: ntStyles.badgeIndicatorGreen, iconClass: ntStyles.statIconBadgeLightBlue },
-          'Ride Notifications': { icon: <Car size={18} color="#475569" />, badgeClass: ntStyles.badgeIndicatorRed, iconClass: ntStyles.statIconBadgeGray }
-        }
-
-        setMetrics(rawMetrics.map(item => ({
-          ...item,
-          icon: statStyleConfig[item.label]?.icon || <Bell size={18} />,
-          badgeClass: statStyleConfig[item.label]?.badgeClass || ntStyles.badgeIndicatorGreen,
-          iconClass: statStyleConfig[item.label]?.iconClass || ntStyles.statIconBadgeBlue
-        })))
-
-        // Hydrate notification elements dynamically with contextual lookups
         const feedStyleLookup = {
           driver: { icon: <UserPlus size={16} color="#1E3A8A" />, bg: '#EFF6FF', sideBg: '#1E3A8A' },
           rides: { icon: <Car size={16} color="#DC2626" />, bg: '#FEE2E2', sideBg: '#DC2626' },
@@ -62,6 +44,7 @@ export default function NotificationsScreen() {
         }
 
         const hydratedNotes = rawNotes.map(note => {
+          if (!note) return null
           const defaults = note.urgency === 'CRITICAL' 
             ? { icon: <AlertTriangle size={16} color="#DC2626" />, bg: '#FEE2E2', sideBg: '#DC2626' }
             : { icon: <Megaphone size={16} color="#1E3A8A" />, bg: '#EFF6FF', sideBg: '#1E3A8A' };
@@ -70,16 +53,23 @@ export default function NotificationsScreen() {
 
           return {
             ...note,
+            _id: note._id || note.id,
             icon: config.icon,
             bg: config.bg,
             sideBg: config.sideBg,
             actionText: note.category === 'driver' ? 'Verify Credentials' : note.category === 'rides' ? 'Inspect Live' : 'Acknowledge'
           }
-        })
+        }).filter(Boolean)
 
         setNotifications(hydratedNotes)
         setCriticalAlerts(hydratedNotes.filter(n => n.urgency === 'CRITICAL'))
-        setPendingTasks(rawTasks)
+        
+        // Dynamically structure the sidebar items using true live counters from the database
+        setPendingTasks([
+          { id: '1', title: 'Pending Driver Screenings', count: `${metrics.pendingDrivers || 0} left` },
+          { id: '2', title: 'Active Transit Running Streams', count: `${metrics.activeRides || 0} current` },
+          { id: '3', title: 'Total Users Connected', count: `${metrics.systemLoad || 0} entities` }
+        ])
       }
     } catch (error) {
       console.error("Failed syncing notification registry lists:", error)
@@ -98,9 +88,10 @@ export default function NotificationsScreen() {
 
     try {
       setIsSending(true)
+      
       const res = await api.post('/admin/notifications/broadcast', {
         title: broadcastTitle,
-        message: broadcastMessage,
+        body: broadcastMessage, 
         target: broadcastTarget,
         urgency: broadcastUrgency
       })
@@ -110,18 +101,43 @@ export default function NotificationsScreen() {
         setBroadcastTitle('')
         setBroadcastMessage('')
         setIsModalOpen(false)
-        fetchNotificationsData(false)
+        fetchNotificationsData(false) 
       }
     } catch (err) {
       console.error("Failed deploying global broadcast payload configuration:", err)
-      alert("Error deploying transmission trigger string parameter checks.")
+      alert("Error sending message. Please check the backend console logs.")
     } finally {
       setIsSending(false)
     }
   }
 
-  const handleActionClick = (notificationId, actionType) => {
-    console.log(`Notification action: [${actionType}] targeted at entry token string parameter index: ${notificationId}`)
+  const handleActionClick = async (notificationId, actionType) => {
+    if (actionType === 'dismiss') {
+      try {
+        const res = await api.delete(`/admin/notifications/${notificationId}`)
+        
+        if (res.data?.success) {
+          const targetIdStr = String(notificationId).trim();
+          
+          setNotifications(prev => prev.filter(note => {
+            const noteId = note._id ? String(note._id).trim() : '';
+            const fallbackId = note.id ? String(note.id).trim() : '';
+            return noteId !== targetIdStr && fallbackId !== targetIdStr;
+          }));
+          
+          setCriticalAlerts(prev => prev.filter(note => {
+            const noteId = note._id ? String(note._id).trim() : '';
+            const fallbackId = note.id ? String(note.id).trim() : '';
+            return noteId !== targetIdStr && fallbackId !== targetIdStr;
+          }));
+        }
+      } catch (err) {
+        console.error("Failed to dismiss notification:", err)
+        alert("Failed to dismiss this notification.")
+      }
+    } else {
+      console.log(`Notification action: [${actionType}] targeted at entry: ${notificationId}`)
+    }
   }
 
   const filteredFeed = notifications.filter(n => {
@@ -140,30 +156,18 @@ export default function NotificationsScreen() {
   return (
     <div style={ntStyles.workspaceWrapperContainer}>
 
-      {/* 1. TOP CARD OVERVIEW COUNTER BADGES */}
-      <div style={ntStyles.metricsGrid}>
-        {metrics.map((card, idx) => (
-          <div key={idx} style={ntStyles.statCard}>
-            <div style={ntStyles.statBodyBlock}>
-              <span style={ntStyles.statLabelText}>{card.label}</span>
-              <div style={ntStyles.statNumberGroup}>
-                <span style={ntStyles.statNumberText}>{card.value}</span>
-                <span style={card.badgeClass}>{card.change}</span>
-              </div>
-            </div>
-            <div style={card.iconClass}>{card.icon}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* ACTION COMPONENT TOOLBAR CONTROL ROW */}
-      <div style={ntStyles.actionToolbarRow}>
+      {/* NEW HEADER AREA WITH QUICK ACTION TRIGGER */}
+      <div style={ntStyles.dashboardHeaderBlockFlexRow}>
+        <div style={{ textAlign: 'left' }}>
+          <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>System Notifications Hub</h2>
+          <p style={{ fontSize: '12px', color: '#64748B', margin: '2px 0 0 0', fontWeight: 500 }}>Monitor live operations data updates and broadcast messaging streams</p>
+        </div>
         <button onClick={() => setIsModalOpen(true)} style={ntStyles.toolbarBroadcastActionButton}>
-          <Megaphone size={14} /> Send Global Broadcast Message
+          <Megaphone size={14} /> Send Global Broadcast
         </button>
       </div>
 
-      {/* 2. SPLIT LAYOUT CANVAS PANELS */}
+      {/* SPLIT LAYOUT CANVAS PANELS */}
       <div style={ntStyles.splitContentRowCanvas}>
 
         {/* LEFT COMPONENT: SYSTEM EVENT LOGGER FEED */}
@@ -171,41 +175,72 @@ export default function NotificationsScreen() {
           <div style={ntStyles.feedContainerCard}>
 
             <div style={ntStyles.tabHeaderSwitcherTrackRow}>
-              <button onClick={() => setActivePageTab('all')} style={{ ...ntStyles.switchTriggerButton, backgroundColor: activeTab === 'all' ? '#ffffff' : 'transparent', fontWeight: activeTab === 'all' ? 800 : 600, color: activeTab === 'all' ? '#1E3A8A' : '#64748B' }}>All Logs</button>
-              <button onClick={() => setActivePageTab('system')} style={{ ...ntStyles.switchTriggerButton, backgroundColor: activeTab === 'system' ? '#ffffff' : 'transparent', fontWeight: activeTab === 'system' ? 800 : 600, color: activeTab === 'system' ? '#1E3A8A' : '#64748B' }}>System Alerts</button>
-              <button onClick={() => setActivePageTab('driver')} style={{ ...ntStyles.switchTriggerButton, backgroundColor: activeTab === 'driver' ? '#ffffff' : 'transparent', fontWeight: activeTab === 'driver' ? 800 : 600, color: activeTab === 'driver' ? '#1E3A8A' : '#64748B' }}>Driver Updates</button>
-              <button onClick={() => setActivePageTab('rides')} style={{ ...ntStyles.switchTriggerButton, backgroundColor: activeTab === 'rides' ? '#ffffff' : 'transparent', fontWeight: activeTab === 'rides' ? 800 : 600, color: activeTab === 'rides' ? '#1E3A8A' : '#64748B' }}>Ride Activity</button>
+              <button onClick={() => setActivePageTab('all')} style={{ ...ntStyles.switchTriggerButton, backgroundColor: activeTab === 'all' ? '#ffffff' : 'transparent', fontWeight: activeTab === 'all' ? 800 : 600, color: activeTab === 'all' ? '#1E3A8A' : '#64748B' }}>All Activity</button>
+              <button onClick={() => setActivePageTab('system')} style={{ ...ntStyles.switchTriggerButton, backgroundColor: activeTab === 'system' ? '#ffffff' : 'transparent', fontWeight: activeTab === 'system' ? 800 : 600, color: activeTab === 'system' ? '#1E3A8A' : '#64748B' }}>System Events</button>
+              <button onClick={() => setActivePageTab('driver')} style={{ ...ntStyles.switchTriggerButton, backgroundColor: activeTab === 'driver' ? '#ffffff' : 'transparent', fontWeight: activeTab === 'driver' ? 800 : 600, color: activeTab === 'driver' ? '#1E3A8A' : '#64748B' }}>Driver Context</button>
+              <button onClick={() => setActivePageTab('rides')} style={{ ...ntStyles.switchTriggerButton, backgroundColor: activeTab === 'rides' ? '#ffffff' : 'transparent', fontWeight: activeTab === 'rides' ? 800 : 600, color: activeTab === 'rides' ? '#1E3A8A' : '#64748B' }}>Ride Runs</button>
             </div>
 
             <div style={ntStyles.notificationsVerticalScrollFrame}>
               {filteredFeed.length > 0 ? (
-                filteredFeed.map((note) => (
-                  <div key={note.id} style={{ ...ntStyles.notificationItemStripBlock, borderLeft: `4px solid ${note.sideBg}` }}>
-                    <div style={{ ...ntStyles.itemBadgeNodeIcon, backgroundColor: note.bg }}>{note.icon}</div>
+                filteredFeed.map((note) => {
+                  const itemKey = note._id || note.id || Math.random().toString();
+                  const displayDesc = note.desc || note.body || note.message || "No content provided.";
+                  const displayTime = note.time || "Recent";
 
-                    <div style={ntStyles.itemTextDetailsMetadataStackGroup}>
-                      <div style={ntStyles.itemFlexTopHeaderLine}>
-                        <span style={ntStyles.itemPrimaryHeadingTitleText}>{note.title}</span>
-                        <span style={ntStyles.itemMicroTimestampLabelText}>{note.time}</span>
-                      </div>
-                      <p style={ntStyles.itemParagraphDescriptionBodyText}>{note.desc}</p>
+                  return (
+                    <div key={itemKey} style={{ ...ntStyles.notificationItemStripBlock, borderLeft: `4px solid ${note.sideBg || '#1E3A8A'}` }}>
+                      <div style={{ ...ntStyles.itemBadgeNodeIcon, backgroundColor: note.bg || '#EFF6FF' }}>{note.icon}</div>
 
-                      {note.hasActions && (
-                        <div style={ntStyles.itemActionButtonsClusterRow}>
-                          <button onClick={() => handleActionClick(note.id, 'investigate')} style={ntStyles.itemPrimaryActionButtonMarkup}>{note.actionText}</button>
-                          <button onClick={() => handleActionClick(note.id, 'dismiss')} style={ntStyles.itemSecondaryDismissButtonMarkup}>Dismiss</button>
+                      <div style={ntStyles.itemTextDetailsMetadataStackGroup}>
+                        <div style={ntStyles.itemFlexTopHeaderLine}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={ntStyles.itemPrimaryHeadingTitleText}>{note.title || "Untitled Notification"}</span>
+                            <span style={{
+                              fontSize: '9px',
+                              fontWeight: 700,
+                              textTransform: 'uppercase',
+                              backgroundColor: note.type === 'SYSTEM_ALERT' ? '#F1F5F9' : '#F3E8FF',
+                              color: note.type === 'SYSTEM_ALERT' ? '#475569' : '#6B21A8',
+                              padding: '2px 6px',
+                              borderRadius: '4px'
+                            }}>
+                              {note.type === 'SYSTEM_ALERT' ? 'System Log' : 'Broadcast'}
+                            </span>
+                          </div>
+                          <span style={ntStyles.itemMicroTimestampLabelText}>{displayTime}</span>
                         </div>
-                      )}
+                        <p style={ntStyles.itemParagraphDescriptionBodyText}>{displayDesc}</p>
+
+                        <div style={ntStyles.itemActionButtonsClusterRow}>
+                          <button 
+                            onClick={() => handleActionClick(itemKey, 'investigate')} 
+                            style={ntStyles.itemPrimaryActionButtonMarkup}
+                          >
+                            {note.actionText || 'Acknowledge'}
+                          </button>
+                          
+                          {/* Only allow dismissal actions for actual global broadcasts */}
+                          {note.type !== 'SYSTEM_ALERT' && (
+                            <button 
+                              onClick={() => handleActionClick(itemKey, 'dismiss')} 
+                              style={ntStyles.itemSecondaryDismissButtonMarkup}
+                            >
+                              Dismiss
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <div style={ntStyles.emptyStateTextWrapper}>Logs history stream clean. No active notifications recorded under this tab category.</div>
               )}
             </div>
 
             <div style={ntStyles.tableFooterPaginationRow}>
-              <div style={ntStyles.tableFooterCount}>Showing {filteredFeed.length} logs rows</div>
+              <div style={ntStyles.tableFooterCount}>Showing {filteredFeed.length} live entries</div>
               <div style={ntStyles.paginationButtonCluster}>
                 <button style={ntStyles.paginationArrowButton} aria-label="Previous feed page"><ChevronLeft size={14} color="#64748B" /></button>
                 <button style={ntStyles.paginationArrowButton} aria-label="Next feed page"><ChevronRight size={14} color="#64748B" /></button>
@@ -215,41 +250,41 @@ export default function NotificationsScreen() {
           </div>
         </div>
 
-        {/* RIGHT WORKSPACE SIDEBAR PANEL: ACTIONABLE OPERATIONAL HEADS-UP */}
+        {/* RIGHT WORKSPACE SIDEBAR PANEL */}
         <div style={ntStyles.rightWorkspaceSidebarPanel}>
 
-          {/* CRITICAL ALERTS COMPONENT WIDGET */}
+          {/* CRITICAL ALERTS */}
           <div style={ntStyles.criticalSidebarWidgetCard}>
             <div style={ntStyles.widgetHeaderFlexLine}>
               <ShieldAlert size={14} color="#DC2626" />
-              <h4 style={ntStyles.widgetBlockTitleErrorThemeText}>Critical Infrastructure Alerts</h4>
+              <h4 style={ntStyles.widgetBlockTitleErrorThemeText}>Critical Diagnostics</h4>
             </div>
             <div style={ntStyles.widgetVerticalContentStackList}>
               {criticalAlerts.length > 0 ? (
                 criticalAlerts.map((crit) => (
-                  <div key={crit.id} style={ntStyles.criticalBulletRowCardBlock}>
+                  <div key={crit._id || crit.id} style={ntStyles.criticalBulletRowCardBlock}>
                     <div style={ntStyles.criticalCardIndicatorBulletNode} />
                     <div style={ntStyles.widgetTextGroupDetailsStack}>
                       <span style={ntStyles.widgetItemTitleStrongText}>{crit.title}</span>
-                      <p style={ntStyles.widgetItemParagraphSupportingDescriptionText}>{crit.desc}</p>
+                      <p style={ntStyles.widgetItemParagraphSupportingDescriptionText}>{crit.desc || crit.body || crit.message}</p>
                     </div>
                   </div>
                 ))
               ) : (
-                <div style={ntStyles.emptySidebarFallbackLabelText}>Infrastructure servers running nominal. Zero critical alert exceptions reported.</div>
+                <div style={ntStyles.emptySidebarFallbackLabelText}>Infrastructure engines tracking nominal. Zero exception states reported.</div>
               )}
             </div>
           </div>
 
-          {/* PENDING OPERATOR CHECKS COMPONENT WIDGET */}
+          {/* PENDING TASKS */}
           <div style={ntStyles.tasksSidebarWidgetCard}>
             <div style={ntStyles.widgetHeaderFlexLine}>
               <ClipboardList size={14} color="#1E3A8A" />
-              <h4 style={ntStyles.widgetBlockTitlePrimaryThemeText}>Pending Review Tasks</h4>
+              <h4 style={ntStyles.widgetBlockTitlePrimaryThemeText}>Live Context Registry</h4>
             </div>
             <div style={ntStyles.widgetVerticalContentStackList}>
-              {pendingTasks.map((task) => (
-                <div key={task.id} style={ntStyles.taskListItemRowStrip}>
+              {pendingTasks.map((task, index) => (
+                <div key={index} style={ntStyles.taskListItemRowStrip}>
                   <div style={ntStyles.widgetTextGroupDetailsStack}>
                     <span style={ntStyles.widgetItemTitleStrongText}>{task.title}</span>
                     <span style={ntStyles.widgetItemParagraphSupportingDescriptionText}>{task.count}</span>
@@ -322,7 +357,7 @@ export default function NotificationsScreen() {
                 <label style={ntStyles.modalFieldTitleLabel}>Broadcast Message Body Context</label>
                 <textarea 
                   rows={4} 
-                  placeholder="Type the message here to broadcast directly through WebSocket emitters..." 
+                  placeholder="Type the message here to broadcast directly through backend pipelines..." 
                   value={broadcastMessage} 
                   onChange={(e) => setBroadcastMessage(e.target.value)} 
                   required 
@@ -347,7 +382,7 @@ export default function NotificationsScreen() {
   )
 }
 
- const ntStyles = {
+const ntStyles = {
   workspaceWrapperContainer: {
     display: 'flex',
     flexDirection: 'column',
@@ -355,101 +390,10 @@ export default function NotificationsScreen() {
     width: '100%',
     boxSizing: 'border-box'
   },
-  metricsGrid: {
-    display: 'flex',
-    gap: '20px',
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    justifyContent: 'space-between'
-  },
-  statCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: '16px',
-    border: '1px solid #E2E8F0',
-    padding: '20px',
+  dashboardHeaderBlockFlexRow: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    boxShadow: '0 1px 2px rgba(0,0,0,0.01)',
-    flex: 1
-  },
-  statBodyBlock: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-    textAlign: 'left'
-  },
-  statLabelText: {
-    fontSize: '12px',
-    color: '#64748B',
-    fontWeight: 600
-  },
-  statNumberGroup: {
-    display: 'flex',
-    alignItems: 'baseline',
-    gap: '8px'
-  },
-  statNumberText: {
-    fontSize: '22px',
-    fontWeight: 800,
-    color: '#0F172A'
-  },
-  badgeIndicatorGreen: {
-    fontSize: '10px',
-    fontWeight: 700,
-    color: '#16A34A',
-    backgroundColor: '#DCFCE7',
-    padding: '2px 6px',
-    borderRadius: '4px'
-  },
-  badgeIndicatorRed: {
-    fontSize: '10px',
-    fontWeight: 700,
-    color: '#DC2626',
-    backgroundColor: '#FEE2E2',
-    padding: '2px 6px',
-    borderRadius: '4px'
-  },
-  statIconBadgeBlue: {
-    width: '36px',
-    height: '36px',
-    borderRadius: '12px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#DBEAFE'
-  },
-  statIconBadgeRed: {
-    width: '36px',
-    height: '36px',
-    borderRadius: '12px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FEE2E2'
-  },
-  statIconBadgeLightBlue: {
-    width: '36px',
-    height: '36px',
-    borderRadius: '12px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#EFF6FF'
-  },
-  statIconBadgeGray: {
-    width: '36px',
-    height: '36px',
-    borderRadius: '12px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F1F5F9'
-  },
-  actionToolbarRow: {
-    display: 'flex',
-    justifyContent: 'flex-start',
     width: '100%'
   },
   toolbarBroadcastActionButton: {
@@ -464,7 +408,8 @@ export default function NotificationsScreen() {
     fontSize: '12px',
     fontWeight: 700,
     cursor: 'pointer',
-    outline: 'none'
+    outline: 'none',
+    boxShadow: '0 2px 4px rgba(30,58,138,0.15)'
   },
   splitContentRowCanvas: {
     display: 'flex',
@@ -581,8 +526,8 @@ export default function NotificationsScreen() {
     cursor: 'pointer'
   },
   itemSecondaryDismissButtonMarkup: {
-    backgroundColor: '#F1F5F9',
-    color: '#475569',
+    backgroundColor: '#FFF1F2',
+    color: '#E11D48',
     border: 'none',
     borderRadius: '8px',
     padding: '6px 14px',
@@ -826,6 +771,11 @@ export default function NotificationsScreen() {
     fontWeight: 600,
     outline: 'none',
     cursor: 'pointer'
+  },
+  modalInlineFormFieldsSplitRow: {
+    display: 'flex',
+    gap: '16px',
+    width: '100%'
   },
   modalTextAreaInput: {
     width: '100%',
