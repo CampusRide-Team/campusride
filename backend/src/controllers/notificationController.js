@@ -1,9 +1,11 @@
+// backend/src/controllers/notificationController.js
 import Notification from '../models/Notification.js';
 import User from '../models/User.js';
 import Ride from '../models/Ride.js';
-import { sendPushNotification } from '../services/notificationService.js'; // ðŸ’¡ Import your service!
+import { sendPushNotification } from '../services/notificationService.js'; 
 
- export const getNotificationSnapshot = async (req, res, next) => {
+// ðŸ’¡ Ensure "export" is present here!
+export const getNotificationSnapshot = async (req, res, next) => {
   try {
     const [
       unreadCount,
@@ -48,9 +50,12 @@ import { sendPushNotification } from '../services/notificationService.js'; // ðŸ
   }
 };
 
-  export const sendGlobalBroadcast = async (req, res, next) => {
+// ðŸ’¡ Ensure "export" is present here as well!
+export const sendGlobalBroadcast = async (req, res, next) => {
   try {
     const { title, message, target, urgency } = req.body;
+
+    console.log(`[Broadcast] Received request to send to target: ${target}`);
 
     // 1. Persist the log inside MongoDB
     const broadcastNote = await Notification.create({
@@ -73,23 +78,38 @@ import { sendPushNotification } from '../services/notificationService.js'; // ðŸ
     }
 
     // Find target accounts that possess active push tokens registered
-    // (Assumes you store the token in a field called 'expoPushToken' or 'pushToken' on your User model)
-    const targetUsers = await User.find(userFilter).select('expoPushToken pushToken');
+    const targetUsers = await User.find(userFilter).select('expoPushToken pushToken fullName role');
 
-    // 3. Loop through active tokens and dispatch through your Expo service
-    let dispatchedCount = 0;
-    targetUsers.forEach(user => {
-      const token = user.expoPushToken || user.pushToken;
-      if (token) {
-        sendPushNotification(
-          token, 
-          title, 
-          message, 
-          { type: 'GLOBAL_BROADCAST', urgency }
-        );
-        dispatchedCount++;
-      }
+    console.log(`[Broadcast] Found ${targetUsers.length} total user accounts matching filter:`, userFilter);
+
+    // 3. Filter users who actually have a registered push token
+    const usersWithTokens = targetUsers.filter(user => user.expoPushToken || user.pushToken);
+    
+    console.log(`[Broadcast] Out of those, only ${usersWithTokens.length} users have registered tokens:`);
+    usersWithTokens.forEach(u => {
+      console.log(`  - User: ${u.fullName} (${u.role}) | Token: ${u.expoPushToken || u.pushToken}`);
     });
+
+    // 4. Dispatch async push payloads concurrently using Promise.all
+    let dispatchedCount = 0;
+    await Promise.all(
+      usersWithTokens.map(async (user) => {
+        const token = user.expoPushToken || user.pushToken;
+        try {
+          await sendPushNotification(
+            token, 
+            title, 
+            message, 
+            { type: 'GLOBAL_BROADCAST', urgency }
+          );
+          dispatchedCount++;
+        } catch (pushErr) {
+          console.error(`[Broadcast] Push failed for user ${user.fullName} (${user._id}):`, pushErr);
+        }
+      })
+    );
+
+    console.log(`[Broadcast] Dispatched successfully to ${dispatchedCount} active Expo devices.`);
 
     res.json({
       success: true,

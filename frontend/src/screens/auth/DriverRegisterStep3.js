@@ -277,22 +277,70 @@ const DriverRegisterStep3 = ({ initialData, onSubmit, onBack, onLogin }) => {
     setLoading(true);
 
     try {
-      // 📦 JSON payload structured exactly to match express-validator expectations
-      const registrationPayload = {
-        fullName: initialData?.fullName || "",
-        email: initialData?.email || "",
-        password: initialData?.password || "",
-        role: "driver",
-        phoneNumber: (initialData?.phoneNumber || "").replace(
-          /[\s\-\+\(\)]/g,
-          "",
-        ),
+      // 💡 THE PRODUCTION SOLVER: Compile everything into a multi-part form stream
+      const formData = new FormData();
+
+      // 1. Append absolute profile authentication details
+      formData.append("fullName", initialData?.fullName || "");
+      formData.append("email", initialData?.email || "");
+      formData.append("password", initialData?.password || "");
+      formData.append("role", "driver");
+      formData.append("phoneNumber", (initialData?.phoneNumber || "").replace(/[\s\-\+\(\)]/g, ""));
+
+      // 2. 💡 CRITICAL ADDITION: Forward the vehicle info collected in Step 2!
+      formData.append("vehicleType", initialData?.vehicleType || initialData?.category || "Campus Sedan");
+      formData.append("vehicleModel", initialData?.vehicleModel || initialData?.vehicleDetails || "Campus Sedan");
+      formData.append("vehicleLicensePlate", initialData?.vehicleLicensePlate || initialData?.licensePlate || "GA-2026-X");
+      formData.append("vehicleColor", initialData?.vehicleColor || initialData?.color || "Silver/Gray");
+      formData.append("nationalIdNumber", nationalIdNumber);
+
+      // 3. Helper to cleanly package files for platform-agnostic multi-part delivery
+      const appendFileToForm = (keyName, localFileObj) => {
+        if (!localFileObj) return;
+        
+        const fileUri = localFileObj.uri;
+        const fileExtension = fileUri.split(".").pop();
+        let mimeType = "application/pdf"; // Fallback default
+        
+        if (["jpg", "jpeg", "png", "heic"].includes(fileExtension?.toLowerCase())) {
+          mimeType = `image/${fileExtension === "jpg" ? "jpeg" : fileExtension}`;
+        }
+
+        formData.append(keyName, {
+          uri: Platform.OS === "android" ? fileUri : fileUri.replace("file://", ""),
+          name: localFileObj.name || `${keyName}_upload.${fileExtension}`,
+          type: mimeType,
+        });
       };
 
-      // 🚀 Dispatch pure content stream to register route
-      const response = await api.post("/auth/register", registrationPayload, {
+      // Append binary documents stream attachments
+      appendFileToForm("insuranceFile", insuranceFile);
+      appendFileToForm("licenseFile", licenseFile);
+      appendFileToForm("registrationFile", registrationFile);
+
+      // 4. Append Ghana Card image assets
+      if (ghanaCardFront) {
+        const frontExt = ghanaCardFront.split(".").pop();
+        formData.append("ghanaCardFront", {
+          uri: Platform.OS === "android" ? ghanaCardFront : ghanaCardFront.replace("file://", ""),
+          name: `ghana_card_front.${frontExt}`,
+          type: `image/${frontExt === "jpg" ? "jpeg" : frontExt}`,
+        });
+      }
+
+      if (ghanaCardBack) {
+        const backExt = ghanaCardBack.split(".").pop();
+        formData.append("ghanaCardBack", {
+          uri: Platform.OS === "android" ? ghanaCardBack : ghanaCardBack.replace("file://", ""),
+          name: `ghana_card_back.${backExt}`,
+          type: `image/${backExt === "jpg" ? "jpeg" : backExt}`,
+        });
+      }
+
+      // 🚀 Dispatch the complete file and field stream to your registration gateway route
+      const response = await api.post("/auth/register", formData, {
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type": "multipart/form-data", // Forces express-multer configurations to process on the backend
         },
       });
 
@@ -301,7 +349,7 @@ const DriverRegisterStep3 = ({ initialData, onSubmit, onBack, onLogin }) => {
       if (response.data?.success || response.status === 201) {
         Alert.alert(
           "Registration Successful!",
-          "Your account has been created successfully.",
+          "Your application and system verification assets have been logged.",
           [
             {
               text: "Proceed",
@@ -324,14 +372,11 @@ const DriverRegisterStep3 = ({ initialData, onSubmit, onBack, onLogin }) => {
       }
     } catch (error) {
       setLoading(false);
-      console.error("Registration runtime error:", error);
+      console.error("Registration runtime data delivery crash:", error);
 
-      // 🔍 ADVANCED DIAGNOSTICS DECODER
       const validatorDetails = error.response?.data?.error?.details;
       if (validatorDetails && Array.isArray(validatorDetails)) {
-        const issues = validatorDetails
-          .map((d) => `• ${d.field}: ${d.issue}`)
-          .join("\n");
+        const issues = validatorDetails.map((d) => `• ${d.field}: ${d.issue}`).join("\n");
         Alert.alert("Backend Validation Rejection", issues);
         return;
       }
@@ -344,7 +389,7 @@ const DriverRegisterStep3 = ({ initialData, onSubmit, onBack, onLogin }) => {
       Alert.alert("Registration Failed", errorMessage);
     }
   };
-
+  
   return (
     <KeyboardAvoidingView
       style={styles.container}
