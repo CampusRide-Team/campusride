@@ -4,10 +4,10 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
 import { ThemeProvider, useTheme } from "./src/context/ThemeContext";
 
-// 💡 NEW IMPORTS: For registering native hardware push notification parameters
+// IMPORTS: For registering native hardware push notification parameters
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
-import api from "./src/api/axios"; // Adjust this path if your axios instance is placed differently
+import api from "./src/api/axios";
 
 // Configure how notifications behave when the app is foregrounded
 Notifications.setNotificationHandler({
@@ -45,19 +45,46 @@ import DriverSupport from "./src/screens/driver/DriverSupport";
 import EditDriverProfile from "./src/screens/driver/EditDriverProfile";
 import DriverSettings from "./src/screens/driver/DriverSettings";
 
+// IMPORT: Suspension Modal Component
+import AccountSuspendedModal from "./src/context/AccountSuspendedModal";
+
 const RootNavigator = () => {
   const [screen, setScreen] = useState("splash");
   const { role, setRole, login, logout, user: authUser, token: authToken } = useAuth();
   const { theme, darkModeEnabled } = useTheme();
 
-  // UNIFIED DRIVER REGISTRATION LEDGER STATE
+  //  GLOBAL SUSPENDED MODAL STATE & ERROR INTERCEPTION
+  const [globalSuspendedModalVisible, setGlobalSuspendedModalVisible] = useState(false);
+  const [globalAttemptedEmail, setGlobalAttemptedEmail] = useState("");
+
+  // Global Axios interceptor to catch any 403 ACCOUNT_SUSPENDED errors on live sessions
+  useEffect(() => {
+    const interceptor = api.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        const errorCode = error.response?.data?.error?.code;
+        if (errorCode === 'ACCOUNT_SUSPENDED') {
+          setGlobalAttemptedEmail(error.config?.data ? JSON.parse(error.config.data)?.email || authUser?.email || "" : authUser?.email || "");
+          setGlobalSuspendedModalVisible(true);
+        }
+        return Promise.reject(error);
+      }
+    );
+
+    return () => {
+      api.interceptors.response.eject(interceptor);
+    };
+  }, [authUser]);
+
+  // 🚀 PRODUCTION SYNCED MASTER REGISTRATION FORM LEDGER
   const [registrationForm, setRegistrationForm] = useState({
     fullName: "",
     phoneNumber: "",
     email: "",
     password: "",
-    vehicleType: "",
-    licensePlate: "",
+    vehicleType: "Campus Sedan",
+    vehicleModel: "",   
+    vehicleLicensePlate: "", 
     vehicleColor: "",
     seats: "",
   });
@@ -70,7 +97,7 @@ const RootNavigator = () => {
   // LIVE DRIVER PROFILE RECORD
   const [driverProfileData, setDriverProfileData] = useState(null);
 
-  // 💡 SYNC DRIVER PROFILE DATA
+  // SYNC DRIVER PROFILE DATA
   useEffect(() => {
     if (authUser && role === "driver") {
       const rawAvatarUrl = authUser.avatarUri || authUser.avatarUrl || authUser.avatar || null;
@@ -88,65 +115,58 @@ const RootNavigator = () => {
     }
   }, [authUser, role]);
 
-  // 💡 CLEAN UNIFIED REGISTRATION HANDSHAKE: Resolves real tokens or uses developer overrides for local testing
+  // CLEAN UNIFIED REGISTRATION HANDSHAKE (Expo Go SDK 53 Safe Guarded)
   const registerForPushNotificationsAsync = async () => {
     let pushToken = null;
 
     try {
-      // 1. If we are running in an emulator or Expo Go, resolve a mock token for local testing
       if (!Device.isDevice) {
-        console.log("[Push] Emulator/Simulator detected. Using local development fallback token.");
-        pushToken = "ExponentPushToken[local_dev_simulator_token]";
-      } else {
-        // 2. Request permission gates on physical device
-        const { status: existingStatus } = await Notifications.getPermissionsAsync();
-        let finalStatus = existingStatus;
-        if (existingStatus !== "granted") {
-          const { status } = await Notifications.requestPermissionsAsync();
-          finalStatus = status;
-        }
-        
-        if (finalStatus !== "granted") {
-          console.warn("[Push] User declined notification permissions. Falling back to dev token.");
-          pushToken = "ExponentPushToken[local_dev_permission_denied_token]";
-        } else {
-          // 3. Fetch the unique Expo Push Token string
-          const appConfig = require("./app.json");
-          const projectId = appConfig?.expo?.extra?.eas?.projectId;
-
-          if (projectId) {
-            const tokenResult = await Notifications.getExpoPushTokenAsync({ projectId });
-            pushToken = tokenResult.data;
-          } else {
-            console.warn("[Push] No EAS projectId found. Using local development fallback token.");
-            pushToken = "ExponentPushToken[local_dev_missing_eas_token]";
-          }
-        }
+        console.log("[Push] Emulator/Simulator detected. Skipping remote push registration.");
+        return;
       }
+
+      const appConfig = require("./app.json");
+      const projectId = appConfig?.expo?.extra?.eas?.projectId;
+
+      if (!projectId) {
+        console.log("[Push] No EAS project ID configured. Skipping push registration for Expo Go.");
+        return;
+      }
+
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      if (existingStatus !== "granted") {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      
+      if (finalStatus !== "granted") {
+        console.warn("[Push] User declined notification permissions.");
+        return;
+      }
+
+      const tokenResult = await Notifications.getExpoPushTokenAsync({ projectId });
+      pushToken = tokenResult.data;
+
     } catch (err) {
-      console.warn("[Push] SDK 53+ / Expo Go environment restriction caught. Falling back to local dev token:", err.message);
-      // 💡 EXPO GO SDK 53 FALLBACK: Auto-generates a valid structural token so your MongoDB updates!
-      pushToken = "ExponentPushToken[local_expo_go_sdk53_fallback]";
+      console.warn("[Push Notice] Remote notifications require a development build on SDK 53+. Bypassing for Expo Go session.");
+      return;
     }
 
-    // 4. Send the resolved token directly to your backend
     if (pushToken) {
       try {
         console.log("[Push] Dispatching token to backend database:", pushToken);
-        
-        // 💡 UPDATED ROUTE: Changed from '/users/profile' to '/driver/profile'
         const response = await api.put("/driver/profile", { expoPushToken: pushToken });
-        
         if (response.data?.success) {
           console.log("[Push] Success! Token successfully registered in MongoDB.");
         }
       } catch (backendErr) {
-        console.error("[Push] Could not write token to backend database. Check route path:", backendErr.message);
+        console.error("[Push] Could not write token to backend database:", backendErr.message);
       }
     }
   };
 
-  // 💡 DYNAMIC REGISTRY: Run the Push Registration Handshake upon active session login
+  // DYNAMIC REGISTRY: Run the Push Registration Handshake upon active session login
   useEffect(() => {
     if (authToken && authUser) {
       registerForPushNotificationsAsync();
@@ -233,6 +253,7 @@ const RootNavigator = () => {
         <DriverRegisterStep2
           initialData={registrationForm}
           onNext={(vehicleData) => {
+            //  HOT PATCH MATCH: Perfectly merges synced vehicle keys into master ledger context
             setRegistrationForm((prev) => ({ ...prev, ...vehicleData }));
             setScreen("driver-reg-step3");
           }}
@@ -484,6 +505,17 @@ const RootNavigator = () => {
   return (
     <View style={[styles.rootWrapper, { backgroundColor: theme.background }]}>
       {renderScreen()}
+
+      {/*  Global Account Suspended Modal Interceptor */}
+      <AccountSuspendedModal 
+        visible={globalSuspendedModalVisible} 
+        userEmail={globalAttemptedEmail}
+        onClose={() => {
+          setGlobalSuspendedModalVisible(false);
+          logout();
+          setScreen("role-selection");
+        }} 
+      />
     </View>
   );
 };

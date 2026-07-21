@@ -1,4 +1,8 @@
 import mongoose from 'mongoose';
+import dns from 'node:dns'; // 🚀 PRODUCTION SAFEGUARD: Native Node DNS engine
+
+// Force Node to use reliable public DNS resolvers to bypass local ISP / router SRV lookup bugs
+dns.setServers(['8.8.8.8', '8.8.4.4']); 
 
 const connectDB = async () => {
   try {
@@ -9,4 +13,5 @@ const connectDB = async () => {
     process.exit(1);
   }
 };
+
 export default connectDB;

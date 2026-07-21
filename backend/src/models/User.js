@@ -1,18 +1,26 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 
- const notificationSchema = new mongoose.Schema(
+const notificationSchema = new mongoose.Schema(
   {
     title: { type: String, required: true },
     body: { type: String, required: true },
     type: { 
       type: String,  
-      enum: ["ride_request", "rating", "verification", "cancelled", "general"], 
+      enum: ["ride_request", "rating", "verification", "cancelled", "general", "critical"], 
       default: "general" 
     },
     isRead: { type: Boolean, default: false },
   },
   { timestamps: true }
+);
+
+const warningSchema = new mongoose.Schema(
+  {
+    message: { type: String, required: true },
+    date: { type: Date, default: Date.now }
+  },
+  { _id: false }
 );
 
 const userSchema = new mongoose.Schema(
@@ -48,24 +56,31 @@ const userSchema = new mongoose.Schema(
     walletBalance: { type: Number, default: 0 },
     isApproved: { type: Boolean, default: false },
 
-    // 💡 SYSTEM SPECIFICATIONS ADDITIONS: Register flat vehicle details keys 
-    vehicleType: { type: String, default: 'Campus Sedan' },
-    vehicleModel: { type: String, default: 'Campus Sedan' },
-    vehicleLicensePlate: { type: String, default: 'GA-2026-X' },
-    vehicleColor: { type: String, default: 'Silver/Gray' },
-    nationalIdNumber: { type: String, default: 'N/A' },
+    // ACCOUNT ENFORCEMENT & SAFETY FIELDS (Added)
+    isSuspended: { type: Boolean, default: false },
+    isBlocked: { type: Boolean, default: false },
+    warnings: [warningSchema],
 
-    // Register document file paths fields keys mapping destinations
+    // Vehicle & Verification Data
+    vehicleType: { type: String, default: null },
+    vehicleModel: { type: String, default: null },
+    vehicleLicensePlate: { type: String, default: null },
+    vehicleColor: { type: String, default: null },
+    nationalIdNumber: { type: String, default: null },
+
+    // Upload asset document destinations
     licenseImg: { type: String, default: null },
     ghanaCardImg: { type: String, default: null },
     ghanaCardBackImg: { type: String, default: null },
     insuranceImg: { type: String, default: null },
     registrationImg: { type: String, default: null },
 
-    // 💡 Persisted notification ledger schema
     notifications: [notificationSchema],
   },
-  { timestamps: true },
+  { 
+    timestamps: true,
+    collection: 'users' 
+  }
 );
 
 userSchema.index({ currentLocation: "2dsphere" });

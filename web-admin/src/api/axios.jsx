@@ -2,7 +2,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'https://orange-fiesta-wrrvpqgqgxw53x65-5000.app.github.dev/api/v1', 
+  baseURL: 'https://c5m62bwc-5000.uks1.devtunnels.ms/api/v1', 
   timeout: 10000,
 });
 

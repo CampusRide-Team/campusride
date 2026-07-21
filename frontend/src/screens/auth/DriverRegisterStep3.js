@@ -18,7 +18,6 @@ import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
 import api from "../../api/axios";
 
-// UploadRow — reusable row for document / input fields
 const UploadRow = ({
   label,
   icon,
@@ -49,9 +48,7 @@ const UploadRow = ({
           <Text
             style={[
               styles.fileNameText,
-              !fileName || fileName.includes("No file")
-                ? styles.noFileText
-                : null,
+              !fileName || fileName.includes("No file") ? styles.noFileText : null,
             ]}
             numberOfLines={1}
           >
@@ -70,7 +67,6 @@ const UploadRow = ({
   </View>
 );
 
-// GhanaCardPreview — shows thumbnail previews of front/back images
 const GhanaCardPreview = ({ frontUri, backUri }) => {
   if (!frontUri && !backUri) return null;
   return (
@@ -92,45 +88,25 @@ const GhanaCardPreview = ({ frontUri, backUri }) => {
 };
 
 const DriverRegisterStep3 = ({ initialData, onSubmit, onBack, onLogin }) => {
-  // STATE PERSISTENCE HYDRATION: Keeps documents and inputs alive if needed via App.js memory layer
-  const [insuranceFile, setInsuranceFile] = useState(
-    initialData?.insuranceFile || null,
-  );
-  const [licenseFile, setLicenseFile] = useState(
-    initialData?.licenseFile || null,
-  );
-  const [registrationFile, setRegistrationFile] = useState(
-    initialData?.registrationFile || null,
-  );
-
-  const [ghanaCardFront, setGhanaCardFront] = useState(
-    initialData?.ghanaCardFront || null,
-  );
-  const [ghanaCardBack, setGhanaCardBack] = useState(
-    initialData?.ghanaCardBack || null,
-  );
-
-  const [nationalIdNumber, setNationalIdNumber] = useState(
-    initialData?.nationalIdNumber || "",
-  );
-  const [loading, setLoading] = useState(false); // ⏳ Loading state for network activity indicator
+  const [insuranceFile, setInsuranceFile] = useState(initialData?.insuranceFile || null);
+  const [licenseFile, setLicenseFile] = useState(initialData?.licenseFile || null);
+  const [registrationFile, setRegistrationFile] = useState(initialData?.registrationFile || null);
+  const [ghanaCardFront, setGhanaCardFront] = useState(initialData?.ghanaCardFront || null);
+  const [ghanaCardBack, setGhanaCardBack] = useState(initialData?.ghanaCardBack || null);
+  const [nationalIdNumber, setNationalIdNumber] = useState(initialData?.nationalIdNumber || "");
+  const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
 
   let ghanaCardPlaceholder = "Select front & back images";
-  if (ghanaCardFront && !ghanaCardBack)
-    ghanaCardPlaceholder = "Front added — select back...";
-  if (!ghanaCardFront && ghanaCardBack)
-    ghanaCardPlaceholder = "Back added — select front...";
-  if (ghanaCardFront && ghanaCardBack)
-    ghanaCardPlaceholder = "✓ Front & Back uploaded";
+  if (ghanaCardFront && !ghanaCardBack) ghanaCardPlaceholder = "Front added — select back...";
+  if (!ghanaCardFront && ghanaCardBack) ghanaCardPlaceholder = "Back added — select front...";
+  if (ghanaCardFront && ghanaCardBack) ghanaCardPlaceholder = "✓ Front & Back uploaded";
 
   const handleIdNumberChange = (text) => {
     let cleaned = text.toUpperCase().replace(/[^A-Z0-9]/g, "");
-
     if (!cleaned.startsWith("GHA") && cleaned.length > 0) {
       cleaned = "GHA" + cleaned.replace(/[^0-9]/g, "");
     }
-
     let formatted = "";
     if (cleaned.length > 0) {
       formatted = "GHA";
@@ -138,7 +114,6 @@ const DriverRegisterStep3 = ({ initialData, onSubmit, onBack, onLogin }) => {
       if (numbersOnly.length > 0) formatted += "-" + numbersOnly.slice(0, 9);
       if (numbersOnly.length > 9) formatted += "-" + numbersOnly.slice(9, 10);
     }
-
     setNationalIdNumber(formatted);
     setErrors((e) => ({ ...e, nationalIdNumber: null }));
   };
@@ -149,9 +124,7 @@ const DriverRegisterStep3 = ({ initialData, onSubmit, onBack, onLogin }) => {
         type: ["application/pdf", "image/*"],
         copyToCacheDirectory: true,
       });
-
       if (result.canceled) return;
-
       const file = result.assets[0];
 
       if (docType === "insurance") setInsuranceFile(file);
@@ -177,14 +150,8 @@ const DriverRegisterStep3 = ({ initialData, onSubmit, onBack, onLogin }) => {
       `Ghana Card — ${side === "front" ? "Front" : "Back"} Side`,
       "Choose how to provide the image:",
       [
-        {
-          text: "📁 File Manager",
-          onPress: () => pickGhanaCardFromFiles(side),
-        },
-        {
-          text: "📷 Take a Photo",
-          onPress: () => pickGhanaCardFromCamera(side),
-        },
+        { text: "📁 Gallery", onPress: () => pickGhanaCardFromFiles(side) },
+        { text: "📷 Take a Photo", onPress: () => pickGhanaCardFromCamera(side) },
         { text: "Cancel", style: "cancel" },
       ],
     );
@@ -192,28 +159,21 @@ const DriverRegisterStep3 = ({ initialData, onSubmit, onBack, onLogin }) => {
 
   const pickGhanaCardFromFiles = async (side) => {
     try {
-      const { status } =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert(
-          "Permission Required",
-          "Please allow access to your photo library in Settings.",
-        );
+        Alert.alert("Permission Required", "Please allow access to your photo library in Settings.");
         return;
       }
-
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
         allowsEditing: false,
         quality: 0.9,
       });
-
       if (result.canceled) return;
 
       const uri = result.assets[0].uri;
       if (side === "front") setGhanaCardFront(uri);
       if (side === "back") setGhanaCardBack(uri);
-
       setErrors((e) => ({ ...e, ghanaCardFile: null }));
     } catch (error) {
       Alert.alert("Error", `Could not open image library: ${error.message}`);
@@ -224,25 +184,19 @@ const DriverRegisterStep3 = ({ initialData, onSubmit, onBack, onLogin }) => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert(
-          "Permission Required",
-          "Please allow camera access in Settings.",
-        );
+        Alert.alert("Permission Required", "Please allow camera access in Settings.");
         return;
       }
-
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ["images"],
         allowsEditing: false,
         quality: 0.9,
       });
-
       if (result.canceled) return;
 
       const uri = result.assets[0].uri;
       if (side === "front") setGhanaCardFront(uri);
       if (side === "back") setGhanaCardBack(uri);
-
       setErrors((e) => ({ ...e, ghanaCardFile: null }));
     } catch (error) {
       Alert.alert("Error", `Could not open camera: ${error.message}`);
@@ -251,15 +205,10 @@ const DriverRegisterStep3 = ({ initialData, onSubmit, onBack, onLogin }) => {
 
   const validate = () => {
     const newErrors = {};
-
-    if (!insuranceFile)
-      newErrors.insuranceFile = "Driver insurance document is required";
-    if (!licenseFile)
-      newErrors.licenseFile = "Driver license document is required";
-    if (!registrationFile)
-      newErrors.registrationFile = "Vehicle registration document is required";
-    if (!ghanaCardFront || !ghanaCardBack)
-      newErrors.ghanaCardFile = "Both Front and Back images are required";
+    if (!insuranceFile) newErrors.insuranceFile = "Driver insurance document is required";
+    if (!licenseFile) newErrors.licenseFile = "Driver license document is required";
+    if (!registrationFile) newErrors.registrationFile = "Vehicle registration document is required";
+    if (!ghanaCardFront || !ghanaCardBack) newErrors.ghanaCardFile = "Both Front and Back images are required";
 
     const idRegex = /^GHA-\d{9}-\d{1}$/;
     if (!nationalIdNumber.trim()) {
@@ -277,30 +226,28 @@ const DriverRegisterStep3 = ({ initialData, onSubmit, onBack, onLogin }) => {
     setLoading(true);
 
     try {
-      // 💡 THE PRODUCTION SOLVER: Compile everything into a multi-part form stream
       const formData = new FormData();
 
-      // 1. Append absolute profile authentication details
+      // 1. Core Profile Details
       formData.append("fullName", initialData?.fullName || "");
       formData.append("email", initialData?.email || "");
       formData.append("password", initialData?.password || "");
       formData.append("role", "driver");
       formData.append("phoneNumber", (initialData?.phoneNumber || "").replace(/[\s\-\+\(\)]/g, ""));
 
-      // 2. 💡 CRITICAL ADDITION: Forward the vehicle info collected in Step 2!
-      formData.append("vehicleType", initialData?.vehicleType || initialData?.category || "Campus Sedan");
-      formData.append("vehicleModel", initialData?.vehicleModel || initialData?.vehicleDetails || "Campus Sedan");
-      formData.append("vehicleLicensePlate", initialData?.vehicleLicensePlate || initialData?.licensePlate || "GA-2026-X");
-      formData.append("vehicleColor", initialData?.vehicleColor || initialData?.color || "Silver/Gray");
+      // 2. 🚀 EXPLICIT VEHICLE MAPPING PASS-THROUGH
+      formData.append("vehicleType", initialData?.vehicleType || "Campus Sedan");
+      formData.append("vehicleModel", initialData?.vehicleModel || initialData?.vehicleType || "Campus Sedan");
+      formData.append("vehicleLicensePlate", initialData?.vehicleLicensePlate || "N/A");
+      formData.append("vehicleColor", initialData?.vehicleColor || "Unspecified");
       formData.append("nationalIdNumber", nationalIdNumber);
 
-      // 3. Helper to cleanly package files for platform-agnostic multi-part delivery
+      // 3. Binary Attachment Parser
       const appendFileToForm = (keyName, localFileObj) => {
         if (!localFileObj) return;
-        
         const fileUri = localFileObj.uri;
         const fileExtension = fileUri.split(".").pop();
-        let mimeType = "application/pdf"; // Fallback default
+        let mimeType = "application/pdf";
         
         if (["jpg", "jpeg", "png", "heic"].includes(fileExtension?.toLowerCase())) {
           mimeType = `image/${fileExtension === "jpg" ? "jpeg" : fileExtension}`;
@@ -313,12 +260,11 @@ const DriverRegisterStep3 = ({ initialData, onSubmit, onBack, onLogin }) => {
         });
       };
 
-      // Append binary documents stream attachments
       appendFileToForm("insuranceFile", insuranceFile);
       appendFileToForm("licenseFile", licenseFile);
       appendFileToForm("registrationFile", registrationFile);
 
-      // 4. Append Ghana Card image assets
+      // 4. Ghana Card Image streams
       if (ghanaCardFront) {
         const frontExt = ghanaCardFront.split(".").pop();
         formData.append("ghanaCardFront", {
@@ -337,11 +283,8 @@ const DriverRegisterStep3 = ({ initialData, onSubmit, onBack, onLogin }) => {
         });
       }
 
-      // 🚀 Dispatch the complete file and field stream to your registration gateway route
       const response = await api.post("/auth/register", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data", // Forces express-multer configurations to process on the backend
-        },
+        headers: { "Content-Type": "multipart/form-data" },
       });
 
       setLoading(false);
@@ -356,14 +299,7 @@ const DriverRegisterStep3 = ({ initialData, onSubmit, onBack, onLogin }) => {
               onPress: () => {
                 onSubmit?.({
                   ...response.data,
-                  localDocuments: {
-                    insuranceFile,
-                    licenseFile,
-                    registrationFile,
-                    ghanaCardFront,
-                    ghanaCardBack,
-                    nationalIdNumber,
-                  },
+                  localDocuments: { insuranceFile, licenseFile, registrationFile, ghanaCardFront, ghanaCardBack, nationalIdNumber },
                 });
               },
             },
@@ -372,38 +308,18 @@ const DriverRegisterStep3 = ({ initialData, onSubmit, onBack, onLogin }) => {
       }
     } catch (error) {
       setLoading(false);
-      console.error("Registration runtime data delivery crash:", error);
-
-      const validatorDetails = error.response?.data?.error?.details;
-      if (validatorDetails && Array.isArray(validatorDetails)) {
-        const issues = validatorDetails.map((d) => `• ${d.field}: ${d.issue}`).join("\n");
-        Alert.alert("Backend Validation Rejection", issues);
-        return;
-      }
-
-      const errorMessage =
-        error.response?.data?.error?.message ||
-        error.response?.data?.message ||
-        "Connection to authentication gateway failed.";
-
+      console.error("Registration data delivery failure:", error);
+      const errorMessage = error.response?.data?.error?.message || error.response?.data?.message || "Connection failed.";
       Alert.alert("Registration Failed", errorMessage);
     }
   };
   
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <StatusBar style="dark" />
 
       <View style={styles.headerNav}>
-        <TouchableOpacity
-          onPress={onBack}
-          activeOpacity={0.7}
-          style={styles.backButton}
-          disabled={loading}
-        >
+        <TouchableOpacity onPress={onBack} activeOpacity={0.7} style={styles.backButton} disabled={loading}>
           <Ionicons name="arrow-back" size={24} color="#1E3A8A" />
         </TouchableOpacity>
         <Text style={styles.stepIndicator}>Step 3 of 3</Text>
@@ -415,102 +331,37 @@ const DriverRegisterStep3 = ({ initialData, onSubmit, onBack, onLogin }) => {
         <View style={styles.progressBarActive} />
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={styles.titleSection}>
           <Text style={styles.screenTitle}>Upload Documents</Text>
-          <Text style={styles.screenSubtitle}>
-            Required for verified system access
-          </Text>
+          <Text style={styles.screenSubtitle}>Required for verified system access</Text>
         </View>
 
         <View style={styles.formContainer}>
           <Text style={styles.sectionTitle}>Verification Assets</Text>
 
-          {/* Driver Insurance */}
-          <UploadRow
-            label="Driver Insurance Cover"
-            icon="shield-checkmark-outline"
-            fileName={insuranceFile ? insuranceFile.name : "No file selected"}
-            onUploadPress={() => handleUpload("insurance")}
-          />
-          {errors.insuranceFile && (
-            <Text style={styles.errorText}>{errors.insuranceFile}</Text>
-          )}
+          <UploadRow label="Driver Insurance Cover" icon="shield-checkmark-outline" fileName={insuranceFile ? insuranceFile.name : "No file selected"} onUploadPress={() => handleUpload("insurance")} />
+          {errors.insuranceFile && <Text style={styles.errorText}>{errors.insuranceFile}</Text>}
 
-          {/* Driver License */}
-          <UploadRow
-            label="Driver's License"
-            icon="card-outline"
-            fileName={licenseFile ? licenseFile.name : "No file selected"}
-            onUploadPress={() => handleUpload("license")}
-          />
-          {errors.licenseFile && (
-            <Text style={styles.errorText}>{errors.licenseFile}</Text>
-          )}
+          <UploadRow label="Driver's License" icon="card-outline" fileName={licenseFile ? licenseFile.name : "No file selected"} onUploadPress={() => handleUpload("license")} />
+          {errors.licenseFile && <Text style={styles.errorText}>{errors.licenseFile}</Text>}
 
-          {/* Vehicle Registration */}
-          <UploadRow
-            label="Vehicle Logbook / Registration"
-            icon="car-sport-outline"
-            fileName={
-              registrationFile ? registrationFile.name : "No file selected"
-            }
-            onUploadPress={() => handleUpload("registration")}
-          />
-          {errors.registrationFile && (
-            <Text style={styles.errorText}>{errors.registrationFile}</Text>
-          )}
+          <UploadRow label="Vehicle Logbook / Registration" icon="car-sport-outline" fileName={registrationFile ? registrationFile.name : "No file selected"} onUploadPress={() => handleUpload("registration")} />
+          {errors.registrationFile && <Text style={styles.errorText}>{errors.registrationFile}</Text>}
 
-          {/* Ghana Card Upload */}
-          <UploadRow
-            label="Ghana Card (Front & Back Images)"
-            icon="person-add-outline"
-            fileName={ghanaCardPlaceholder}
-            onUploadPress={handleGhanaCardUploadPrompt}
-          />
-          {errors.ghanaCardFile && (
-            <Text style={styles.errorText}>{errors.ghanaCardFile}</Text>
-          )}
+          <UploadRow label="Ghana Card (Front & Back Images)" icon="person-add-outline" fileName={ghanaCardPlaceholder} onUploadPress={handleGhanaCardUploadPrompt} />
+          {errors.ghanaCardFile && <Text style={styles.errorText}>{errors.ghanaCardFile}</Text>}
 
-          {/* Ghana Card image previews */}
           <GhanaCardPreview frontUri={ghanaCardFront} backUri={ghanaCardBack} />
 
-          {/* Ghana Card Number */}
-          <UploadRow
-            label="Ghana Card Number Ident"
-            icon="keypad-outline"
-            showInput={true}
-            inputValue={nationalIdNumber}
-            onInputChange={handleIdNumberChange}
-          />
-          {errors.nationalIdNumber && (
-            <Text style={styles.errorText}>{errors.nationalIdNumber}</Text>
-          )}
+          <UploadRow label="Ghana Card Number Ident" icon="keypad-outline" showInput={true} inputValue={nationalIdNumber} onInputChange={handleIdNumberChange} />
+          {errors.nationalIdNumber && <Text style={styles.errorText}>{errors.nationalIdNumber}</Text>}
 
-          {/* Submit */}
-          <TouchableOpacity
-            style={[styles.submitBtn, loading && styles.submitBtnDisabled]}
-            onPress={handleSubmit}
-            activeOpacity={0.85}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <Text style={styles.submitBtnText}>Submit Application</Text>
-            )}
+          <TouchableOpacity style={[styles.submitBtn, loading && styles.submitBtnDisabled]} onPress={handleSubmit} activeOpacity={0.85} disabled={loading}>
+            {loading ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.submitBtnText}>Submit Application</Text>}
           </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={onBack}
-            style={styles.goBackCenterBtn}
-            activeOpacity={0.7}
-            disabled={loading}
-          >
+          <TouchableOpacity onPress={onBack} style={styles.goBackCenterBtn} activeOpacity={0.7} disabled={loading}>
             <Text style={styles.goBackCenterText}>← Modify Vehicle Info</Text>
           </TouchableOpacity>
         </View>
@@ -520,200 +371,38 @@ const DriverRegisterStep3 = ({ initialData, onSubmit, onBack, onLogin }) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F8FAFC",
-  },
-  scroll: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingBottom: 40,
-  },
-  headerNav: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 24,
-    paddingTop: 60,
-    marginBottom: 16,
-  },
-  backButton: {
-    paddingVertical: 4,
-    paddingRight: 16,
-  },
-  stepIndicator: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#1E3A8A",
-  },
-  progressContainer: {
-    flexDirection: "row",
-    height: 4,
-    width: "100%",
-    paddingHorizontal: 24,
-    marginBottom: 32,
-  },
-  progressBarActive: {
-    flex: 1,
-    backgroundColor: "#1E3A8A",
-    borderRadius: 2,
-    marginLeft: 8,
-  },
-  progressBarInactive: {
-    flex: 1,
-    backgroundColor: "#1E3A8A",
-    borderRadius: 2,
-    opacity: 0.15,
-  },
-  titleSection: {
-    marginBottom: 24,
-  },
-  screenTitle: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: "#1E3A8A",
-    marginBottom: 6,
-    letterSpacing: -0.5,
-  },
-  screenSubtitle: {
-    fontSize: 15,
-    color: "#64748B",
-    fontWeight: "500",
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#1F2937",
-    marginBottom: 16,
-  },
-  formContainer: {
-    width: "100%",
-  },
-  uploadBlock: {
-    marginBottom: 16,
-  },
-  uploadLabelRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-    gap: 8,
-  },
-  uploadLabel: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#1F2937",
-  },
-  actionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    height: 56,
-    paddingHorizontal: 16,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    borderRadius: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.02,
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  fileNameText: {
-    flex: 1,
-    fontSize: 14,
-    color: "#1F2937",
-    fontWeight: "500",
-    paddingRight: 12,
-  },
-  noFileText: {
-    color: "#94A3B8",
-    fontWeight: "400",
-  },
-  inlineInput: {
-    flex: 1,
-    fontSize: 15,
-    color: "#1F2937",
-    fontWeight: "500",
-    height: "100%",
-  },
-  inlineUploadBtn: {
-    backgroundColor: "#1E3A8A",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    height: 38,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  inlineUploadBtnText: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  previewRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 4,
-    marginBottom: 16,
-  },
-  previewItem: {
-    alignItems: "center",
-  },
-  previewImage: {
-    width: 100,
-    height: 64,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-  },
-  previewLabel: {
-    fontSize: 11,
-    color: "#64748B",
-    marginTop: 4,
-    fontWeight: "700",
-  },
-  errorText: {
-    fontSize: 12,
-    color: "#EF4444",
-    marginTop: 6,
-    marginBottom: 12,
-    marginLeft: 4,
-  },
-  submitBtn: {
-    width: "100%",
-    height: 56,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 16,
-    backgroundColor: "#1E3A8A",
-    shadowColor: "#1E3A8A",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  submitBtnDisabled: {
-    backgroundColor: "#64748B",
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  submitBtnText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#FFFFFF",
-    letterSpacing: 0.2,
-  },
-  goBackCenterBtn: {
-    alignItems: "center",
-    marginTop: 20,
-    paddingVertical: 8,
-  },
-  goBackCenterText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#64748B",
-  },
+  container: { flex: 1, backgroundColor: "#F8FAFC" },
+  scroll: { flexGrow: 1, paddingHorizontal: 24, paddingBottom: 40 },
+  headerNav: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 24, paddingTop: 60, marginBottom: 16 },
+  backButton: { paddingVertical: 4, paddingRight: 16 },
+  stepIndicator: { fontSize: 14, fontWeight: "700", color: "#1E3A8A" },
+  progressContainer: { flexDirection: "row", height: 4, width: "100%", paddingHorizontal: 24, marginBottom: 32 },
+  progressBarActive: { flex: 1, backgroundColor: "#1E3A8A", borderRadius: 2, marginLeft: 8 },
+  progressBarInactive: { flex: 1, backgroundColor: "#1E3A8A", borderRadius: 2, opacity: 0.15 },
+  titleSection: { marginBottom: 24 },
+  screenTitle: { fontSize: 28, fontWeight: "800", color: "#1E3A8A", marginBottom: 6, letterSpacing: -0.5 },
+  screenSubtitle: { fontSize: 15, color: "#64748B", fontWeight: "500" },
+  sectionTitle: { fontSize: 18, fontWeight: "800", color: "#1F2937", marginBottom: 16 },
+  formContainer: { width: "100%" },
+  uploadBlock: { marginBottom: 16 },
+  uploadLabelRow: { flexDirection: "row", alignItems: "center", marginBottom: 8, gap: 8 },
+  uploadLabel: { fontSize: 14, fontWeight: "700", color: "#1F2937" },
+  actionRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", height: 56, paddingHorizontal: 16, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E2E8F0", borderRadius: 16, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.02, shadowRadius: 3, elevation: 1 },
+  fileNameText: { flex: 1, fontSize: 14, color: "#1F2937", fontWeight: "500", paddingRight: 12 },
+  noFileText: { color: "#94A3B8", fontWeight: "400" },
+  inlineInput: { flex: 1, fontSize: 15, color: "#1F2937", fontWeight: "500", height: "100%" },
+  inlineUploadBtn: { backgroundColor: "#1E3A8A", borderRadius: 12, paddingHorizontal: 16, height: 38, alignItems: "center", justifyContent: "center" },
+  inlineUploadBtnText: { color: "#FFFFFF", fontSize: 13, fontWeight: "700" },
+  previewRow: { flexDirection: "row", gap: 12, marginTop: 4, marginBottom: 16 },
+  previewItem: { alignItems: "center" },
+  previewImage: { width: 100, height: 64, borderRadius: 12, borderWidth: 1, borderColor: "#E2E8F0" },
+  previewLabel: { fontSize: 11, color: "#64748B", marginTop: 4, fontWeight: "700" },
+  errorText: { fontSize: 12, color: "#EF4444", marginTop: 6, marginBottom: 12, marginLeft: 4 },
+  submitBtn: { width: "100%", height: 56, borderRadius: 16, alignItems: "center", justifyContent: "center", marginTop: 16, backgroundColor: "#1E3A8A", shadowColor: "#1E3A8A", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 3 },
+  submitBtnDisabled: { backgroundColor: "#64748B", shadowOpacity: 0, elevation: 0 },
+  submitBtnText: { fontSize: 16, fontWeight: "700", color: "#FFFFFF", letterSpacing: 0.2 },
+  goBackCenterBtn: { alignItems: "center", marginTop: 20, paddingVertical: 8 },
+  goBackCenterText: { fontSize: 14, fontWeight: "700", color: "#64748B" },
 });
 
 export default DriverRegisterStep3;

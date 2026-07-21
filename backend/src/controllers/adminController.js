@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import https from 'https';
 import User from '../models/User.js';
 import Ride from '../models/Ride.js';
+import { sendDriverRejectionEmail } from '../services/emailService.js';
 
 // Helper to calculate the current calendar week of the year
 const getCurrentWeekNumber = () => {
@@ -10,68 +11,165 @@ const getCurrentWeekNumber = () => {
   const pastDaysOfYear = (today - firstDayOfYear) / 86400000;
   return Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
 };
- 
-const getPendingDrivers = async (req, res, next) => {
+
+// FEATURE 1: Fetch all users registered on the app for the UserDirectory
+const getUserDirectory = async (req, res, next) => {
   try {
-    // 1. Fetch the driver documents from your User collection
-    const drivers = await User.find({ role: 'driver' }).select('-password').sort({ createdAt: -1 });
+    const { query } = req.query;
 
-    // 2. Safely inspect active collection models list on the fly
-    const availableModels = mongoose.modelNames();
-    console.log("[Verification Engine] Querying vehicle records across models registry:", availableModels);
+    // 1. Exclude Admin accounts by default
+    let filter = { role: { $ne: 'admin' } };
 
-    // 3. Hydrate profiles by cross-referencing your relational driver strings
-    const populatedDrivers = await Promise.all(drivers.map(async (driver) => {
-      let carData = null;
-      const driverObjectId = driver._id;
-
-      try {
-        // Dynamically checks whichever model name your schema setup created
-        if (availableModels.includes('Vehicle')) {
-          carData = await mongoose.model('Vehicle').findOne({
-            $or: [{ driverId: driverObjectId }, { driver: driverObjectId }, { userId: driverObjectId }]
-          });
-        } else if (availableModels.includes('Car')) {
-          carData = await mongoose.model('Car').findOne({
-            $or: [{ driverId: driverObjectId }, { driver: driverObjectId }, { userId: driverObjectId }]
-          });
-        } else if (availableModels.includes('VehicleDetail')) {
-          carData = await mongoose.model('VehicleDetail').findOne({
-            $or: [{ driverId: driverObjectId }, { driver: driverObjectId }, { userId: driverObjectId }]
-          });
+    if (query && query.trim()) {
+      const regex = new RegExp(query.trim(), 'i');
+      filter.$and = [
+        { role: { $ne: 'admin' } },
+        {
+          $or: [
+            { fullName: regex },
+            { email: regex },
+            { phoneNumber: regex },
+            { role: regex }
+          ]
         }
-      } catch (err) {
-        console.warn(`[Relational Lookup Skipped] for Driver ID ${driverObjectId}:`, err.message);
+      ];
+    }
+
+    const users = await User.find(filter).select('-password').sort({ createdAt: -1 });
+
+    // 2. Calculate Live Aggregated Platform Metrics
+    const [totalUsers, activeCount, driversCount, studentsCount] = await Promise.all([
+      User.countDocuments({ role: { $ne: 'admin' } }),
+      User.countDocuments({ isOnline: true }),
+      User.countDocuments({ role: 'driver', isApproved: true }),
+      User.countDocuments({ role: { $in: ['student', 'rider'] } })
+    ]);
+
+    const metrics = [
+      { id: 'u1', label: 'Total Platform Accounts', value: totalUsers.toString(), change: 'Registered', trendColor: '#15803D', icon: 'users', color: '#1E3A8A', bg: '#EFF6FF' },
+      { id: 'u2', label: 'Active Fleet Operators', value: driversCount.toString(), change: 'Drivers', trendColor: '#15803D', icon: 'userCheck', color: '#16A34A', bg: '#DCFCE7' },
+      { id: 'u3', label: 'Student / Rider Base', value: studentsCount.toString(), change: 'Riders', trendColor: '#15803D', icon: 'userPlus', color: '#2563EB', bg: '#DBEAFE' },
+      { id: 'u4', label: 'Currently Active Online', value: activeCount.toString(), change: 'Live GPS', trendColor: '#15803D', icon: 'alertTriangle', color: '#CA8A04', bg: '#FEF9E7' }
+    ];
+
+    // 3. Format User Records with Accurate Status Mapping
+    const formattedUsers = users.map((u) => {
+      const raw = u.toObject();
+      const name = raw.fullName || 'Campus User';
+      const parts = name.trim().split(/\s+/);
+      const initials = parts.length > 1 
+        ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase() 
+        : name.slice(0, 2).toUpperCase();
+
+      let mappedUserType = 'GUEST';
+      if (raw.role === 'driver') mappedUserType = 'DRIVER';
+      if (['student', 'rider'].includes(raw.role?.toLowerCase())) mappedUserType = 'STUDENT';
+
+      // ACCURATE MULTI-STATE STATUS LOGIC
+      let userStatus = 'ACTIVE';
+      if (raw.isSuspended || raw.isBlocked) {
+        userStatus = 'FLAGGED';
+      } else if (raw.role === 'driver') {
+        if (raw.approvalStatus === 'rejected') {
+          userStatus = 'REJECTED';
+        } else if (!raw.isApproved || raw.approvalStatus === 'pending') {
+          userStatus = 'PENDING';
+        }
       }
 
-      // Convert mongoose document into a plain object to append properties safely
+      return {
+        id: raw._id.toString(),
+        name,
+        email: raw.email || 'N/A',
+        phone: raw.phoneNumber || raw.phone || 'N/A',
+        userType: mappedUserType,
+        role: raw.role || 'student',
+        residence: raw.locationResidence || raw.residence || 'Campus Zone',
+        status: userStatus,
+        initials,
+        image: raw.profilePicture || raw.avatar || raw.avatarUri || null,
+        rideCount: raw.tripsCompleted || raw.rideCount || 0,
+        rideStatus: raw.isOnline ? 'In Transit' : 'Idle',
+        tripsHistory: [],
+        feedbackHistory: [],
+        reportsHistory: []
+      };
+    });
+
+    res.json({
+      success: true,
+      count: formattedUsers.length,
+      data: {
+        metrics,
+        studentsData: formattedUsers
+      }
+    });
+
+  } catch (error) {
+    next(error);
+  }
+};
+ 
+// FEATURE 2: Fetch drivers to view approved and pending profiles on the verification page
+const getPendingDrivers = async (req, res, next) => {
+  try {
+    const drivers = await User.find({ 
+      role: { $regex: /^driver$/i } 
+    }).select('-password').sort({ createdAt: -1 });
+
+    const hydratedDrivers = drivers.map((driver) => {
       const rawUserObj = driver.toObject();
+
+      const extractedModel = 
+        rawUserObj.vehicleModel || 
+        rawUserObj.vehicleType || 
+        rawUserObj.vehicle?.model || 
+        rawUserObj.vehicleDetails?.model || 
+        'Not Specified';
+
+      const extractedPlate = 
+        rawUserObj.vehicleLicensePlate || 
+        rawUserObj.licensePlate || 
+        rawUserObj.vehicle?.licensePlate || 
+        rawUserObj.vehicleDetails?.licensePlate || 
+        'N/A';
+
+      const extractedColor = 
+        rawUserObj.vehicleColor || 
+        rawUserObj.color || 
+        rawUserObj.vehicle?.color || 
+        rawUserObj.vehicleDetails?.color || 
+        'Unspecified';
 
       return {
         ...rawUserObj,
-        // 💡 Pulls from the linked vehicle record if found, otherwise falls back to any strings stored on user
-        vehicleModel: carData?.model || carData?.vehicleModel || carData?.vehicleType || rawUserObj.vehicleModel || rawUserObj.vehicleDetails || 'Campus Shuttle',
-        vehicleLicensePlate: carData?.plate || carData?.licensePlate || carData?.vehicleLicensePlate || rawUserObj.vehicleLicensePlate || rawUserObj.licensePlate || 'GA-2026-X',
-        vehicleColor: carData?.color || carData?.vehicleColor || rawUserObj.vehicleColor || 'Silver/Gray',
+        vehicleModel: extractedModel,
+        vehicleLicensePlate: extractedPlate,
+        vehicleColor: extractedColor,
+        vehicleType: extractedModel,
         
-        // Document image file links lookup tree
-        licenseImg: carData?.licenseImg || carData?.licenseImage || carData?.licenseUrl || rawUserObj.licenseImg || rawUserObj.licenseImage || rawUserObj.licenseUrl,
-        ghanaCardImg: carData?.ghanaCardImg || carData?.ghanaCardImage || carData?.ghanaCardUrl || rawUserObj.ghanaCardImg || rawUserObj.ghanaCardImage || rawUserObj.ghanaCardUrl,
-        insuranceImg: carData?.insuranceImg || carData?.insuranceImage || carData?.insuranceUrl || rawUserObj.insuranceImg || rawUserObj.insuranceImage || rawUserObj.insuranceUrl
+        licenseImg: rawUserObj.licenseImg || rawUserObj.licenseImage || rawUserObj.licenseUrl || rawUserObj.documents?.license || null,
+        ghanaCardImg: rawUserObj.ghanaCardImg || rawUserObj.ghanaCardFrontUrl || rawUserObj.ghanaCardFront || rawUserObj.ghanaCardImage || rawUserObj.ghanaCardUrl || rawUserObj.documents?.ghanaCard || null,
+        ghanaCardBackImg: rawUserObj.ghanaCardBackImg || rawUserObj.ghanaCardBackUrl || rawUserObj.ghanaCardBack || rawUserObj.ghanaCardBackImage || rawUserObj.documents?.ghanaCardBack || null,
+        
+        insuranceImg: rawUserObj.insuranceImg || rawUserObj.insuranceImage || rawUserObj.insuranceUrl || rawUserObj.documents?.insurance || null,
+        registrationImg: rawUserObj.registrationImg || rawUserObj.registrationImage || rawUserObj.registrationUrl || rawUserObj.documents?.registration || null
       };
-    }));
+    });
 
-    res.json({ success: true, data: populatedDrivers });
+    res.json({ success: true, data: hydratedDrivers });
   } catch (error) { 
     next(error); 
   }
 };
 
-// @desc    Approve a driver
-// @route   PUT /api/v1/admin/drivers/:id/approve
 const approveDriver = async (req, res, next) => {
   try {
-    const driver = await User.findByIdAndUpdate(req.params.id, { isApproved: true }, { new: true });
+    const driver = await User.findByIdAndUpdate(
+      req.params.id, 
+      { isApproved: true, approvalStatus: 'approved' }, 
+      { returnDocument: 'after' }
+    );
     if (!driver) {
       return res.status(404).json({ success: false, error: { message: 'Driver not found' }});
     }
@@ -83,17 +181,40 @@ const approveDriver = async (req, res, next) => {
 
 const handleDriverRejection = async (req, res, next) => {
   try {
+    const { reason } = req.body;
+    
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({ 
+        success: false, 
+        error: { message: 'A rejection reason must be provided.' } 
+      });
+    }
+
     const driver = await User.findByIdAndUpdate(
       req.params.id, 
-      { isApproved: false, approvalStatus: 'rejected' }, 
-      { new: true }
+      { 
+        isApproved: false, 
+        approvalStatus: 'rejected',
+        rejectionReason: reason 
+      }, 
+      { returnDocument: 'after' }
     );
 
     if (!driver) {
       return res.status(404).json({ success: false, error: { message: 'Driver not found' }});
     }
-    
-    res.json({ success: true, data: { message: 'Driver application rejected successfully', driver } });
+
+    try {
+      await sendDriverRejectionEmail(driver.email, driver.fullName, reason);
+      console.log(`[Email Dispatch] Rejection notification sent to ${driver.email}`);
+    } catch (emailErr) {
+      console.error(`[Email Dispatch Error] Failed to send rejection email:`, emailErr.message);
+    }
+
+    res.json({ 
+      success: true, 
+      data: { message: 'Driver application rejected and email notification sent.', driver } 
+    });
   } catch (error) { 
     next(error); 
   }
@@ -125,7 +246,7 @@ const getCampusDemand = async (req, res, next) => {
         }
 
         let level = "Low Demand";
-        let color = "#10B981"; // Green for low demand to contrast surge updates
+        let color = "#10B981"; // Green
 
         if (activeRequests >= 5) {
           level = "High Demand";
@@ -318,6 +439,7 @@ const sendExpoPushPayload = (tokensArray, alertTitle, alertBody) => {
   }
 };
 
+// FEATURE 3: Broadcast notification messages per admin selection
 const broadcastNotification = async (req, res, next) => {
   try {
     const bodyData = req && req.body ? req.body : {};
@@ -327,7 +449,6 @@ const broadcastNotification = async (req, res, next) => {
     let target = bodyData.target;
 
     if (!title || !body || !target) {
-      console.log("[Broadcast Validation Failed] Missing properties:", { title, body, target });
       return res.status(400).json({
         success: false,
         error: { message: "Required parameters (title, body/message, target) are missing." }
@@ -335,8 +456,6 @@ const broadcastNotification = async (req, res, next) => {
     }
 
     const normalizedTarget = target.trim().toUpperCase();
-    console.log(`[Broadcast] Processing target filter: ${normalizedTarget}`);
-
     let filter = {};
     if (normalizedTarget === 'ALL' || normalizedTarget === 'BOTH') {
       filter = { role: { $in: ['student', 'rider', 'guest', 'driver'] } };
@@ -349,7 +468,6 @@ const broadcastNotification = async (req, res, next) => {
     }
 
     const users = await User.find(filter);
-    console.log(`[Broadcast] Filter successfully matched ${users.length} total user accounts in database.`);
 
     if (users.length === 0) {
       return res.json({
@@ -369,8 +487,7 @@ const broadcastNotification = async (req, res, next) => {
       createdAt: new Date()
     };
 
-    const result = await User.updateMany(filter, { $push: { notifications: newNotification } });
-    console.log(`[Broadcast] Successfully pushed notification entry to ${result.modifiedCount} user profiles.`);
+    await User.updateMany(filter, { $push: { notifications: newNotification } });
 
     const pushTokens = users
       .map((u) => u.expoPushToken)
@@ -387,7 +504,6 @@ const broadcastNotification = async (req, res, next) => {
     });
 
   } catch (error) {
-    console.error("[Broadcast] Process pipeline failed with error:", error);
     next(error);
   }
 };
@@ -404,9 +520,7 @@ const deleteNotification = async (req, res, next) => {
     }
 
     const targetObjectId = new mongoose.Types.ObjectId(id);
-
-    const userWithTargetNote = await User.findOne({ "notifications._id": targetObjectId })
-      .select("notifications");
+    const userWithTargetNote = await User.findOne({ "notifications._id": targetObjectId }).select("notifications");
 
     let titleMatch = "";
     let bodyMatch = "";
@@ -429,13 +543,7 @@ const deleteNotification = async (req, res, next) => {
       };
     }
 
-    const result = await User.updateMany(
-      {},
-      { $pull: { notifications: pullCondition } }
-    );
-
-    console.log(`[Delete] Notification dismissed. Removed from ${result.modifiedCount} profile arrays.`);
-
+    await User.updateMany({}, { $pull: { notifications: pullCondition } });
     res.json({ success: true, message: "Notification deleted successfully." });
   } catch (error) {
     next(error);
@@ -450,8 +558,7 @@ const getNotificationsSnapshot = async (req, res, next) => {
       User.countDocuments({})
     ]);
 
-    const usersWithNotes = await User.find({ "notifications.0": { $exists: true } })
-      .select("notifications role");
+    const usersWithNotes = await User.find({ "notifications.0": { $exists: true } }).select("notifications role");
 
     let eventFeed = [];
     const processedBroadcasts = new Set(); 
@@ -535,10 +642,8 @@ const getNotificationsSnapshot = async (req, res, next) => {
   }
 };
 
-// 💡 NEW REAL-TIME TELEMETRY SNAPSHOT MONITOR (COMPLETELY DYNAMIC)
 const getMonitoringSnapshot = async (req, res, next) => {
   try {
-    // 1. Calculate live fleet operational scopes directly from MongoDB
     const [
       totalActiveDrivers,
       onlineDriversCount,
@@ -555,14 +660,12 @@ const getMonitoringSnapshot = async (req, res, next) => {
         { $match: { status: 'completed' } },
         { $group: { _id: '$driverId', count: { $sum: 1 } } }
       ]) : Promise.resolve([]),
-      // Aggregate real demand bounds based on spatial location coordinates
       Ride ? Ride.aggregate([
         { $match: { status: { $in: ['requested', 'searching', 'ongoing'] } } },
         { $group: { _id: '$pickupLocationName', activeCount: { $sum: 1 } } }
       ]) : Promise.resolve([])
     ]);
 
-    // 2. Hydrate top overview row metrics widgets
     const metrics = [
       { id: 'm1', label: 'Total Fleet Operators', value: totalActiveDrivers.toString(), change: 'Registered', color: '#1E3A8A', bg: '#EFF6FF' },
       { id: 'm2', label: 'Drivers Active Online', value: onlineDriversCount.toString(), change: 'Live GPS', color: '#16A34A', bg: '#DCFCE7' },
@@ -570,11 +673,10 @@ const getMonitoringSnapshot = async (req, res, next) => {
       { id: 'm4', label: 'Actionable Screening Items', value: pendingVerifications.toString(), change: 'Pending', color: '#DC2626', bg: '#FEE2E2' }
     ];
 
-    // 3. Process Live Active Dispatches matching true ride arrays
     let realTimeTrips = [];
     if (Ride) {
       const liveRides = await Ride.find({ status: { $in: ['requested', 'searching', 'ongoing'] } })
-        .populate('riderId driverId', 'fullName vehicleDetails')
+        .populate('riderId driverId', 'fullName vehicleModel vehicleLicensePlate')
         .sort({ createdAt: -1 })
         .limit(15);
 
@@ -588,33 +690,24 @@ const getMonitoringSnapshot = async (req, res, next) => {
         route: ride.pickupLocationName && ride.dropoffLocationName 
           ? `${ride.pickupLocationName} ➔ ${ride.dropoffLocationName}`
           : 'Campus Internal Run',
-        vehicle: ride.driverId?.vehicleDetails?.plate || 'Awaiting Match'
+        vehicle: ride.driverId?.vehicleLicensePlate || 'Awaiting Match'
       }));
     }
 
-// 4. Fetch the real roster lists (with dynamic separate vehicle resolution)
     const fullDriversList = await User.find({ role: 'driver' })
-      .select('fullName isOnline rating email infractions tripsCompleted tripsCanceled');
+      .select('fullName isOnline rating email infractions vehicleModel vehicleLicensePlate vehicleColor vehicleType vehicleDetails vehicle tripsCompleted tripsCanceled');
     
-    const driverRoster = await Promise.all(fullDriversList.map(async (driver) => {
+    const driverRoster = fullDriversList.map((driver) => {
       const completionStat = completedRidesAgg.find(c => c._id && c._id.toString() === driver._id.toString());
       const realCompletedCount = completionStat ? completionStat.count : (driver.tripsCompleted || 0);
 
-      // Check the separate Vehicle link
-      let carData = null;
-      if (mongoose.models.Vehicle) {
-        carData = await mongoose.models.Vehicle.findOne({ driverId: driver._id });
-      } else if (mongoose.models.Car) {
-        carData = await mongoose.models.Car.findOne({ driverId: driver._id });
-      }
-
-      const activeCarPlate = carData?.plate || carData?.licensePlate || 'GA-2026-X';
-      const activeCarModel = carData?.model || carData?.vehicleModel || 'Campus Sedan';
+      const model = driver.vehicleModel || driver.vehicleType || driver.vehicle?.model || driver.vehicleDetails?.model || 'Not Specified';
+      const plate = driver.vehicleLicensePlate || driver.licensePlate || driver.vehicle?.licensePlate || driver.vehicleDetails?.licensePlate || 'N/A';
 
       return {
         id: driver._id.toString(),
         name: driver.fullName || 'Fleet Operator',
-        vehicle: `${activeCarModel} (${activeCarPlate})`,
+        vehicle: `${model} (${plate})`,
         status: driver.isOnline ? 'ONLINE' : 'OFFLINE',
         statusBg: driver.isOnline ? '#DCFCE7' : '#F1F5F9',
         statusColor: driver.isOnline ? '#16A34A' : '#64748B',
@@ -627,9 +720,8 @@ const getMonitoringSnapshot = async (req, res, next) => {
         },
         infractionsLog: []
       };
-    }));
+    });
 
-    // 5. Compute real-time Campus Zone Demand Densities using exact required uniform "5 min" scaling
     const targetCampusHubs = [
       { name: "Balme Library Complex", defaultKey: "Balme Library" },
       { name: "Legon Night Market", defaultKey: "Night Market" },
@@ -642,20 +734,20 @@ const getMonitoringSnapshot = async (req, res, next) => {
       const activeCount = activeMatch ? activeMatch.activeCount : 0;
 
       let load = "LOW VOLUME";
-      let color = "#10B981"; // Green fallback
+      let color = "#10B981";
 
       if (activeCount >= 5) {
         load = "HIGH DENSITY";
-        color = "#EF4444"; // Red
+        color = "#EF4444";
       } else if (activeCount >= 2) {
         load = "MID SURGE";
-        color = "#F59E0B"; // Yellow
+        color = "#F59E0B";
       }
 
       return {
         name: hub.name,
-        activeDrivers: onlineDriversCount, // Online driver roaming volume visibility
-        avgEta: "5 min",                  // Forced strict performance mapping parameter
+        activeDrivers: onlineDriversCount,
+        avgEta: "5 min",
         load,
         color
       };
@@ -672,15 +764,86 @@ const getMonitoringSnapshot = async (req, res, next) => {
     });
 
   } catch (error) {
-    console.error("[Telemetry Snapshot Engine Failure]:", error);
+    next(error);
+  }
+};
+
+// FEATURE: Toggle User Account Status (Suspend/Warn) - PRODUCTION READY
+const updateUserStatus = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { action, message } = req.body;
+
+    const existingUser = await User.findById(id);
+    if (!existingUser) {
+      return res.status(404).json({ success: false, error: { message: 'User record not found' } });
+    }
+
+    let update = {};
+    let responseMsg = '';
+
+    if (action === 'suspend') {
+      const targetState = !existingUser.isSuspended;
+      update = { 
+        isSuspended: targetState, 
+        isOnline: targetState ? false : existingUser.isOnline 
+      };
+      responseMsg = targetState 
+        ? `Account for ${existingUser.fullName || 'User'} suspended.` 
+        : `Access reactivated for ${existingUser.fullName || 'User'}.`;
+
+    } else if (action === 'warn') {
+      const noticeText = message || 'An administrative warning notice has been issued for your account.';
+      
+      update = { 
+        $push: { 
+          warnings: { date: new Date(), message: noticeText },
+          notifications: {
+            title: 'System Security Notice',
+            body: noticeText,
+            message: noticeText,
+            desc: noticeText,
+            type: 'critical',
+            isRead: false,
+            createdAt: new Date()
+          }
+        } 
+      };
+      responseMsg = `Warning notice dispatched to ${existingUser.fullName || 'user'}.`;
+
+      if (existingUser.expoPushToken && existingUser.expoPushToken.startsWith('ExponentPushToken')) {
+        sendExpoPushPayload([existingUser.expoPushToken], 'System Security Notice', noticeText);
+      }
+
+    } else if (action === 'activate') {
+      update = { isSuspended: false };
+      responseMsg = `User access reactivated.`;
+    } else {
+      return res.status(400).json({ success: false, error: { message: 'Invalid action protocol provided.' } });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      id, 
+      update, 
+      { returnDocument: 'after', runValidators: true }
+    ).select('-password');
+
+    res.json({ 
+      success: true, 
+      message: responseMsg, 
+      data: updatedUser 
+    });
+  } catch (error) {
     next(error);
   }
 };
 
 export {
+  getUserDirectory,
   getPendingDrivers,
   approveDriver,
   handleDriverRejection,
+  updateUserStatus,
   getCampusDemand,
   getDashboardData,
   broadcastNotification,

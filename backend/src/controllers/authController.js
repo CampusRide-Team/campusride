@@ -5,9 +5,25 @@ const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' });
 };
 
+// Helper function to safely extract and normalize upload file paths across Windows/Linux
+const extractFilePath = (fileArray) => {
+  if (!fileArray || !fileArray[0]) return null;
+  const fileObj = fileArray[0];
+  
+  // If using Cloudinary / S3 remote storage
+  if (fileObj.secure_url) return fileObj.secure_url;
+  if (fileObj.url) return fileObj.url;
+
+  // If using local multer storage, normalize Windows backslashes (\) to standard URIs (/)
+  if (fileObj.path) {
+    return fileObj.path.replace(/\\/g, '/');
+  }
+  return null;
+};
+
 export const register = async (req, res, next) => {
   try {
-    // 1. Destructure all textual parameter fields passed from the multi-part FormData layout
+    // 1. Destructure parameter fields passed from multi-part FormData
     const { 
       fullName, 
       email, 
@@ -30,12 +46,12 @@ export const register = async (req, res, next) => {
       });
     }
 
-    // 3. Extract uploaded media file locations safely using chaining (?.) to prevent null exceptions
-     const licenseUrl = req.files?.licenseFile?.[0] ? (req.files.licenseFile[0].path || req.files.licenseFile[0].secure_url) : null;
-    const ghanaCardFrontUrl = req.files?.ghanaCardFront?.[0] ? (req.files.ghanaCardFront[0].path || req.files.ghanaCardFront[0].secure_url) : null;
-    const ghanaCardBackUrl = req.files?.ghanaCardBack?.[0] ? (req.files.ghanaCardBack[0].path || req.files.ghanaCardBack[0].secure_url) : null;
-    const insuranceUrl = req.files?.insuranceFile?.[0] ? (req.files.insuranceFile[0].path || req.files.insuranceFile[0].secure_url) : null;
-    const registrationUrl = req.files?.registrationFile?.[0] ? (req.files.registrationFile[0].path || req.files.registrationFile[0].secure_url) : null;
+    // 3. Extract uploaded media file locations safely
+    const licenseUrl = extractFilePath(req.files?.licenseFile);
+    const ghanaCardFrontUrl = extractFilePath(req.files?.ghanaCardFront);
+    const ghanaCardBackUrl = extractFilePath(req.files?.ghanaCardBack);
+    const insuranceUrl = extractFilePath(req.files?.insuranceFile);
+    const registrationUrl = extractFilePath(req.files?.registrationFile);
     
     // 4. Save everything directly to your unified User schema document
     const user = await User.create({ 
@@ -44,16 +60,17 @@ export const register = async (req, res, next) => {
       phoneNumber, 
       password, 
       role: role || 'driver',
-      isApproved: false, // Remains false for driver applicants until Admin clicks verify
+      isApproved: false,  
+      isSuspended: false,
 
-      // Flat vehicle fields integration
-      vehicleType: vehicleType || 'Campus Sedan',
-      vehicleModel: vehicleModel || 'Campus Sedan',
-      vehicleLicensePlate: vehicleLicensePlate || 'GA-2026-X',
-      vehicleColor: vehicleColor || 'Silver/Gray',
+      // Vehicle field assignments
+      vehicleType: vehicleType || vehicleModel || 'Sedan',
+      vehicleModel: vehicleModel || vehicleType || 'Not Specified',
+      vehicleLicensePlate: vehicleLicensePlate || 'N/A',
+      vehicleColor: vehicleColor || 'Unspecified',
       nationalIdNumber: nationalIdNumber || 'N/A',
 
-      // Upload files destinations mapping
+      // Upload file destination mappings
       licenseImg: licenseUrl,
       ghanaCardImg: ghanaCardFrontUrl,
       ghanaCardBackImg: ghanaCardBackUrl,
@@ -61,9 +78,9 @@ export const register = async (req, res, next) => {
       registrationImg: registrationUrl
     });
 
-    console.log(`[Auth API Hub] New registration created successfully for user: ${user.fullName}`);
+    console.log(`[Auth API Hub] New driver registration logged successfully for: ${user.fullName}`);
 
-    // 5. Send back response payload in the exact shape your mobile app expects to receive
+    // 5. Send response payload back to mobile app
     res.status(201).json({
       success: true,
       data: {
@@ -80,7 +97,7 @@ export const register = async (req, res, next) => {
     });
 
   } catch (error) { 
-    console.error("❌ Registration execution crash inside controller layer:", error);
+    console.error(" Registration execution crash inside controller layer:", error);
     next(error); 
   }
 };
@@ -92,6 +109,18 @@ export const login = async (req, res, next) => {
 
     if (user && (await user.matchPassword(password))) {
       
+      //  ACCOUNT SUSPENSION ENFORCEMENT CHECK
+      if (user.isSuspended || user.isBlocked) {
+        return res.status(403).json({ 
+          success: false, 
+          error: { 
+            code: 'ACCOUNT_SUSPENDED', 
+            message: 'Your account has been suspended by administration. Please contact support.' 
+          } 
+        });
+      }
+
+      // Check driver approval status
       if (user.role === 'driver' && !user.isApproved) {
         return res.status(403).json({ 
           success: false, 
