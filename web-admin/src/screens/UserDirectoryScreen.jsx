@@ -70,23 +70,59 @@ export default function UserDirectoryScreen() {
   }, [searchQuery])
 
   const handleAccountAction = async (targetId, actionProtocol) => {
-    try {
-      const res = await api.patch(`/admin/users/${targetId}/status`, { action: actionProtocol })
-      if (res.data?.success) {
-        alert(`Action applied successfully: [${actionProtocol.toUpperCase()}]`)
-        fetchDirectoryState(false)
-      }
-    } catch (err) {
-      console.error("Enforcement target error:", err)
+  try {
+    let customPayload = { action: actionProtocol };
+
+    if (actionProtocol === 'warn') {
+      const warningMsg = window.prompt(
+        'Enter custom warning message to send to user:',
+        'Please review platform terms regarding account usage.'
+      );
+      if (!warningMsg) return; // User cancelled prompt
+      customPayload.message = warningMsg;
     }
+
+    if (actionProtocol === 'suspend') {
+      const isCurrentlyFlagged = selectedStudent?.status === 'FLAGGED';
+      const confirmAction = window.confirm(
+        isCurrentlyFlagged
+          ? 'Are you sure you want to reactivate access for this user?'
+          : 'Are you sure you want to suspend this user account?'
+      );
+      if (!confirmAction) return;
+    }
+
+    const res = await api.patch(`/admin/users/${targetId}/status`, customPayload);
+
+    if (res.data?.success) {
+      // Instantly update selected user in local state for fast UI response
+      if (actionProtocol === 'suspend') {
+        const nextStatus = selectedStudent.status === 'FLAGGED' ? 'ACTIVE' : 'FLAGGED';
+        setSelectedStudent(prev => prev ? { ...prev, status: nextStatus } : null);
+      }
+      
+      alert(res.data.message || `Action [${actionProtocol.toUpperCase()}] executed successfully.`);
+      fetchDirectoryState(false);
+    }
+  } catch (err) {
+    console.error("Account action error:", err);
+    alert(err.response?.data?.error?.message || "Failed to execute account action.");
   }
+};
 
   const getStatusStyle = (status) => {
     switch (status) {
-      case 'ACTIVE': return { backgroundColor: '#DCFCE7', color: '#15803D' }
-      case 'FLAGGED': return { backgroundColor: '#FEE2E2', color: '#991B1B' }
-      default: return { backgroundColor: '#F1F5F9', color: '#64748B' }
+      case 'ACTIVE': return { backgroundColor: '#DCFCE7', color: '#15803D' };
+      case 'PENDING': return { backgroundColor: '#FEF9C3', color: '#854D0E' };
+      case 'REJECTED': return { backgroundColor: '#FEE2E2', color: '#991B1B' };
+      case 'FLAGGED': return { backgroundColor: '#FEE2E2', color: '#991B1B' };
+      default: return { backgroundColor: '#F1F5F9', color: '#64748B' };
     }
+  }
+
+  const formatShortId = (idStr) => {
+    if (!idStr) return 'N/A';
+    return idStr.length > 6 ? idStr.substring(idStr.length - 6) : idStr;
   }
 
   if (loading) {
@@ -127,19 +163,19 @@ export default function UserDirectoryScreen() {
         {/* LEFT CANVAS COMPONENT: USER DIRECTORY TABLE */}
         <div style={smStyles.leftWorkspaceMainColumn}>
           <div style={smStyles.tableContainerCard}>
+            
+            {/* TABLE HEADER - TITLE ON LEFT, SEARCH BAR SHIFTED FAR RIGHT */}
             <div style={smStyles.tableHeaderSegmentRow}>
               <h3 style={smStyles.panelTitleText}>User Directory</h3>
-              <div style={smStyles.tableHeaderToolbarActionCluster}>
-                <div style={smStyles.tableCardInlineSearchBar}>
-                  <Search size={14} color="#94A3B8" />
-                  <input 
-                    type="text" 
-                    placeholder="Search name, email, identifier ID..." 
-                    value={searchQuery} 
-                    onChange={(e) => setSearchQuery(e.target.value)} 
-                    style={smStyles.tableCardSearchInputField} 
-                  />
-                </div>
+              <div style={smStyles.tableCardInlineSearchBar}>
+                <Search size={14} color="#94A3B8" />
+                <input 
+                  type="text" 
+                  placeholder="Search name, email, identifier ID..." 
+                  value={searchQuery} 
+                  onChange={(e) => setSearchQuery(e.target.value)} 
+                  style={smStyles.tableCardSearchInputField} 
+                />
               </div>
             </div>
 
@@ -148,12 +184,12 @@ export default function UserDirectoryScreen() {
                 <table style={smStyles.tableStructureMarkup}>
                   <thead>
                     <tr>
-                      <th style={{ ...smStyles.th, textAlign: 'left', paddingLeft: '24px' }}>NAME / CONTACT DETAILS</th>
-                      <th style={{ ...smStyles.th, textAlign: 'left' }}>ACCOUNT ROLE</th>
-                      <th style={{ ...smStyles.th, textAlign: 'left' }}>IDENTIFIER ID</th>
-                      <th style={{ ...smStyles.th, textAlign: 'left' }}>RIDE ACTIVITY</th>
+                      <th style={{ ...smStyles.th, textAlign: 'left', paddingLeft: '20px' }}>NAME / CONTACT DETAILS</th>
+                      <th style={{ ...smStyles.th, textAlign: 'left' }}>ROLE</th>
+                      <th style={{ ...smStyles.th, textAlign: 'left' }}>IDENTIFIER</th>
+                      <th style={{ ...smStyles.th, textAlign: 'left' }}>ACTIVITY</th>
                       <th style={{ ...smStyles.th, textAlign: 'center' }}>STATUS</th>
-                      <th style={{ ...smStyles.th, textAlign: 'right', paddingRight: '24px' }}>ACTION</th>
+                      <th style={{ ...smStyles.th, textAlign: 'right', paddingRight: '20px' }}>ACTION</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -169,7 +205,7 @@ export default function UserDirectoryScreen() {
                           }} 
                           onClick={() => { setSelectedStudent(user); setActiveInspectorTab('info'); }}
                         >
-                          <td style={{ ...smStyles.tdNameCellMarkup, paddingLeft: isSelected ? '20px' : '24px' }}>
+                          <td style={{ ...smStyles.tdNameCellMarkup, paddingLeft: isSelected ? '16px' : '20px' }}>
                             <div style={smStyles.avatarContainerNodeRelative}>
                               {user.image ? (
                                 <img src={user.image} alt={user.name} style={smStyles.tableRowAvatarImage} />
@@ -192,19 +228,21 @@ export default function UserDirectoryScreen() {
                               <span style={smStyles.roleGuestBadge}><Globe size={12} /> Guest</span>
                             )}
                           </td>
-                          <td style={smStyles.tdStandardDataText}><span style={smStyles.monospaceIdentifierFont}>{user.id.substring(18)}</span></td>
+                          <td style={smStyles.tdStandardDataText}>
+                            <span style={smStyles.monospaceIdentifierFont}>#{formatShortId(user.id)}</span>
+                          </td>
                           <td style={smStyles.tdStandardDataText}>
                             <div style={smStyles.rideActivityStatusBarFlexBlock}>
                               <div style={smStyles.progressBarTrackBaseLine}>
-                                <div style={{ ...smStyles.progressBarFilledTrackLine, width: `${Math.min(user.rideCount * 2.5, 100)}%` }} />
+                                <div style={{ ...smStyles.progressBarFilledTrackLine, width: `${Math.min((user.rideCount || 0) * 2.5, 100)}%` }} />
                               </div>
-                              <span style={smStyles.rideVolumeTextCounterLabel}>{user.rideCount} runs</span>
+                              <span style={smStyles.rideVolumeTextCounterLabel}>{user.rideCount || 0} runs</span>
                             </div>
                           </td>
                           <td style={{ ...smStyles.tdStandardDataText, textAlign: 'center' }}>
                             <span style={{ ...smStyles.statusBadgeIndicatorPill, ...getStatusStyle(user.status) }}>{user.status}</span>
                           </td>
-                          <td style={{ ...smStyles.tdStandardDataText, textAlign: 'right', paddingRight: '24px' }}>
+                          <td style={{ ...smStyles.tdStandardDataText, textAlign: 'right', paddingRight: '20px' }}>
                             <span style={smStyles.tableInteractiveInlineActionTextBtn}>Inspect</span>
                           </td>
                         </tr>
@@ -240,15 +278,15 @@ export default function UserDirectoryScreen() {
                   <div style={smStyles.inspectorProfileAvatarMock}>{selectedStudent.name.slice(0, 2).toUpperCase()}</div>
                 )}
                 <h2 style={smStyles.inspectorProfilePrimaryTitleText}>{selectedStudent.name}</h2>
-                <p style={smStyles.inspectorProfileSecondarySubtitleText}>{selectedStudent.id}</p>
+                <p style={smStyles.inspectorProfileSecondarySubtitleText}>ID: #{formatShortId(selectedStudent.id)}</p>
               </div>
 
               {/* Sub-Tab Selector Navigation Track Row */}
               <div style={smStyles.historyTabTrackRow}>
-                <button onClick={() => setActiveInspectorTab('info')} style={{ ...smStyles.historyTabBtn, borderBottom: activeInspectorTab === 'info' ? '2px solid #1E3A8A' : 'none', color: activeInspectorTab === 'info' ? '#1E3A8A' : '#64748B', fontWeight: activeInspectorTab === 'info' ? 800 : 600 }}>Info</button>
-                <button onClick={() => setActiveInspectorTab('trips')} style={{ ...smStyles.historyTabBtn, borderBottom: activeInspectorTab === 'trips' ? '2px solid #1E3A8A' : 'none', color: activeInspectorTab === 'trips' ? '#1E3A8A' : '#64748B', fontWeight: activeInspectorTab === 'trips' ? 800 : 600 }}>Rides</button>
-                <button onClick={() => setActiveInspectorTab('feedback')} style={{ ...smStyles.historyTabBtn, borderBottom: activeInspectorTab === 'feedback' ? '2px solid #1E3A8A' : 'none', color: activeInspectorTab === 'feedback' ? '#1E3A8A' : '#64748B', fontWeight: activeInspectorTab === 'feedback' ? 800 : 600 }}>Reviews</button>
-                <button onClick={() => setActiveInspectorTab('reports')} style={{ ...smStyles.historyTabBtn, borderBottom: activeInspectorTab === 'reports' ? '2px solid #1E3A8A' : 'none', color: activeInspectorTab === 'reports' ? '#991B1B' : '#64748B', fontWeight: activeInspectorTab === 'reports' ? 800 : 600 }}>Reports</button>
+                <button onClick={() => setActiveInspectorTab('info')} style={{ ...smStyles.historyTabBtn, borderBottom: activeInspectorTab === 'info' ? '2px solid #1E3A8A' : '2px solid transparent', color: activeInspectorTab === 'info' ? '#1E3A8A' : '#64748B', fontWeight: activeInspectorTab === 'info' ? 800 : 600 }}>Info</button>
+                <button onClick={() => setActiveInspectorTab('trips')} style={{ ...smStyles.historyTabBtn, borderBottom: activeInspectorTab === 'trips' ? '2px solid #1E3A8A' : '2px solid transparent', color: activeInspectorTab === 'trips' ? '#1E3A8A' : '#64748B', fontWeight: activeInspectorTab === 'trips' ? 800 : 600 }}>Rides</button>
+                <button onClick={() => setActiveInspectorTab('feedback')} style={{ ...smStyles.historyTabBtn, borderBottom: activeInspectorTab === 'feedback' ? '2px solid #1E3A8A' : '2px solid transparent', color: activeInspectorTab === 'feedback' ? '#1E3A8A' : '#64748B', fontWeight: activeInspectorTab === 'feedback' ? 800 : 600 }}>Reviews</button>
+                <button onClick={() => setActiveInspectorTab('reports')} style={{ ...smStyles.historyTabBtn, borderBottom: activeInspectorTab === 'reports' ? '2px solid #1E3A8A' : '2px solid transparent', color: activeInspectorTab === 'reports' ? '#991B1B' : '#64748B', fontWeight: activeInspectorTab === 'reports' ? 800 : 600 }}>Reports</button>
               </div>
 
               {/* Content Viewport Stacks */}
@@ -258,9 +296,9 @@ export default function UserDirectoryScreen() {
                   <div style={smStyles.tabContentBlock}>
                     <h4 style={smStyles.inspectorSegmentGroupHeadingTitleText}>{selectedStudent.userType === 'DRIVER' ? 'VEHICLE ACCESS INFO' : 'CONTACT DETAILS'}</h4>
                     <div style={smStyles.inspectorMetaContentBlockCard}>
-                      <div style={smStyles.inspectorMetaCardRowField}><Mail size={14} color="#94A3B8" /><span style={smStyles.inspectorMetaCardRowValueText}>{selectedStudent.email}</span></div>
-                      <div style={smStyles.inspectorMetaCardRowField}><Phone size={14} color="#94A3B8" /><span style={smStyles.inspectorMetaCardRowValueText}>{selectedStudent.phone}</span></div>
-                      <div style={smStyles.inspectorMetaCardRowField}><MapPin size={14} color="#94A3B8" /><span style={smStyles.inspectorMetaCardRowValueText}>{selectedStudent.residence}</span></div>
+                      <div style={smStyles.inspectorMetaCardRowField}><Mail size={14} color="#94A3B8" style={{ flexShrink: 0 }} /><span style={smStyles.inspectorMetaCardRowValueText}>{selectedStudent.email}</span></div>
+                      <div style={smStyles.inspectorMetaCardRowField}><Phone size={14} color="#94A3B8" style={{ flexShrink: 0 }} /><span style={smStyles.inspectorMetaCardRowValueText}>{selectedStudent.phone}</span></div>
+                      <div style={smStyles.inspectorMetaCardRowField}><MapPin size={14} color="#94A3B8" style={{ flexShrink: 0 }} /><span style={smStyles.inspectorMetaCardRowValueText}>{selectedStudent.residence}</span></div>
                     </div>
                   </div>
                 )}
@@ -271,7 +309,7 @@ export default function UserDirectoryScreen() {
                     {selectedStudent.tripsHistory && selectedStudent.tripsHistory.length > 0 ? (
                       selectedStudent.tripsHistory.map((trip, i) => (
                         <div key={i} style={smStyles.historyItemCard}>
-                          <div style={smStyles.historyCardHeader}><span style={smStyles.boldBlueTripIdentifier}>{trip.id.substring(18)}</span><span>{trip.date}</span></div>
+                          <div style={smStyles.historyCardHeader}><span style={smStyles.boldBlueTripIdentifier}>#{formatShortId(trip.id)}</span><span>{trip.date}</span></div>
                           <p style={smStyles.historyCardText}><MapPin size={10} /> {trip.route}</p>
                           <div style={smStyles.historyCardHeader}><span>{selectedStudent.userType === 'DRIVER' ? 'Passenger:' : 'Driver:'} {trip.driver}</span><span style={{ ...smStyles.boldTripStateStatus, color: trip.state === 'CANCELED' ? '#991B1B' : '#15803D' }}>{trip.state}</span></div>
                         </div>
@@ -321,8 +359,23 @@ export default function UserDirectoryScreen() {
 
               {/* Administrative Security Control Block */}
               <div style={smStyles.inspectorSidebarFooterActionToolbarButtonCluster}>
-                <button style={smStyles.inspectorSidebarMessageActionButton} onClick={() => handleAccountAction(selectedStudent.id, 'warn')}><Send size={14} /> Send Warning Notice</button>
-                <button style={smStyles.inspectorSidebarSuspendAccountActionButton} onClick={() => handleAccountAction(selectedStudent.id, 'suspend')}><Ban size={14} /> Suspend User Access</button>
+                <button 
+                  style={smStyles.inspectorSidebarMessageActionButton} 
+                  onClick={() => handleAccountAction(selectedStudent.id, 'warn')}
+                >
+                  <Send size={14} /> Send Warning Notice
+                </button>
+                
+                <button 
+                  style={{
+                    ...smStyles.inspectorSidebarSuspendAccountActionButton,
+                    backgroundColor: selectedStudent.status === 'FLAGGED' ? '#DCFCE7' : '#FFF1F2',
+                    color: selectedStudent.status === 'FLAGGED' ? '#15803D' : '#E11D48'
+                  }} 
+                  onClick={() => handleAccountAction(selectedStudent.id, 'suspend')}
+                >
+                  <Ban size={14} /> {selectedStudent.status === 'FLAGGED' ? 'Reactivate User Access' : 'Suspend User Access'}
+                </button>
               </div>
             </div>
           ) : (
@@ -341,46 +394,45 @@ const smStyles = {
   workspaceWrapperContainer: { 
     display: 'flex', 
     flexDirection: 'column', 
-    gap: '24px', 
+    gap: '20px', 
     width: '100%', 
     boxSizing: 'border-box' 
   },
   metricsGrid: { 
-    display: 'flex', 
-    gap: '20px', 
+    display: 'grid', 
+    gridTemplateColumns: 'repeat(4, 1fr)', 
+    gap: '16px', 
     width: '100%', 
-    flexDirection: 'row', 
-    alignItems: 'stretch', 
-    justifyContent: 'space-between' 
+    alignItems: 'stretch' 
   },
   splitContentRowCanvas: { 
     display: 'flex', 
-    gap: '32px', 
+    gap: '20px', 
     width: '100%', 
     boxSizing: 'border-box', 
-    alignItems: 'stretch' 
+    alignItems: 'flex-start' 
   },
   leftWorkspaceMainColumn: { 
     display: 'flex', 
     flexDirection: 'column', 
-    flex: 3, 
-    boxSizing: 'border-box' 
+    flex: '1 1 64%', 
+    minWidth: '0', 
+    boxSizing: 'border-box'
   },
   statCard: { 
     backgroundColor: '#ffffff', 
     borderRadius: '16px', 
     border: '1px solid #E2E8F0', 
-    padding: '20px', 
+    padding: '16px 20px', 
     display: 'flex', 
     justifyContent: 'space-between', 
     alignItems: 'center', 
-    boxShadow: '0 1px 2px rgba(0,0,0,0.01)', 
-    flex: 1 
+    boxShadow: '0 1px 2px rgba(0,0,0,0.01)' 
   },
   statBodyBlock: { 
     display: 'flex', 
     flexDirection: 'column', 
-    gap: '6px', 
+    gap: '4px', 
     textAlign: 'left' 
   },
   statLabelText: { 
@@ -394,7 +446,7 @@ const smStyles = {
     gap: '8px' 
   },
   statNumberText: { 
-    fontSize: '24px', 
+    fontSize: '22px', 
     fontWeight: 800, 
     color: '#0F172A' 
   },
@@ -403,30 +455,34 @@ const smStyles = {
     fontWeight: 700 
   },
   statIconBadge: { 
-    width: '36px', 
-    height: '36px', 
+    width: '40px', 
+    height: '40px', 
     borderRadius: '12px', 
     display: 'flex', 
     alignItems: 'center', 
-    justifyContent: 'center' 
+    justifyContent: 'center',
+    flexShrink: 0
   },
   tableContainerCard: { 
     backgroundColor: '#ffffff', 
     borderRadius: '16px', 
     border: '1px solid #E2E8F0', 
-    padding: '24px 0', 
+    padding: '20px 0 0 0', 
     width: '100%', 
     boxShadow: '0 1px 3px rgba(0,0,0,0.01)', 
     display: 'flex', 
-    flexDirection: 'column', 
-    height: '100%' 
+    flexDirection: 'column' 
   },
+
+  /* HEADER SEGMENT - SPREADS TITLE TO FAR LEFT AND SEARCH TO FAR RIGHT */
   tableHeaderSegmentRow: { 
     display: 'flex', 
     justifyContent: 'space-between', 
     alignItems: 'center', 
-    padding: '0 24px 20px 24px', 
-    borderBottom: '1px solid #F1F5F9' 
+    padding: '0 20px 16px 20px', 
+    borderBottom: '1px solid #F1F5F9',
+    width: '100%',
+    boxSizing: 'border-box'
   },
   panelTitleText: { 
     fontSize: '15px', 
@@ -436,11 +492,6 @@ const smStyles = {
     textTransform: 'capitalize', 
     letterSpacing: '0.3px' 
   },
-  tableHeaderToolbarActionCluster: { 
-    display: 'flex', 
-    alignItems: 'center', 
-    gap: '12px' 
-  },
   tableCardInlineSearchBar: { 
     display: 'flex', 
     alignItems: 'center', 
@@ -449,7 +500,7 @@ const smStyles = {
     border: '1px solid #E2E8F0', 
     borderRadius: '10px', 
     padding: '6px 12px', 
-    width: '240px' 
+    width: '260px' 
   },
   tableCardSearchInputField: { 
     background: 'transparent', 
@@ -468,9 +519,9 @@ const smStyles = {
     borderCollapse: 'collapse' 
   },
   th: { 
-    padding: '14px 12px', 
-    fontSize: '11px', 
-    fontWeight: 700, 
+    padding: '12px 10px', 
+    fontSize: '10px', 
+    fontWeight: 800, 
     color: '#94A3B8', 
     borderBottom: '1px solid #F1F5F9', 
     letterSpacing: '0.5px', 
@@ -483,13 +534,14 @@ const smStyles = {
   },
   avatarContainerNodeRelative: { 
     position: 'relative', 
-    display: 'inline-block' 
+    display: 'inline-block',
+    flexShrink: 0
   },
   tdNameCellMarkup: { 
-    padding: '14px 12px', 
+    padding: '12px 10px', 
     display: 'flex', 
     alignItems: 'center', 
-    gap: '14px' 
+    gap: '12px' 
   },
   tableRowAvatarImage: { 
     width: '34px', 
@@ -506,16 +558,15 @@ const smStyles = {
     color: '#1E3A8A', 
     fontSize: '12px', 
     fontWeight: 700, 
-    display: 'flex', 
-    alignItems: 'center', 
-    justifyContent: 'center' 
+    lineHeight: '34px', 
+    textAlign: 'center'
   },
   tableRowOnlineStatusDotBadgeNode: { 
     position: 'absolute', 
     bottom: '-1px', 
     right: '-1px', 
-    width: '9px', 
-    height: '9px', 
+    width: '8px', 
+    height: '8px', 
     borderRadius: '50%', 
     backgroundColor: '#22C55E', 
     border: '1.5px solid #ffffff' 
@@ -537,49 +588,47 @@ const smStyles = {
     fontWeight: 500 
   },
   tdStandardDataText: { 
-    padding: '14px 12px', 
-    fontSize: '13px', 
+    padding: '12px 10px', 
+    fontSize: '12px', 
     color: '#475569', 
     textAlign: 'left', 
     verticalAlign: 'middle' 
   },
   monospaceIdentifierFont: { 
     fontFamily: 'monospace', 
-    fontWeight: '500' 
+    fontWeight: '600' 
   },
   roleStudentBadge: { 
-    fontSize: '11px', 
+    fontSize: '10px', 
     fontWeight: 700, 
     color: '#1E3A8A', 
     backgroundColor: '#EFF6FF', 
-    padding: '4px 8px', 
+    padding: '3px 8px', 
     borderRadius: '6px', 
-    display: 'flex', 
+    display: 'inline-flex', 
     alignItems: 'center', 
-    gap: '4px', 
-    width: 'fit-content' 
+    gap: '4px' 
   },
   roleGuestBadge: { 
-    fontSize: '11px', 
+    fontSize: '10px', 
     fontWeight: 700, 
     color: '#D97706', 
     backgroundColor: '#FFFBEB', 
-    padding: '4px 8px', 
+    padding: '3px 8px', 
     borderRadius: '6px', 
-    display: 'flex', 
+    display: 'inline-flex', 
     alignItems: 'center', 
-    gap: '4px', 
-    width: 'fit-content' 
+    gap: '4px' 
   },
   rideActivityStatusBarFlexBlock: { 
     display: 'flex', 
     alignItems: 'center', 
-    gap: '10px', 
-    width: '120px' 
+    gap: '8px', 
+    width: '100px' 
   },
   progressBarTrackBaseLine: { 
     flex: 1, 
-    height: '6px', 
+    height: '5px', 
     backgroundColor: '#E2E8F0', 
     borderRadius: '10px', 
     overflow: 'hidden' 
@@ -598,111 +647,116 @@ const smStyles = {
   statusBadgeIndicatorPill: { 
     fontSize: '10px', 
     fontWeight: 700, 
-    padding: '4px 10px', 
+    padding: '3px 8px', 
     borderRadius: '50px', 
     letterSpacing: '0.2px', 
     display: 'inline-block' 
   },
   tableInteractiveInlineActionTextBtn: { 
-    fontSize: '12px', 
+    fontSize: '11px', 
     fontWeight: 700, 
     color: '#2563EB', 
     cursor: 'pointer' 
   },
   tableFooterPaginationRow: { 
     display: 'flex', 
-    justifyContent: 'space-between', 
+    justify: 'space-between', 
     alignItems: 'center', 
-    padding: '20px 24px 0 24px', 
+    padding: '14px 20px', 
     borderTop: '1px solid #F1F5F9', 
     marginTop: 'auto' 
   },
   tableFooterCount: { 
-    fontSize: '12px', 
+    fontSize: '11px', 
     color: '#94A3B8', 
     fontWeight: 500 
   },
   paginationButtonCluster: { 
     display: 'flex', 
-    gap: '16px', 
+    gap: '12px', 
     alignItems: 'center' 
   },
   paginationArrowButton: { 
     display: 'flex', 
     alignItems: 'center', 
-    justifyContent: 'center', 
+    justify: 'center', 
     background: 'none', 
     border: 'none', 
     cursor: 'pointer', 
     padding: '4px', 
     outline: 'none' 
   },
+
+  /* INSPECTOR PANEL */
   rightWorkspaceReviewInspectorSidebarPanel: { 
     backgroundColor: '#ffffff', 
     borderRadius: '16px', 
     border: '1px solid #E2E8F0', 
-    padding: '24px', 
-    flex: 1.2, 
+    padding: '20px', 
+    flex: '0 0 320px', 
+    maxWidth: '320px',
     display: 'flex', 
     flexDirection: 'column', 
     boxShadow: '0 1px 3px rgba(0,0,0,0.01)', 
-    minWidth: '340px', 
-    boxSizing: 'border-box' 
+    boxSizing: 'border-box'
   },
   inspectorSidebarInternalContentFlexContainer: { 
     display: 'flex', 
     flexDirection: 'column', 
-    height: '100%', 
     width: '100%' 
   },
   inspectorHeaderProfileSummaryBlock: { 
     display: 'flex', 
     flexDirection: 'column', 
     alignItems: 'center', 
+    justify: 'center',
     textAlign: 'center', 
-    marginBottom: '16px' 
+    marginBottom: '16px',
+    width: '100%'
   },
   inspectorProfileAvatarMainImage: { 
-    width: '64px', 
-    height: '64px', 
+    width: '68px', 
+    height: '68px', 
     borderRadius: '50%', 
     objectFit: 'cover', 
     border: '2px solid #E2E8F0', 
     marginBottom: '10px' 
   },
   inspectorProfileAvatarMock: { 
-    width: '64px', 
-    height: '64px', 
+    width: '68px', 
+    height: '68px', 
     borderRadius: '50%', 
     backgroundColor: '#DBEAFE', 
     color: '#1E3A8A', 
-    fontSize: '18px', 
+    fontSize: '20px', 
     fontWeight: 800, 
-    display: 'flex', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    marginBottom: '10px' 
+    lineHeight: '68px', 
+    textAlign: 'center', 
+    margin: '0 auto 10px auto',
+    boxSizing: 'border-box'
   },
   inspectorProfilePrimaryTitleText: { 
     fontSize: '16px', 
     fontWeight: 800, 
     color: '#1E3A8A', 
-    margin: 0 
+    margin: 0,
+    textAlign: 'center'
   },
   inspectorProfileSecondarySubtitleText: { 
-    fontSize: '12px', 
+    fontSize: '11px', 
     color: '#64748B', 
     fontFamily: 'monospace', 
-    margin: '2px 0 0 0' 
+    margin: '4px 0 0 0',
+    textAlign: 'center'
   },
   historyTabTrackRow: { 
     display: 'flex', 
     borderBottom: '1px solid #E2E8F0', 
     paddingBottom: '2px', 
-    gap: '12px', 
+    gap: '16px', 
     marginBottom: '16px', 
     width: '100%', 
-    justifyContent: 'space-between' 
+    justify: 'flex-start' 
   },
   historyTabBtn: { 
     background: 'none', 
@@ -715,15 +769,15 @@ const smStyles = {
   historyScrollContainerViewport: { 
     display: 'flex', 
     flexDirection: 'column', 
-    gap: '14px', 
-    flex: 1, 
+    gap: '12px', 
+    maxHeight: '300px',
     overflowY: 'auto', 
-    paddingRight: '4px' 
+    paddingRight: '2px'
   },
   tabContentBlock: { 
     display: 'flex', 
     flexDirection: 'column', 
-    gap: '12px', 
+    gap: '10px', 
     textAlign: 'left' 
   },
   inspectorSegmentGroupHeadingTitleText: { 
@@ -736,34 +790,35 @@ const smStyles = {
   inspectorMetaContentBlockCard: { 
     border: '1px solid #F1F5F9', 
     borderRadius: '12px', 
-    padding: '16px', 
+    padding: '14px', 
     display: 'flex', 
     flexDirection: 'column', 
-    gap: '14px', 
+    gap: '12px', 
     backgroundColor: '#FAFCFF' 
   },
   inspectorMetaCardRowField: { 
     display: 'flex', 
     alignItems: 'center', 
-    gap: '12px' 
+    gap: '10px' 
   },
   inspectorMetaCardRowValueText: { 
     fontSize: '12px', 
     color: '#334155', 
-    fontWeight: 600 
+    fontWeight: 600,
+    wordBreak: 'break-all'
   },
   historyItemCard: { 
-    padding: '12px', 
+    padding: '10px', 
     border: '1px solid #E2E8F0', 
-    borderRadius: '12px', 
+    borderRadius: '10px', 
     backgroundColor: '#FAFCFF', 
     display: 'flex', 
     flexDirection: 'column', 
-    gap: '6px' 
+    gap: '4px' 
   },
   historyCardHeader: { 
     display: 'flex', 
-    justifyContent: 'space-between', 
+    justify: 'space-between', 
     fontSize: '11px', 
     color: '#475569' 
   },
@@ -775,7 +830,7 @@ const smStyles = {
     fontWeight: 700 
   },
   historyCardText: { 
-    fontSize: '12px', 
+    fontSize: '11px', 
     fontWeight: 600, 
     color: '#1E293B', 
     margin: 0, 
@@ -788,20 +843,20 @@ const smStyles = {
     color: '#CA8A04' 
   },
   historyCardItalicCommentText: { 
-    fontSize: '12px', 
+    fontSize: '11px', 
     fontWeight: 600, 
     color: '#1E293B', 
     margin: 0, 
     fontStyle: 'italic' 
   },
   incidentReportRowBlockCard: { 
-    padding: '12px', 
+    padding: '10px', 
     border: '1px solid #FEE2E2', 
-    borderRadius: '12px', 
+    borderRadius: '10px', 
     backgroundColor: '#FFF5F5', 
     display: 'flex', 
     flexDirection: 'column', 
-    gap: '6px' 
+    gap: '4px' 
   },
   reportIncidentTitleBadge: { 
     color: '#991B1B', 
@@ -810,17 +865,17 @@ const smStyles = {
     alignItems: 'center' 
   },
   microTimestampFont: { 
-    fontSize: '11px' 
+    fontSize: '10px' 
   },
   incidentLogBodyTextDescription: { 
     margin: 0, 
-    fontSize: '12px', 
+    fontSize: '11px', 
     color: '#475569', 
     lineHeight: '1.4', 
     fontWeight: 500 
   },
   incidentFilerAuthorLabel: { 
-    fontSize: '10px', 
+    fontSize: '9px', 
     color: '#94A3B8', 
     textTransform: 'uppercase', 
     letterSpacing: '0.3px', 
@@ -829,53 +884,53 @@ const smStyles = {
   inspectorSidebarFooterActionToolbarButtonCluster: { 
     display: 'flex', 
     flexDirection: 'column', 
-    gap: '12px', 
-    marginTop: 'auto', 
-    paddingTop: '16px' 
+    gap: '10px', 
+    marginTop: '16px',
+    paddingTop: '12px',
+    borderTop: '1px solid #F1F5F9'
   },
   inspectorSidebarMessageActionButton: { 
     width: '100%', 
     backgroundColor: '#F1F5F9', 
     border: 'none', 
-    borderRadius: '12px', 
+    borderRadius: '10px', 
     color: '#475569', 
-    fontSize: '13px', 
+    fontSize: '12px', 
     fontWeight: 700, 
-    padding: '12px 0', 
+    padding: '10px 0', 
     cursor: 'pointer', 
     display: 'flex', 
     alignItems: 'center', 
-    justifyContent: 'center', 
+    justify: 'center', 
     gap: '8px', 
     outline: 'none' 
   },
   inspectorSidebarSuspendAccountActionButton: { 
     width: '100%', 
-    backgroundColor: '#FFF1F2', 
     border: 'none', 
-    borderRadius: '12px', 
-    color: '#E11D48', 
-    fontSize: '13px', 
+    borderRadius: '10px', 
+    fontSize: '12px', 
     fontWeight: 700, 
-    padding: '12px 0', 
+    padding: '10px 0', 
     cursor: 'pointer', 
     display: 'flex', 
     alignItems: 'center', 
-    justifyContent: 'center', 
+    justify: 'center', 
     gap: '8px', 
-    outline: 'none' 
+    outline: 'none',
+    transition: 'all 0.15s ease'
   },
   inspectorSidebarEmptyStateContainerFallbackBox: { 
     display: 'flex', 
     alignItems: 'center', 
-    justifyContent: 'center', 
+    justify: 'center', 
     height: '100%', 
     width: '100%' 
   },
   loadingWrapperContainerFrame: { 
     display: 'flex', 
     alignItems: 'center', 
-    justifyContent: 'center', 
+    justify: 'center', 
     height: '75vh', 
     width: '100%' 
   },
@@ -888,7 +943,14 @@ const smStyles = {
     padding: '32px', 
     textAlign: 'center', 
     color: '#94A3B8', 
-    fontSize: '13px', 
+    fontSize: '12px', 
     fontWeight: 600 
+  },
+  emptyFallbackItalicMessageText: {
+    fontSize: '11px',
+    color: '#94A3B8',
+    fontWeight: 500,
+    fontStyle: 'italic',
+    textAlign: 'center'
   }
 }

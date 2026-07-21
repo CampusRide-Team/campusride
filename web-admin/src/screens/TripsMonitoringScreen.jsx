@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { 
   Users, 
   CheckCircle, 
@@ -24,15 +24,18 @@ export default function TripsMonitoringScreen() {
   const [driverRoster, setDriverRoster] = useState([])
   const [eventsLog, setEventsLog] = useState([])
 
+  // Use a mutable ref to track selected ID within the high-frequency poller to avoid interval thrashing
+  const selectedDriverIdRef = useRef(null)
+
   const fetchLiveTrackingState = async (isInitial = false) => {
     try {
       if (isInitial) setLoading(true)
       
       const res = await api.get('/admin/monitoring/snapshot')
       if (res.data?.success && res.data?.data) {
-        const { metrics: rawMetrics, activeTrips: rawTrips, routePerformance: rawRoute, driverRoster: rawRoster } = res.data.data
+        const { metrics: rawMetrics = [], activeTrips: rawTrips = [], routePerformance: rawRoute = [], driverRoster: rawRoster = [] } = res.data.data
         
-        // Hydrate metrics with frontend lucide-react icons
+        // Hydrate metrics with frontend icons securely
         const iconMapping = [
           { icon: <Users size={18} color="#1E3A8A" /> },
           { icon: <CheckCircle size={18} color="#1E3A8A" /> },
@@ -49,7 +52,9 @@ export default function TripsMonitoringScreen() {
         setRoutePerformance(rawRoute)
         setDriverRoster(rawRoster)
 
-        if (rawRoster.length > 0 && !selectedDriverId) {
+        // Only assign default fallback if nothing has been selected yet
+        if (rawRoster.length > 0 && !selectedDriverIdRef.current) {
+          selectedDriverIdRef.current = rawRoster[0].id
           setSelectedDriverId(rawRoster[0].id)
         }
 
@@ -72,18 +77,24 @@ export default function TripsMonitoringScreen() {
     }
   }
 
+  // 💡 THE ARCHITECTURAL FIX: Separate poller initialization from focus selections to avoid high-frequency network flooding
   useEffect(() => {
     fetchLiveTrackingState(true)
     
-    // High-frequency 3-second operational room sync polling
     const liveTelemetryPoller = setInterval(() => {
       fetchLiveTrackingState(false)
     }, 3000)
 
     return () => clearInterval(liveTelemetryPoller)
-  }, [selectedDriverId])
+  }, [])
+
+  const handleSelectDriver = (id) => {
+    selectedDriverIdRef.current = id
+    setSelectedDriverId(id)
+  }
 
   const handleDriverAction = async (driverId, commandType) => {
+    if (!driverId) return
     try {
       const res = await api.post(`/admin/monitoring/driver/${driverId}/action`, { action: commandType })
       if (res.data?.success) {
@@ -96,7 +107,8 @@ export default function TripsMonitoringScreen() {
     }
   }
 
-  const auditedDriver = driverRoster.find(d => d.id === selectedDriverId) || driverRoster[0]
+  // Safe evaluation cascade for audited target context
+  const auditedDriver = driverRoster.find(d => d.id === selectedDriverId) || driverRoster[0] || null
 
   if (loading) {
     return (
@@ -110,10 +122,10 @@ export default function TripsMonitoringScreen() {
     <div style={tmStyles.workspaceWrapperContainer}>
       <MapStyles />
 
-      {/* 1. UPPER OVERVIEW METRICS GRID */}
+      {/* OVERVIEW METRICS GRID */}
       <div style={tmStyles.metricsGrid}>
         {metrics.map((m) => (
-          <div key={m.id} style={tmStyles.statCard}>
+          <div key={m.id || m.label} style={tmStyles.statCard}>
             <div style={smStyles.statBodyBlock}>
               <span style={smStyles.statLabelText}>{m.label}</span>
               <div style={smStyles.statNumberGroup}>
@@ -126,7 +138,7 @@ export default function TripsMonitoringScreen() {
         ))}
       </div>
 
-      {/* 2. MIDDLE ROW CANVAS: SPLIT ZONES TABLE & SIDEPANEL */}
+      {/* MIDDLE ROW CANVAS: SPLIT ZONES TABLE & SIDEPANEL */}
       <div style={tmStyles.splitContentRowCanvas}>
 
         {/* LEFT COLUMN COMPONENT LAYER: CAMPUS ZONES CARD */}
@@ -146,18 +158,22 @@ export default function TripsMonitoringScreen() {
                 <span style={tmStyles.tableHeaderLabel}>AVG WAIT ETA</span>
                 <span style={{ ...tmStyles.tableHeaderLabel, textAlign: 'right' }}>SURGE VELOCITY</span>
               </div>
-              {routePerformance.map((route, index) => (
-                <div key={index} style={tmStyles.tableDataDataRow}>
-                  <span style={tmStyles.routeNameText}>{route.name}</span>
-                  <span style={tmStyles.routeMetricsText}>{route.activeDrivers} cars roaming</span>
-                  <span style={tmStyles.routeMetricsText}>{route.avgEta}</span>
-                  <div style={tmStyles.flexRightAlignWrapper}>
-                    <span style={{ ...tmStyles.loadStatusPill, backgroundColor: route.color }}>
-                      {route.load}
-                    </span>
+              {routePerformance.length > 0 ? (
+                routePerformance.map((route, index) => (
+                  <div key={index} style={tmStyles.tableDataDataRow}>
+                    <span style={tmStyles.routeNameText}>{route.name}</span>
+                    <span style={tmStyles.routeMetricsText}>{route.activeDrivers} cars roaming</span>
+                    <span style={tmStyles.routeMetricsText}>{route.avgEta}</span>
+                    <div style={tmStyles.flexRightAlignWrapper}>
+                      <span style={{ ...tmStyles.loadStatusPill, backgroundColor: route.color || '#475569' }}>
+                        {route.load}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              ) : (
+                <div style={tmStyles.emptyStateTextWrapper}>No campus zones tracking density metrics.</div>
+              )}
             </div>
           </div>
         </div>
@@ -183,10 +199,10 @@ export default function TripsMonitoringScreen() {
             {activeRightTab === 'trips' ? (
               activeTrips.length > 0 ? (
                 activeTrips.map((t, idx) => (
-                  <div key={idx} style={tmStyles.tripCleanLayoutItemBlock}>
+                  <div key={t.id || idx} style={tmStyles.tripCleanLayoutItemBlock}>
                     <div style={tmStyles.tripCardTopHeaderLine}>
                       <span style={tmStyles.tripIdIdentifierLabelText}>{t.id}</span>
-                      <span style={{ ...tmStyles.liveStatusBadgeMarkup, backgroundColor: t.statusBg, color: t.statusColor }}>{t.status}</span>
+                      <span style={{ ...tmStyles.liveStatusBadgeMarkup, backgroundColor: t.statusBg || '#E2E8F0', color: t.statusColor || '#475569' }}>{t.status}</span>
                     </div>
 
                     <div style={tmStyles.tripIdentityDetailsGridContainer}>
@@ -213,16 +229,16 @@ export default function TripsMonitoringScreen() {
               driverRoster.length > 0 ? (
                 driverRoster.map((driver, idx) => (
                   <div 
-                    key={idx} 
-                    onClick={() => setSelectedDriverId(driver.id)} 
+                    key={driver.id || idx} 
+                    onClick={() => handleSelectDriver(driver.id)} 
                     style={{ ...tmStyles.driverRosterLayoutCardBlock, border: selectedDriverId === driver.id ? '2px solid #1E3A8A' : '1px solid #E2E8F0' }}
                   >
                     <div style={tmStyles.driverRosterHeaderFlexRow}>
                       <div style={tmStyles.driverIdentityTextStack}>
                         <span style={tmStyles.driverRosterNameTitle}>{driver.name}</span>
-                        <span style={tmStyles.driverRosterSubAssetLabel}>{driver.id.substring(18)} • {driver.vehicle}</span>
+                        <span style={tmStyles.driverRosterSubAssetLabel}>{driver.id ? driver.id.substring(Math.max(0, driver.id.length - 6)) : '---'} • {driver.vehicle}</span>
                       </div>
-                      <span style={{ ...tmStyles.statusBadgeIndicatorPillMarkup, backgroundColor: driver.statusBg, color: driver.statusColor }}>{driver.status}</span>
+                      <span style={{ ...tmStyles.statusBadgeIndicatorPillMarkup, backgroundColor: driver.statusBg || '#E2E8F0', color: driver.statusColor || '#475569' }}>{driver.status}</span>
                     </div>
                     <p style={tmStyles.driverLiveActivityLogDetailsDescriptionText}>{driver.details}</p>
                   </div>
@@ -235,35 +251,39 @@ export default function TripsMonitoringScreen() {
         </div>
       </div>
 
-      {/* 3. BASE TIER PANEL: DYNAMIC AUDITING LEDGER & RECENT TIMELINE LOGS */}
+      {/* BASE TIER PANEL: DYNAMIC AUDITING LEDGER & RECENT TIMELINE LOGS */}
       <div style={tmStyles.bottomDoubleGridCanvasRow}>
 
         {/* LOWER GRID WINDOW LEFT: ACTIVE OPERATOR DETAILS DETECTOR */}
         <div style={tmStyles.driverHistoryLedgerCard}>
           <div style={tmStyles.panelHeadingRowFlexHeader}>
-            <h3 style={tmStyles.containerBlockTitle}>Driver Audit Blueprint: <span style={tmStyles.auditedDriverInlineHeadingText}>{auditedDriver?.name}</span></h3>
+            <h3 style={tmStyles.containerBlockTitle}>
+              Driver Audit Blueprint: <span style={tmStyles.auditedDriverInlineHeadingText}>{auditedDriver ? auditedDriver.name : 'No Operator Selected'}</span>
+            </h3>
           </div>
 
           <div style={tmStyles.driverHistorySplitGridContainers}>
             <div style={{ ...tmStyles.ledgerMetricSubBlock, gridColumn: 'span 2' }}>
               <span style={tmStyles.subBlockHeadingTitle}>LIFETIME PERFORMANCE TRACKER</span>
-              <p style={tmStyles.ledgerDataRowText}>Total Completed Rides: <strong>{auditedDriver?.lifetimeTrips?.completed}</strong></p>
-              <p style={tmStyles.ledgerDataRowText}>Total Customer Cancellations: <strong style={tmStyles.errorColorEmphasisText}>{auditedDriver?.lifetimeTrips?.canceled}</strong></p>
+              <p style={tmStyles.ledgerDataRowText}>Total Completed Rides: <strong>{auditedDriver?.lifetimeTrips?.completed ?? 0}</strong></p>
+              <p style={tmStyles.ledgerDataRowText}>Total Customer Cancellations: <strong style={tmStyles.errorColorEmphasisText}>{auditedDriver?.lifetimeTrips?.canceled ?? 0}</strong></p>
             </div>
 
             <div style={{ ...tmStyles.ledgerMetricSubBlock, gridColumn: 'span 2' }}>
               <span style={tmStyles.subBlockHeadingTitle}>BEHAVIORAL INFRACTIONS RECORD DETECTOR</span>
-              {auditedDriver?.infractionsLog?.length > 0 ? auditedDriver.infractionsLog.map((inf, i) => (
-                <div key={i} style={tmStyles.infractionRowCard}>
-                  <div style={tmStyles.historyCardHeader}>
-                    <span style={tmStyles.infractionLabelErrorFlexLine}>
-                      <AlertTriangle size={12} style={tmStyles.iconRightMarginSpacing} />{inf.type}
-                    </span>
-                    <span>{inf.date}</span>
+              {auditedDriver?.infractionsLog && auditedDriver.infractionsLog.length > 0 ? (
+                auditedDriver.infractionsLog.map((inf, i) => (
+                  <div key={i} style={tmStyles.infractionRowCard}>
+                    <div style={tmStyles.historyCardHeader}>
+                      <span style={tmStyles.infractionLabelErrorFlexLine}>
+                        <AlertTriangle size={12} style={tmStyles.iconRightMarginSpacing} />{inf.type}
+                      </span>
+                      <span>{inf.date}</span>
+                    </div>
+                    <p style={tmStyles.infractionDetailsParagraphBodyText}>{inf.details}</p>
                   </div>
-                  <p style={tmStyles.infractionDetailsParagraphBodyText}>{inf.details}</p>
-                </div>
-              )) : (
+                ))
+              ) : (
                 <p style={tmStyles.emptyLedgerFallbackItalicText}>No behavioral infractions or system performance flags logged.</p>
               )}
             </div>
@@ -289,9 +309,9 @@ export default function TripsMonitoringScreen() {
           </div>
           <div style={tmStyles.verticalFlexStackLayoutContainer}>
             {eventsLog.map((log, idx) => (
-              <div key={idx} style={tmStyles.logEventRowStrip}>
+              <div key={log.id || idx} style={tmStyles.logEventRowStrip}>
                 <div style={tmStyles.logEventLeftStatusCluster}>
-                  <div style={{ ...tmStyles.logStatusNodePoint, backgroundColor: log.color }} />
+                  <div style={{ ...tmStyles.logStatusNodePoint, backgroundColor: log.color || '#3B82F6' }} />
                   <div style={tmStyles.logTextStackTextGroup}>
                     <span style={tmStyles.logEventHeadingTitleText}>{log.title}</span>
                     <span style={smStyles.studentProfileSecondaryEmailText}>{log.desc}</span>
@@ -314,7 +334,7 @@ const MapStyles = () => (
   `}</style>
 )
 
- const smStyles = {
+const smStyles = {
   statBodyBlock: { 
     display: 'flex', 
     flexDirection: 'column', 
@@ -663,6 +683,7 @@ const tmStyles = {
     display: 'flex', 
     flexDirection: 'column', 
     gap: '20px', 
+    boxShadow: '0 1px 2px rgba(0,0,0,0.01)',
     boxSizing: 'border-box' 
   },
   auditedDriverInlineHeadingText: { 
@@ -707,7 +728,8 @@ const tmStyles = {
     display: 'flex', 
     flexDirection: 'column', 
     width: '100%', 
-    boxSizing: 'border-box' 
+    boxSizing: 'border-box',
+    marginBottom: '8px'
   },
   infractionLabelErrorFlexLine: { 
     color: '#991B1B', 

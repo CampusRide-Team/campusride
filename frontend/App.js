@@ -1,8 +1,22 @@
 import React, { useEffect, useState } from "react";
-import { Alert, View, StyleSheet } from "react-native";
+import { Alert, View, StyleSheet, Platform } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
 import { ThemeProvider, useTheme } from "./src/context/ThemeContext";
+
+// IMPORTS: For registering native hardware push notification parameters
+import * as Notifications from "expo-notifications";
+import * as Device from "expo-device";
+import api from "./src/api/axios";
+
+// Configure how notifications behave when the app is foregrounded
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 // Auth screens
 import SplashScreen from "./src/screens/auth/SplashScreen";
@@ -31,21 +45,46 @@ import DriverSupport from "./src/screens/driver/DriverSupport";
 import EditDriverProfile from "./src/screens/driver/EditDriverProfile";
 import DriverSettings from "./src/screens/driver/DriverSettings";
 
+// IMPORT: Suspension Modal Component
+import AccountSuspendedModal from "./src/context/AccountSuspendedModal";
+
 const RootNavigator = () => {
   const [screen, setScreen] = useState("splash");
-  const { role, setRole, login, logout, user: authUser, token: authToken } = useAuth(); // 💡 Added: user (authUser) and token (authToken)
-  
-  // Actively listen to global theme changes to force component redraws
+  const { role, setRole, login, logout, user: authUser, token: authToken } = useAuth();
   const { theme, darkModeEnabled } = useTheme();
 
-  // UNIFIED DRIVER REGISTRATION LEDGER STATE
+  //  GLOBAL SUSPENDED MODAL STATE & ERROR INTERCEPTION
+  const [globalSuspendedModalVisible, setGlobalSuspendedModalVisible] = useState(false);
+  const [globalAttemptedEmail, setGlobalAttemptedEmail] = useState("");
+
+  // Global Axios interceptor to catch any 403 ACCOUNT_SUSPENDED errors on live sessions
+  useEffect(() => {
+    const interceptor = api.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        const errorCode = error.response?.data?.error?.code;
+        if (errorCode === 'ACCOUNT_SUSPENDED') {
+          setGlobalAttemptedEmail(error.config?.data ? JSON.parse(error.config.data)?.email || authUser?.email || "" : authUser?.email || "");
+          setGlobalSuspendedModalVisible(true);
+        }
+        return Promise.reject(error);
+      }
+    );
+
+    return () => {
+      api.interceptors.response.eject(interceptor);
+    };
+  }, [authUser]);
+
+  // 🚀 PRODUCTION SYNCED MASTER REGISTRATION FORM LEDGER
   const [registrationForm, setRegistrationForm] = useState({
     fullName: "",
     phoneNumber: "",
     email: "",
     password: "",
-    vehicleType: "",
-    licensePlate: "",
+    vehicleType: "Campus Sedan",
+    vehicleModel: "",   
+    vehicleLicensePlate: "", 
     vehicleColor: "",
     seats: "",
   });
@@ -58,7 +97,7 @@ const RootNavigator = () => {
   // LIVE DRIVER PROFILE RECORD
   const [driverProfileData, setDriverProfileData] = useState(null);
 
-  // 💡 Sync global auth user profile data to local state whenever authUser hydrates or changes
+  // SYNC DRIVER PROFILE DATA
   useEffect(() => {
     if (authUser && role === "driver") {
       const rawAvatarUrl = authUser.avatarUri || authUser.avatarUrl || authUser.avatar || null;
@@ -76,19 +115,72 @@ const RootNavigator = () => {
     }
   }, [authUser, role]);
 
-  // Helper render wrapper function to ensure the root background color shifts dynamically
+  // CLEAN UNIFIED REGISTRATION HANDSHAKE (Expo Go SDK 53 Safe Guarded)
+  const registerForPushNotificationsAsync = async () => {
+    let pushToken = null;
+
+    try {
+      if (!Device.isDevice) {
+        console.log("[Push] Emulator/Simulator detected. Skipping remote push registration.");
+        return;
+      }
+
+      const appConfig = require("./app.json");
+      const projectId = appConfig?.expo?.extra?.eas?.projectId;
+
+      if (!projectId) {
+        console.log("[Push] No EAS project ID configured. Skipping push registration for Expo Go.");
+        return;
+      }
+
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      if (existingStatus !== "granted") {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      
+      if (finalStatus !== "granted") {
+        console.warn("[Push] User declined notification permissions.");
+        return;
+      }
+
+      const tokenResult = await Notifications.getExpoPushTokenAsync({ projectId });
+      pushToken = tokenResult.data;
+
+    } catch (err) {
+      console.warn("[Push Notice] Remote notifications require a development build on SDK 53+. Bypassing for Expo Go session.");
+      return;
+    }
+
+    if (pushToken) {
+      try {
+        console.log("[Push] Dispatching token to backend database:", pushToken);
+        const response = await api.put("/driver/profile", { expoPushToken: pushToken });
+        if (response.data?.success) {
+          console.log("[Push] Success! Token successfully registered in MongoDB.");
+        }
+      } catch (backendErr) {
+        console.error("[Push] Could not write token to backend database:", backendErr.message);
+      }
+    }
+  };
+
+  // DYNAMIC REGISTRY: Run the Push Registration Handshake upon active session login
+  useEffect(() => {
+    if (authToken && authUser) {
+      registerForPushNotificationsAsync();
+    }
+  }, [authToken]);
+
+  // Helper render wrapper function
   const renderScreen = () => {
-    // 1. Splash Screen
     if (screen === "splash") {
       return <SplashScreen onFinish={() => setScreen("onboarding")} />;
     }
-
-    // 2. Onboarding Screen
     if (screen === "onboarding") {
       return <Onboarding onFinish={() => setScreen("role-selection")} />;
     }
-
-    // 3. Role Selection Screen
     if (screen === "role-selection") {
       return (
         <RoleSelection
@@ -97,8 +189,6 @@ const RootNavigator = () => {
         />
       );
     }
-
-    // 4. Student Login Screen
     if (screen === "student-login") {
       return (
         <StudentLogin
@@ -115,8 +205,6 @@ const RootNavigator = () => {
         />
       );
     }
-
-    // 5. Driver Login Screen
     if (screen === "driver-login") {
       return (
         <DriverLogin
@@ -126,8 +214,6 @@ const RootNavigator = () => {
 
               if (user && token) {
                 await login(user, token);
-
-                // 💡 Corrected to check the updated database field first
                 const initialAvatar = user.avatarUri || user.avatarUrl || user.avatar || null;
 
                 setDriverProfileData({
@@ -149,8 +235,6 @@ const RootNavigator = () => {
         />
       );
     }
-
-    // 6. Driver Registration — Stage 1
     if (screen === "driver-reg-step1") {
       return (
         <DriverRegisterStep1
@@ -164,13 +248,12 @@ const RootNavigator = () => {
         />
       );
     }
-
-    // 7. Driver Registration — Stage 2
     if (screen === "driver-reg-step2") {
       return (
         <DriverRegisterStep2
           initialData={registrationForm}
           onNext={(vehicleData) => {
+            //  HOT PATCH MATCH: Perfectly merges synced vehicle keys into master ledger context
             setRegistrationForm((prev) => ({ ...prev, ...vehicleData }));
             setScreen("driver-reg-step3");
           }}
@@ -179,8 +262,6 @@ const RootNavigator = () => {
         />
       );
     }
-
-    // 8. Driver Registration — Stage 3
     if (screen === "driver-reg-step3") {
       return (
         <DriverRegisterStep3
@@ -194,13 +275,9 @@ const RootNavigator = () => {
         />
       );
     }
-
-    // 9. Driver Registration — Stage 4
     if (screen === "driver-reg-success") {
       return <DriverRegisterSuccess onBackToLogin={() => setScreen("driver-login")} />;
     }
-
-    // 10. Shared Signup Screen
     if (screen === "signup") {
       return (
         <SignupScreen
@@ -212,8 +289,6 @@ const RootNavigator = () => {
         />
       );
     }
-
-    // 11. Core Portal Dashboard
     if (screen === "home") {
       return (
         <DriverHome
@@ -230,8 +305,6 @@ const RootNavigator = () => {
         />
       );
     }
-
-    // 12. Incoming Ride Requests Queue Screen Layout
     if (screen === "active-requests") {
       return (
         <ActiveRequests
@@ -248,8 +321,6 @@ const RootNavigator = () => {
         />
       );
     }
-
-    // 13. Active Navigation Tracking View
     if (screen === "driver-navigation") {
       return (
         <DriverNavigation
@@ -304,8 +375,6 @@ const RootNavigator = () => {
         />
       );
     }
-
-    // 14. Post-Trip Summary Interface
     if (screen === "trip-summary") {
       return (
         <TripSummary
@@ -324,8 +393,6 @@ const RootNavigator = () => {
         />
       );
     }
-
-    // 15. Driver Settings and Profile Workspace Frame
     if (screen === "driver-profile") {
       return (
         <DriverProfile
@@ -347,8 +414,6 @@ const RootNavigator = () => {
         />
       );
     }
-
-    // 16. Ride History Archive Module
     if (screen === "ride-history") {
       return (
         <RideHistory
@@ -361,8 +426,6 @@ const RootNavigator = () => {
         />
       );
     }
-
-    // 17. Standalone Driver Notifications Module
     if (screen === "driver-notis") {
       return (
         <DriverNotis
@@ -375,8 +438,6 @@ const RootNavigator = () => {
         />
       );
     }
-
-    // 18. Standalone Driver Help & Support Module
     if (screen === "driver-support") {
       return (
         <DriverSupport
@@ -389,15 +450,12 @@ const RootNavigator = () => {
         />
       );
     }
-
-    // 19. Standalone Driver Edit Profile Module inside App.js
     if (screen === "edit-driver-profile") {
       return (
         <EditDriverProfile
           driverData={driverProfileData}
           onBack={() => setScreen("driver-profile")}
           onProfileUpdated={async (updatedUser) => {
-            // 💡 Update local profile record structure
             const rawAvatarUrl = updatedUser.avatarUrl || updatedUser.avatarUri || null;
             const updatedAvatar = rawAvatarUrl ? `${rawAvatarUrl}?cb=${Date.now()}` : null;
             
@@ -411,7 +469,6 @@ const RootNavigator = () => {
               avatarUri: updatedAvatar,
             });
 
-            // 💡 Keep persistent global auth context synchronized
             const updatedAuthUser = {
               ...authUser,
               fullName: updatedUser.fullName,
@@ -429,8 +486,6 @@ const RootNavigator = () => {
         />
       );
     }
-
-    // 20. Standalone Driver App Settings Module
     if (screen === "app-settings") {
       return (
         <DriverSettings
@@ -447,10 +502,20 @@ const RootNavigator = () => {
     return null;
   };
 
-  // Wrap in a dynamic theme-responsive container to catch direct layout boundaries
   return (
     <View style={[styles.rootWrapper, { backgroundColor: theme.background }]}>
       {renderScreen()}
+
+      {/*  Global Account Suspended Modal Interceptor */}
+      <AccountSuspendedModal 
+        visible={globalSuspendedModalVisible} 
+        userEmail={globalAttemptedEmail}
+        onClose={() => {
+          setGlobalSuspendedModalVisible(false);
+          logout();
+          setScreen("role-selection");
+        }} 
+      />
     </View>
   );
 };

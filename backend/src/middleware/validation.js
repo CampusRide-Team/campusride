@@ -1,16 +1,26 @@
 import { check, validationResult } from "express-validator";
 
 export const validateRegister = [
-  check("fullName", "Full name is required").notEmpty(),
+  check("fullName", "Full name is required").notEmpty().trim(),
 
-  //FIXED: Replaced university domain requirement with normal email validation
   check("email", "Please include a valid email address")
     .isEmail()
     .normalizeEmail(),
 
-  check("phoneNumber", "Valid Ghana phone number required").matches(
-    /^(05|02)[0-9]{8}$/,
-  ),
+  // 💡 FIXED: Advanced regex supporting local format (054...) and international format (23354...)
+  check("phoneNumber", "Valid Ghana phone number required")
+    .trim()
+    .custom((value) => {
+      // Strips any leftover leading plus signs or white spaces dynamically
+      const cleanPhone = value.replace(/^\+/, "").trim();
+      const ghanaPhoneRegex = /^(02|05)[0-9]{8}$|^(233)(2|5)[0-9]{8}$/;
+      
+      if (!ghanaPhoneRegex.test(cleanPhone)) {
+        throw new Error("Phone number must be a valid Ghana format (e.g., 054... or 23354...)");
+      }
+      return true;
+    }),
+
   check(
     "password",
     "Password must be 8+ chars, 1 uppercase, 1 number, 1 special",
@@ -21,7 +31,7 @@ export const validateRegister = [
     minNumbers: 1,
     minSymbols: 1,
   }),
-  check("role", "Invalid role").optional().isIn(["student", "driver"]),
+  check("role", "Invalid role").optional().isIn(["student", "driver", "admin"]),
 ];
 
 export const validateLogin = [

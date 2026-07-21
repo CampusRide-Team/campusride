@@ -61,24 +61,24 @@ export default function DashboardScreen() {
   const iconMap = {
     'Active Rides Now': { icon: Car, color: '#1E3A8A', bg: '#DBEAFE' },
     'Drivers Online': { icon: UserCheck, color: '#1E3A8A', bg: '#DCFCE7' },
-    'Drivers Registered': { icon: ShieldAlert, color: '#1E3A8A', bg: '#EFF6FF' }, // 💡 Added driver mapping
+    'Drivers Registered': { icon: ShieldAlert, color: '#1E3A8A', bg: '#EFF6FF' },
     'Riders Registered': { icon: Users, color: '#1E3A8A', bg: '#EFF6FF' },
     'Pending Verification': { icon: ShieldCheck, color: '#991B1B', bg: '#FEE2E2' }
   }
 
-  // Renders Active Online Driver Pins
+  // 💡 Safe update marker handler wrapped tightly against memory isolation crashes
   const updateMapMarkers = () => {
-    if (!markerGroupRef.current || !mapInstanceRef.current) return
-    markerGroupRef.current.clearLayers()
+    if (!markerGroupRef.current || !mapInstanceRef.current) return;
+    markerGroupRef.current.clearLayers();
 
     Object.values(driverLocationsRef.current).forEach(driver => {
-      if (!driver.lat || !driver.lng) return
+      if (!driver || !driver.lat || !driver.lng) return;
 
       const customIcon = L.divIcon({
         className: 'pulse-marker',
         iconSize: [12, 12],
         iconAnchor: [6, 6]
-      })
+      });
 
       const marker = L.marker([driver.lat, driver.lng], { icon: customIcon })
         .bindPopup(`
@@ -86,52 +86,53 @@ export default function DashboardScreen() {
             <strong style="color: #1E3A8A;">${driver.name || 'Driver'}</strong><br/>
             Status: <span style="font-weight: 700; color: #15803D">Active Online</span>
           </div>
-        `)
+        `);
       
-      markerGroupRef.current.addLayer(marker)
-    })
-  }
+      markerGroupRef.current.addLayer(marker);
+    });
+  };
 
-  // Renders minimal elegant solid dot demand markers
   const drawHeatmapZones = (zonesList) => {
-    if (!heatZonesGroupRef.current || !mapInstanceRef.current) return
-    heatZonesGroupRef.current.clearLayers()
+    if (!heatZonesGroupRef.current || !mapInstanceRef.current) return;
+    heatZonesGroupRef.current.clearLayers();
 
-    const targets = zonesList && zonesList.length > 0 ? zonesList : hotspots
+    const targets = zonesList && zonesList.length > 0 ? zonesList : hotspots;
 
     targets.forEach(zone => {
+      if (!zone || !zone.lat || !zone.lng) return;
+
       const customIcon = L.divIcon({
         className: 'hotspot-dot',
         html: '',
         iconSize: [12, 12],
         iconAnchor: [6, 6]
-      })
+      });
 
       const marker = L.marker([zone.lat, zone.lng], { icon: customIcon })
         .bindPopup(`
           <div style="font-family: Inter, sans-serif; font-size: 11px;">
             <strong>${zone.name}</strong><br/>
-            Density: <strong style="color: ${zone.color};">${zone.level}</strong> (${zone.activeRequests} active reqs)
+            Density: <strong style="color: ${zone.color};">${zone.level}</strong> (${zone.activeRequests || 0} active reqs)
           </div>
-        `)
+        `);
 
       marker.on('add', (e) => {
-        const el = e.target.getElement()
-        if (el) el.style.backgroundColor = zone.color
-      })
+        const el = e.target.getElement();
+        if (el) el.style.backgroundColor = zone.color;
+      });
 
-      heatZonesGroupRef.current.addLayer(marker)
-    })
-  }
+      heatZonesGroupRef.current.addLayer(marker);
+    });
+  };
 
   const fetchLiveLocationsAndDemand = async () => {
     try {
       const [locationsRes, demandRes] = await Promise.all([
         api.get('/admin/drivers/pending'),
         api.get('/admin/dashboard/demand')
-      ])
+      ]);
       
-      const updatedDrivers = locationsRes.data?.data || []
+      const updatedDrivers = locationsRes.data?.data || [];
       driverLocationsRef.current = updatedDrivers.reduce((acc, curr) => {
         if (curr._id && curr.currentLatitude && curr.currentLongitude) {
           acc[curr._id] = {
@@ -139,111 +140,117 @@ export default function DashboardScreen() {
             name: curr.fullName,
             lat: curr.currentLatitude,
             lng: curr.currentLongitude
-          }
+          };
         }
-        return acc
-      }, {})
+        return acc;
+      }, {});
 
-      updateMapMarkers()
+      updateMapMarkers();
 
       if (demandRes.data?.success && demandRes.data?.data) {
-        setHotspots(demandRes.data.data)
-        drawHeatmapZones(demandRes.data.data)
+        setHotspots(demandRes.data.data);
+        drawHeatmapZones(demandRes.data.data);
       }
     } catch (err) {
-      console.warn("Telemetry polling skip:", err)
+      console.warn("Telemetry polling skip:", err);
     }
-  }
+  };
 
   useEffect(() => {
     const hydrateDashboardData = async () => {
       try {
-        setLoading(true)
-        setError(null)
+        setLoading(true);
+        setError(null);
 
         const [dashboardRes] = await Promise.all([
           api.get('/admin/dashboard')
-        ])
+        ]);
 
         if (dashboardRes.data?.success && dashboardRes.data?.data) {
-          const { stats: rawStats, topDrivers, recentActivity, chartData, currentWeek: serverWeek } = dashboardRes.data.data
+          const { stats: rawStats, topDrivers, recentActivity, chartData, currentWeek: serverWeek } = dashboardRes.data.data;
 
           const hydratedStats = rawStats.map(item => ({
             ...item,
             icon: iconMap[item.label]?.icon || Car,
             color: iconMap[item.label]?.color || '#1E3A8A',
             bg: iconMap[item.label]?.bg || '#DBEAFE'
-          }))
+          }));
 
-          setStats(hydratedStats)
-          setTopDrivers(topDrivers || [])
-          setRecentActivity(recentActivity || [])
-          setChartData(chartData || [0, 0, 0, 0, 0, 0, 0])
-          setCurrentWeek(serverWeek)
+          setStats(hydratedStats);
+          setTopDrivers(topDrivers || []);
+          setRecentActivity(recentActivity || []);
+          setChartData(chartData || [0, 0, 0, 0, 0, 0, 0]);
+          setCurrentWeek(serverWeek);
         }
 
-        await fetchLiveLocationsAndDemand()
+        await fetchLiveLocationsAndDemand();
       } catch (err) {
-        console.error("Dashboard hydration error:", err)
-        setError('Server Connection Error. Check Node service & database states.')
+        console.error("Dashboard hydration error:", err);
+        setError('Server Connection Error. Check Node service & database states.');
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
-    }
+    };
 
-    hydrateDashboardData()
+    hydrateDashboardData();
 
-    // 2-second high-frequency refresh cycle
-    const liveGPSPollingTimer = setInterval(fetchLiveLocationsAndDemand, 2000)
+    const liveGPSPollingTimer = setInterval(fetchLiveLocationsAndDemand, 2000);
 
-    const socketUrl = api.defaults.baseURL ? api.defaults.baseURL.split('/api/v1')[0] : 'https://orange-fiesta-wrrvpqgqgxw53x65-5000.app.github.dev'
+    const socketUrl = api.defaults.baseURL ? api.defaults.baseURL.split('/api/v1')[0] : 'https://c5m62bwc-5000.uks1.devtunnels.ms/api/v1';
     socketRef.current = io(socketUrl, {
       transports: ['websocket', 'polling']
-    })
+    });
 
     socketRef.current.on('driver_location_update', (data) => {
       if (data && data.driverId) {
-        driverLocationsRef.current[data.driverId] = data
-        updateMapMarkers()
+        driverLocationsRef.current[data.driverId] = data;
+        updateMapMarkers();
       }
-    })
+    });
 
+    // 💡 CLEANUP DESTRUCTOR BLOCK: Cleans up leaflet elements completely to prevent crashing on screen transitions
     return () => {
-      clearInterval(liveGPSPollingTimer)
-      if (socketRef.current) socketRef.current.disconnect()
-    }
-  }, [])
+      clearInterval(liveGPSPollingTimer);
+      if (socketRef.current) socketRef.current.disconnect();
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, []);
 
+  // Dedicated secondary hook ensuring map layers only load once DOM bindings are verified
   useEffect(() => {
-    if (loading || error || !mapRef.current) return
+    if (loading || error || !mapRef.current) return;
 
     if (!mapInstanceRef.current) {
       const map = L.map(mapRef.current, {
         zoomControl: false,
         attributionControl: false
-      }).setView([5.6506, -0.1870], 15)
+      }).setView([5.6506, -0.1870], 15);
 
       L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         maxZoom: 19
-      }).addTo(map)
+      }).addTo(map);
 
-      L.control.zoom({ position: 'bottomright' }).addTo(map)
+      L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-      mapInstanceRef.current = map
-      markerGroupRef.current = L.layerGroup().addTo(map)
-      heatZonesGroupRef.current = L.layerGroup().addTo(map)
-      
-      updateMapMarkers()
-      drawHeatmapZones()
+      mapInstanceRef.current = map;
+      markerGroupRef.current = L.layerGroup().addTo(map);
+      heatZonesGroupRef.current = L.layerGroup().addTo(map);
     }
-  }, [loading, error, hotspots])
+
+    // Always keep dynamic elements up to date following re-renders
+    updateMapMarkers();
+    drawHeatmapZones();
+  }, [loading, error, hotspots]);
 
   if (loading) {
     return (
       <div style={styles.loadingWrapperFrame}>
         <span style={styles.loadingText}>Hydrating Performance Dashboards...</span>
       </div>
-    )
+    );
   }
 
   if (error) {
@@ -259,17 +266,17 @@ export default function DashboardScreen() {
           </button>
         </div>
       </div>
-    )
+    );
   }
 
   return (
     <div style={styles.container}>
       <MapStyles />
 
-      {/* 1. TOP METRICS GRID ROW */}
+      {/* METRICS GRID ROW */}
       <div style={styles.metricsGrid}>
         {stats.map((card, idx) => {
-          const IconComponent = card.icon
+          const IconComponent = card.icon;
           return (
             <div key={idx} style={styles.statCard}>
               <div style={styles.statBodyBlock}>
@@ -287,11 +294,11 @@ export default function DashboardScreen() {
                 <IconComponent size={18} color={card.color} />
               </div>
             </div>
-          )
+          );
         })}
       </div>
 
-      {/* 2. MIDDLE AREA: MAP & RECENT ACTIVITY */}
+      {/* MIDDLE SECTION: MAP & RECENT ACTIVITY */}
       <div style={styles.middleSection}>
         <div style={styles.mapCard}>
           <div style={styles.mapHeaderRow}>
@@ -304,7 +311,7 @@ export default function DashboardScreen() {
           <div style={styles.mapWrapper}>
             <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
             
-            {/* 📍 FANCY CORNER DEMAND CARD WITH SOLID COLORS */}
+            {/* LMAP LEGEND CARD */}
             <div style={styles.mapLegendCard}>
               <span style={styles.legendHeader}>DEMAND FORECAST</span>
               <div style={styles.legendList}>
@@ -348,7 +355,7 @@ export default function DashboardScreen() {
         </div>
       </div>
 
-      {/* 3. BOTTOM AREA: LEADERBOARD & RIDE VOLUME */}
+      {/* BOTTOM AREA: LEADERBOARD & RIDE VOLUME */}
       <div style={styles.bottomSection}>
         <div style={styles.tableCard}>
           <div style={styles.panelHeader}>
@@ -412,7 +419,7 @@ export default function DashboardScreen() {
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 const styles = {
@@ -814,4 +821,4 @@ const styles = {
     color: '#1E3A8A',
     fontWeight: 700
   }
-}
+};
