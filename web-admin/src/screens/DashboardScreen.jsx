@@ -196,7 +196,7 @@ export default function DashboardScreen() {
 
     const liveGPSPollingTimer = setInterval(fetchLiveLocationsAndDemand, 2000);
 
-    const socketUrl = api.defaults.baseURL ? api.defaults.baseURL.split('/api/v1')[0] : 'https://orange-fiesta-wrrvpqgqgxw53x65-5000.app.github.dev';
+    const socketUrl = api.defaults.baseURL ? api.defaults.baseURL.split('/api/v1')[0] : 'https://c5m62bwc-5000.uks1.devtunnels.ms/api/v1';
     socketRef.current = io(socketUrl, {
       transports: ['websocket', 'polling']
     });

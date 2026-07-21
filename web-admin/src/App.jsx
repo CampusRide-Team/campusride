@@ -8,14 +8,14 @@ import AnalyticsScreen from './screens/AnalyticsScreen'
 import NotificationsScreen from './screens/NotificationsScreen'
 import SettingsScreen from './screens/SettingsScreen'
 import AdminProfileScreen from './screens/AdminProfileScreen'
-import LoginScreen from './screens/LoginScreen' // 🌟 1. Imported the gateway security checkpoint component
+import LoginScreen from './screens/LoginScreen'
 import { Search, Bell } from 'lucide-react'
 
 export default function App() {
   const [activePage, setActivePage] = useState('dashboard')
   const [currentDateTime, setCurrentDateTime] = useState('')
   const [sessionLoading, setSessionLoading] = useState(true)
-  const [isAuthenticated, setIsAuthenticated] = useState(false) // 🌟 2. Added master state tracker to gate portal access
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
 
   // Dynamic Real-Time Status Clock Update Loop
   useEffect(() => {
@@ -32,17 +32,12 @@ export default function App() {
     return () => clearInterval(timerInterval)
   }, [])
 
-  // 1. 💡 BACKEND TODO: Enforce Global Administrative Session Guard Verification
+  // Administrative Session Guard Verification
   useEffect(() => {
     const verifyAdminSessionToken = async () => {
       try {
         setSessionLoading(true)
-
-        // 💡 BACKEND PRODUCTION ROUTE: Check cookie token context on initial hydration mount
-        // const response = await fetch('/api/v1/auth/verify-session')
-        // if (response.ok) { setIsAuthenticated(true) }
-
-        // Staging Framework Toggle (Auto-resolves loading state to expose login screen)
+        // Staging Framework Toggle (Resolves to expose login screen)
         setIsAuthenticated(false) 
       } catch (err) {
         console.error("Unauthorized administrative intercept. Redirecting to login session.", err)
@@ -62,7 +57,7 @@ export default function App() {
     )
   }
 
-  // 🔒 GATING INTERCEPT: Deflect session tracking pathways down to login mask if unverified
+  // GATING INTERCEPT: Deflect session tracking pathways down to login mask if unverified
   if (!isAuthenticated) {
     return <LoginScreen onLoginSuccess={() => setIsAuthenticated(true)} />
   }
@@ -79,6 +74,8 @@ export default function App() {
             <h2 style={appStyles.headerTitle}>
               {activePage === 'dashboard' 
                 ? 'Dashboard' 
+                : activePage === 'driver-verification'
+                ? 'Driver Verification'
                 : activePage === 'trips' 
                 ? 'Trips Monitoring' 
                 : activePage === 'user-directory'
@@ -134,7 +131,6 @@ export default function App() {
   )
 }
 
-// ── ARRANGED MASTER STYLE SHEET SHEET WITH DOUBLE SPACE INDENTS ──────────────
 const appStyles = {
   appFrame: {
     display: 'flex',
@@ -249,7 +245,6 @@ const appStyles = {
     fontSize: '18px',
     fontWeight: 800,
     color: '#1E293B',
-    textTransform: 'capitalize',
     fontFamily: 'Inter, sans-serif',
     margin: 0
   },
