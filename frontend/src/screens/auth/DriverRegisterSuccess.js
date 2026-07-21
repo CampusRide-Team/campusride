@@ -18,7 +18,6 @@ const DriverRegisterSuccess = ({ onBackToLogin }) => {
 
         <Text style={styles.cardTitle}>Verification in Progress</Text>
 
-        {/* Updated Microcopy clarifying SMS & Email channels */}
         <Text style={styles.cardSubtitle}>
           Your documents are currently being reviewed by our campus admin team.
           You will receive an{" "}
@@ -39,16 +38,13 @@ const DriverRegisterSuccess = ({ onBackToLogin }) => {
 };
 
 const styles = StyleSheet.create({
-  // Main Canvas Container
   container: {
     flex: 1,
-    backgroundColor: "#EEF2F6",
+    backgroundColor: "#F8FAFC", // Matches step backgrounds
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 24,
   },
-
-  // Centered Alert Box Card
   statusCard: {
     width: "100%",
     backgroundColor: "#FFFFFF",
@@ -58,12 +54,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
+    shadowOpacity: 0.02,
     shadowRadius: 12,
-    elevation: 3,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
-
-  // Geometric Vector Clock Properties
   clockIconWrap: {
     marginBottom: 24,
   },
@@ -71,7 +67,7 @@ const styles = StyleSheet.create({
     width: 86,
     height: 86,
     borderRadius: 43,
-    backgroundColor: "#3B82F6",
+    backgroundColor: "#1E3A8A", // 🚀 Accent Matched to Step Theme
     position: "relative",
     alignItems: "center",
     justifyContent: "center",
@@ -94,19 +90,17 @@ const styles = StyleSheet.create({
     top: "50%",
     marginTop: -2.5,
   },
-
-  // Typography Specifications
   cardTitle: {
     fontSize: 24,
     fontWeight: "800",
-    color: "#000000",
+    color: "#1E3A8A", // 🚀 Title Matched to Step Theme
     textAlign: "center",
     marginBottom: 14,
     letterSpacing: -0.3,
   },
   cardSubtitle: {
     fontSize: 15,
-    color: "#4B5563",
+    color: "#64748B", // Clean slate slate tint text
     textAlign: "center",
     lineHeight: 22,
     paddingHorizontal: 8,
@@ -116,20 +110,19 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#1E3A8A",
   },
-
-  // Nav Controller Anchor Link Button
   actionBtn: {
-    backgroundColor: "#3B82F6",
-    borderRadius: 12,
+    backgroundColor: "#1E3A8A", // 🚀 Button Matched to Step Theme
+    borderRadius: 16,
     paddingHorizontal: 28,
-    height: 50,
+    height: 56, // Normalized with step buttons heights
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#3B82F6",
-    shadowOffset: { width: 0, height: 3 },
+    width: "100%", // Full width layout harmony
+    shadowColor: "#1E3A8A",
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 2,
+    shadowRadius: 8,
+    elevation: 3,
   },
   actionBtnText: {
     color: "#FFFFFF",

@@ -66,9 +66,8 @@ const CustomDropdown = ({ label, placeholder, selectedValue, items, onSelect }) 
 }
 
 const DriverRegisterStep2 = ({ initialData, onNext, onBack, onLogin }) => {
-  //  STATE PERSISTENCE HYDRATION: Reloads state values from App.js context if backtracking occurs
-  const [vehicleType, setVehicleType]   = useState(initialData?.vehicleType || '')
-  const [licensePlate, setLicensePlate] = useState(initialData?.licensePlate || '')
+  const [vehicleType, setVehicleType]   = useState(initialData?.vehicleModel || initialData?.vehicleType || '')
+  const [licensePlate, setLicensePlate] = useState(initialData?.vehicleLicensePlate || initialData?.licensePlate || '')
   const [vehicleColor, setVehicleColor] = useState(initialData?.vehicleColor || '')
   const [seats, setSeats]               = useState(initialData?.seats ? String(initialData.seats) : '')
   const [errors, setErrors]             = useState({})
@@ -97,11 +96,11 @@ const DriverRegisterStep2 = ({ initialData, onNext, onBack, onLogin }) => {
     if (!validate()) return
     const sanitizedPlate = licensePlate.trim().toUpperCase().replace(/[\s-]/g, '')
 
-    // TODO: BACKEND INTEGRATION (Step 2 of 3)
-    // Local memory state cache block mapped prior to final multipart generation gateway.
+    // 🚀 PRODUCTION SYNC: Package elements directly using backend schema key layouts
     onNext?.({ 
-      vehicleType, 
-      licensePlate: sanitizedPlate, 
+      vehicleType: 'Campus Sedan',
+      vehicleModel: vehicleType,
+      vehicleLicensePlate: sanitizedPlate, 
       vehicleColor, 
       seats: parseInt(seats.trim(), 10) 
     })
@@ -210,202 +209,37 @@ const DriverRegisterStep2 = ({ initialData, onNext, onBack, onLogin }) => {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  scroll: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingBottom: 40,
-  },
-  headerNav: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 60,
-    marginBottom: 16,
-  },
-  backButton: {
-    paddingVertical: 4,
-    paddingRight: 16,
-  },
-  stepIndicator: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1E3A8A',
-  },
-  progressContainer: {
-    flexDirection: 'row',
-    height: 4,
-    width: '100%',
-    paddingHorizontal: 24,
-    marginBottom: 32,
-  },
-  progressBarActive: {
-    flex: 1,
-    backgroundColor: '#1E3A8A',
-    borderRadius: 2,
-    marginRight: 8,
-  },
-  progressBarInactive: {
-    flex: 1,
-    backgroundColor: '#E2E8F0',
-    borderRadius: 2,
-  },
-  titleSection: {
-    marginBottom: 24,
-  },
-  screenTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#1E3A8A',
-    marginBottom: 6,
-    letterSpacing: -0.5,
-  },
-  screenSubtitle: {
-    fontSize: 15,
-    color: '#64748B',
-    fontWeight: '500',
-  },
-  formContainer: {
-    width: '100%',
-  },
-  fieldWrap: {
-    marginBottom: 18,
-  },
-  fieldLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1E2937',
-    marginBottom: 8,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 56,
-    paddingHorizontal: 16,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.02,
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  dropdownTrigger: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    height: 56,
-    paddingHorizontal: 16,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.02,
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  dropdownTriggerText: {
-    fontSize: 15,
-    color: '#1F2937',
-    fontWeight: '500',
-  },
-  input: {
-    flex: 1,
-    fontSize: 15,
-    color: '#1F2937',
-    fontWeight: '500',
-    height: '100%',
-  },
-  errorText: {
-    fontSize: 12,
-    color: '#EF4444',
-    marginTop: -12,
-    marginBottom: 12,
-    marginLeft: 4,
-  },
-  continueBtn: {
-    width: '100%',
-    height: 56,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 20,
-    backgroundColor: '#1E3A8A',
-    shadowColor: '#1E3A8A',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  continueBtnText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: 0.2,
-  },
-  loginFooterBtn: {
-    alignItems: 'center',
-    marginTop: 24,
-    paddingVertical: 8,
-  },
-  loginFooterText: {
-    fontSize: 14,
-    color: '#64748B',
-    fontWeight: '500',
-  },
-  loginFooterLink: {
-    color: '#1E3A8A',
-    fontWeight: '700',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.3)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '50%',
-    paddingTop: 20,
-    paddingBottom: 40,
-  },
-  modalTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1E3A8A',
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  modalItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-  },
-  modalItemSelected: {
-    backgroundColor: '#F8FAFC',
-  },
-  modalItemText: {
-    fontSize: 15,
-    color: '#334155',
-    fontWeight: '500',
-  },
-  modalItemTextSelected: {
-    color: '#1E3A8A',
-    fontWeight: '700',
-  },
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  scroll: { flexGrow: 1, paddingHorizontal: 24, paddingBottom: 40 },
+  headerNav: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingTop: 60, marginBottom: 16 },
+  backButton: { paddingVertical: 4, paddingRight: 16 },
+  stepIndicator: { fontSize: 14, fontWeight: '700', color: '#1E3A8A' },
+  progressContainer: { flexDirection: 'row', height: 4, width: '100%', paddingHorizontal: 24, marginBottom: 32 },
+  progressBarActive: { flex: 1, backgroundColor: '#1E3A8A', borderRadius: 2, marginRight: 8 },
+  progressBarInactive: { flex: 1, backgroundColor: '#E2E8F0', borderRadius: 2 },
+  titleSection: { marginBottom: 24 },
+  screenTitle: { fontSize: 28, fontWeight: '800', color: '#1E3A8A', marginBottom: 6, letterSpacing: -0.5 },
+  screenSubtitle: { fontSize: 15, color: '#64748B', fontWeight: '500' },
+  formContainer: { width: '100%' },
+  fieldWrap: { marginBottom: 18 },
+  fieldLabel: { fontSize: 14, fontWeight: '600', color: '#1E2937', marginBottom: 8 },
+  inputRow: { flexDirection: 'row', alignItems: 'center', height: 56, paddingHorizontal: 16, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.02, shadowRadius: 3, elevation: 1 },
+  dropdownTrigger: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 56, paddingHorizontal: 16, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.02, shadowRadius: 3, elevation: 1 },
+  dropdownTriggerText: { fontSize: 15, color: '#1F2937', fontWeight: '500' },
+  input: { flex: 1, fontSize: 15, color: '#1F2937', fontWeight: '500', height: '100%' },
+  errorText: { fontSize: 12, color: '#EF4444', marginTop: -12, marginBottom: 12, marginLeft: 4 },
+  continueBtn: { width: '100%', height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginTop: 20, backgroundColor: '#1E3A8A', shadowColor: '#1E3A8A', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 3 },
+  continueBtnText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF', letterSpacing: 0.2 },
+  loginFooterBtn: { alignItems: 'center', marginTop: 24, paddingVertical: 8 },
+  loginFooterText: { fontSize: 14, color: '#64748B', fontWeight: '500' },
+  loginFooterLink: { color: '#1E3A8A', fontWeight: '700' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.3)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '50%', paddingTop: 20, paddingBottom: 40 },
+  modalTitle: { fontSize: 16, fontWeight: '700', color: '#1E3A8A', textAlign: 'center', marginBottom: 16 },
+  modalItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 16, paddingHorizontal: 24, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  modalItemSelected: { backgroundColor: '#F8FAFC' },
+  modalItemText: { fontSize: 15, color: '#334155', fontWeight: '500' },
+  modalItemTextSelected: { color: '#1E3A8A', fontWeight: '700' },
 })
 
 export default DriverRegisterStep2

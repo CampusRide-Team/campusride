@@ -14,7 +14,7 @@ import {
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
 import api from "../../api/axios";  
-
+import AccountSuspendedModal from "../../context/AccountSuspendedModal";
 const InputField = ({
   label,
   placeholder,
@@ -77,6 +77,10 @@ const DriverLogin = ({
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
 
+  //  Suspension Modal State Hooks
+  const [isSuspendedModalVisible, setIsSuspendedModalVisible] = useState(false);
+  const [attemptedEmail, setAttemptedEmail] = useState("");
+
   const validate = () => {
     const newErrors = {};
 
@@ -110,19 +114,25 @@ const DriverLogin = ({
       setLoading(false);
 
       if (response.data?.success) {
-        // Safe check for login payload token extraction context
         if (onDriverLogin) onDriverLogin(response.data);
       }
     } catch (err) {
       setLoading(false);
       console.error("Authentication runtime issue:", err);
 
+      const errorCode = err.response?.data?.error?.code;
       const serverErrorMessage =
         err.response?.data?.error?.message ||
         err.response?.data?.message ||
         "Connection to authentication service timed out.";
 
-      setErrors({ general: serverErrorMessage });
+      // 🚀 INTERCEPT SUSPENDED ACCOUNTS AND TRIGGER APPEAL MODAL
+      if (errorCode === 'ACCOUNT_SUSPENDED') {
+        setAttemptedEmail(email.trim().toLowerCase());
+        setIsSuspendedModalVisible(true);
+      } else {
+        setErrors({ general: serverErrorMessage });
+      }
     }
   };
 
@@ -267,6 +277,13 @@ const DriverLogin = ({
           </Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Account Suspended Modal Component Integration */}
+      <AccountSuspendedModal 
+        visible={isSuspendedModalVisible} 
+        userEmail={attemptedEmail}
+        onClose={() => setIsSuspendedModalVisible(false)} 
+      />
     </KeyboardAvoidingView>
   );
 };
