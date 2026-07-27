@@ -32,7 +32,11 @@ import DriverRegisterSuccess from "./src/screens/auth/DriverRegisterSuccess";
 
 // Student screens
 import StudentHome from "./src/screens/student/StudentHome";
+<<<<<<< HEAD
 import StudentsPage from "./src/screens/student/StudentsPage";
+=======
+import RideBooking from "./src/screens/student/RideBooking"; // <-- UPDATED: Import your new active Rides Hub screen
+>>>>>>> dev
 
 // Driver screens
 import DriverHome from "./src/screens/driver/DriverHome";
@@ -51,8 +55,8 @@ import AccountSuspendedModal from "./src/context/AccountSuspendedModal";
 
 const RootNavigator = () => {
   const [screen, setScreen] = useState("splash");
-  const { role, setRole, login, logout, user: authUser, token: authToken } = useAuth();
-  const { theme, darkModeEnabled } = useTheme();
+  const { role, login, logout, user: authUser, token: authToken } = useAuth();
+  const { theme } = useTheme();
 
   // GLOBAL SUSPENDED MODAL STATE & ERROR INTERCEPTION
   const [globalSuspendedModalVisible, setGlobalSuspendedModalVisible] = useState(false);
@@ -169,10 +173,10 @@ const RootNavigator = () => {
 
   // DYNAMIC REGISTRY: Run the Push Registration Handshake upon active session login
   useEffect(() => {
-    if (authToken && authUser) {
+    if (authToken && authUser && role === "driver") {
       registerForPushNotificationsAsync();
     }
-  }, [authToken]);
+  }, [authToken, role]);
 
   // Helper render wrapper function
   const renderScreen = () => {
@@ -193,13 +197,13 @@ const RootNavigator = () => {
     if (screen === "student-login") {
       return (
         <StudentLogin
-          onStudentLogin={() => {
-            if (setRole) setRole("student");
+          onStudentLogin={async () => {
+            await login({ fullName: "Student User", role: "student" }, "mock-student-token");
             setScreen("home");
           }}
           onCreateAccount={() => setScreen("signup")}
-          onGoogleLogin={() => {
-            if (setRole) setRole("student");
+          onGoogleLogin={async () => {
+            await login({ fullName: "Student User", role: "student" }, "google-mock-token");
             setScreen("home");
           }}
           onBack={() => setScreen("role-selection")}
@@ -214,7 +218,7 @@ const RootNavigator = () => {
               const { user, token } = authPayload.data || {};
 
               if (user && token) {
-                await login(user, token);
+                await login({ ...user, role: "driver" }, token);
                 const initialAvatar = user.avatarUri || user.avatarUrl || user.avatar || null;
 
                 setDriverProfileData({
@@ -266,8 +270,8 @@ const RootNavigator = () => {
       return (
         <DriverRegisterStep3
           initialData={registrationForm}
-          onSubmit={async (finalStepData) => {
-            if (setRole) setRole("driver");
+          onSubmit={async () => {
+            await login({ fullName: registrationForm.fullName, role: "driver" }, "mock-driver-token");
             setScreen("driver-reg-success");
           }}
           onBack={() => setScreen("driver-reg-step2")}
@@ -281,8 +285,8 @@ const RootNavigator = () => {
     if (screen === "signup") {
       return (
         <SignupScreen
-          onDone={() => {
-            if (setRole) setRole("student");
+          onDone={async () => {
+            await login({ fullName: "New Student", role: "student" }, "mock-signup-token");
             setScreen("home");
           }}
           onSignIn={() => setScreen("student-login")}
@@ -290,6 +294,17 @@ const RootNavigator = () => {
       );
     }
     if (screen === "home") {
+      if (role === "student" || authUser?.role === "student") {
+        return (
+          <StudentHome
+            onLogout={() => {
+              logout();
+              setScreen("role-selection");
+            }}
+          />
+        );
+      }
+
       return (
         <DriverHome
           driverData={driverProfileData}
@@ -305,6 +320,23 @@ const RootNavigator = () => {
         />
       );
     }
+    
+    // ==========================================
+    // NEW: RIDES SCREEN / RIDE BOOKING HUB ROUTE
+    // ==========================================
+    if (screen === "rides" || screen === "history") {
+      return (
+        <RideBooking
+          onNavigate={(targetTab) => {
+            if (targetTab === "home") setScreen("home");
+            if (targetTab === "rides") setScreen("rides");
+            if (targetTab === "alerts") setScreen("alerts"); // Ensure you have an alerts route if needed
+            if (targetTab === "profile") setScreen("profile"); // Handle profile route if applicable
+          }}
+        />
+      );
+    }
+
     if (screen === "active-requests") {
       return (
         <ActiveRequests
