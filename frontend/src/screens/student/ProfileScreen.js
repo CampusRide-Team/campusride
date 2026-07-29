@@ -28,6 +28,7 @@ const TAB_ACTIVE_BG = '#EEF2FF';
 const BORDER = '#E2E8F0';
 const PILL_BG = '#F0F6FF';
 
+// TODO: Replace with dynamic user profile data fetched from authentication context or backend API
 const STUDENT_PROFILE = {
   name: 'Sarah Mitchell',
   studentId: 'STU-2024-1547',
@@ -73,18 +74,18 @@ export default function ProfileScreen({ onLogout, onNavigate }) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <StatusBar barStyle="light-content" backgroundColor={BLUE} />
+      <StatusBar barStyle="light-content" backgroundColor={BLUE} translucent={false} />
 
       <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false} bounces={false}>
         
         {/* Top Vibrant Blue Header Section with Overlapping Card Design */}
         <View style={styles.headerBanner}>
           <View style={styles.headerTopRow}>
-            <TouchableOpacity style={styles.headerBackButton} onPress={() => onNavigate('home')}>
+            <TouchableOpacity style={styles.headerBackButton} onPress={() => onNavigate('home')} activeOpacity={0.7}>
               <Ionicons name="arrow-back" size={22} color="#fff" />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Profile</Text>
-            <TouchableOpacity style={styles.headerMoreButton} onPress={() => Alert.alert("Options", "More options...")}>
+            <TouchableOpacity style={styles.headerMoreButton} onPress={() => Alert.alert("Options", "More options...")} activeOpacity={0.7}>
               <Ionicons name="ellipsis-vertical" size={20} color="#fff" />
             </TouchableOpacity>
           </View>
@@ -106,7 +107,7 @@ export default function ProfileScreen({ onLogout, onNavigate }) {
           {/* Group 1: Account & Activity */}
           <View style={styles.menuCardGroup}>
             <ProfileMenuItem 
-              icon={<Ionicons name="time-outline" size={20} color={BLUE} />} 
+              icon={<Ionicons name="person-outline" size={20} color={BLUE} />} 
               label="Edit Profile" 
               onPress={() => setCurrentView('edit-profile')} 
             />
@@ -114,7 +115,7 @@ export default function ProfileScreen({ onLogout, onNavigate }) {
             <ProfileMenuItem 
               icon={<Ionicons name="car-outline" size={20} color={BLUE} />} 
               label="Ride History" 
-              badgeCount={3}
+              badgeCount={3} // TODO: Bind with dynamic completed ride count from API
               onPress={() => setCurrentView('ride-history')} 
             />
             <View style={styles.separatorLine} />
@@ -215,10 +216,8 @@ const styles = StyleSheet.create({
   
   headerBanner: {
     backgroundColor: BLUE,
-    paddingTop: 12,
-    paddingBottom: 40,
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
+    paddingTop: 16,
+    paddingBottom: 44,
   },
   headerTopRow: {
     flexDirection: 'row',
@@ -233,12 +232,12 @@ const styles = StyleSheet.create({
 
   profileIdentityArea: {
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: 8,
   },
   avatarWrapper: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
+    width: 92,
+    height: 92,
+    borderRadius: 46,
     borderWidth: 3,
     borderColor: '#FFFFFF',
     overflow: 'hidden',
@@ -250,13 +249,13 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   avatarImage: { width: '100%', height: '100%' },
-  studentName: { fontSize: 20, fontWeight: '800', color: '#FFFFFF', marginBottom: 2 },
-  studentIdText: { fontSize: 13, color: '#E0F2FE', fontWeight: '600', marginBottom: 2 },
+  studentName: { fontSize: 20, fontWeight: '900', color: '#FFFFFF', marginBottom: 2, letterSpacing: -0.2 },
+  studentIdText: { fontSize: 13, color: '#E0F2FE', fontWeight: '700', marginBottom: 2 },
   studentEmailText: { fontSize: 12, color: '#E0F2FE', fontWeight: '500' },
 
   bodyContent: {
     paddingHorizontal: 20,
-    marginTop: -20,
+    marginTop: -22,
   },
   menuCardGroup: {
     backgroundColor: CARD_BG,
@@ -266,9 +265,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: BORDER,
     shadowColor: '#000',
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.04,
     shadowRadius: 8,
-    elevation: 3,
+    elevation: 2,
   },
   menuItem: {
     flexDirection: 'row',
