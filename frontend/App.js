@@ -32,11 +32,7 @@ import DriverRegisterSuccess from "./src/screens/auth/DriverRegisterSuccess";
 
 // Student screens
 import StudentHome from "./src/screens/student/StudentHome";
-<<<<<<< HEAD
-import StudentsPage from "./src/screens/student/StudentsPage";
-=======
 import RideBooking from "./src/screens/student/RideBooking"; // <-- UPDATED: Import your new active Rides Hub screen
->>>>>>> dev
 
 // Driver screens
 import DriverHome from "./src/screens/driver/DriverHome";
@@ -330,8 +326,8 @@ const RootNavigator = () => {
           onNavigate={(targetTab) => {
             if (targetTab === "home") setScreen("home");
             if (targetTab === "rides") setScreen("rides");
-            if (targetTab === "alerts") setScreen("alerts"); // Ensure you have an alerts route if needed
-            if (targetTab === "profile") setScreen("profile"); // Handle profile route if applicable
+            if (targetTab === "alerts") setScreen("alerts");
+            if (targetTab === "profile") setScreen("profile");
           }}
         />
       );
