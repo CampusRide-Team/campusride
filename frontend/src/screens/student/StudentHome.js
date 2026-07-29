@@ -10,11 +10,12 @@ import {
   ImageBackground,
   StatusBar,
   Platform,
-  Modal,
   Alert,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons, Feather, FontAwesome5 } from '@expo/vector-icons';
+import MapView, { Marker } from 'react-native-maps';
 
 import ProfileScreen from './ProfileScreen'; 
 import RideBooking from './RideBooking'; 
@@ -26,48 +27,75 @@ const BLUE = '#2F6BFF';
 const LIME = '#B6E84A';
 const MUTED = '#8A8FA3';
 const TEXT = '#0F1733';
-const CARD_BG = '#EFF1F4';
-const PILL_BG = '#E6E8F5';
-const TAB_ACTIVE_BG = '#E8EEFF';
-const BORDER = '#ECEEF3';
-const LIME_POPULAR = '#B6E84A';
+const CARD_BG = '#FFFFFF';
+const SCREEN_BG = '#F8FAFC';
+const PILL_BG = '#F1F5F9';
+const TAB_ACTIVE_BG = '#EEF2FF';
+const BORDER = '#E2E8F0';
+const GREEN_PILL = '#DCFCE7';
+const GREEN_TEXT = '#16a34a';
 
+// TODO: Replace with dynamic data fetched from backend API
 const INITIAL_RIDES = [
   { 
     id: '1', 
     name: 'Daniel Miller', 
     rating: '4.9', 
     totalRides: '2,400+ rides', 
-    place: 'Engineering Building', 
-    seats: 3, 
+    place: 'Engineering Bldg', 
+    seats: '3 seats', 
     eta: '3 mins away', 
     vehicleModel: 'White Toyota Camry', 
     vehicleType: 'Premium Campus Fleet',
-    licensePlate: 'X-12-24'
+    licensePlate: 'X-12-24',
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400',
+    timeColor: GREEN_PILL,
+    timeTextColor: GREEN_TEXT,
   },
   { 
     id: '2', 
-    name: 'Marcus Thorne', 
+    name: 'Sarah Chen', 
     rating: '4.8', 
     totalRides: '1,150+ rides', 
-    place: 'Student Union', 
-    seats: 4, 
-    eta: '6 mins away', 
+    place: 'Library North', 
+    seats: '2 seats', 
+    eta: '5 mins away', 
     vehicleModel: 'Silver Honda Civic', 
     vehicleType: 'Standard Campus Ride',
-    licensePlate: 'C-88-91'
+    licensePlate: 'C-88-91',
+    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400',
+    timeColor: PILL_BG,
+    timeTextColor: MUTED,
   },
   { 
     id: '3', 
-    name: 'Sarah Jenkins', 
+    name: 'Marcus Thorne', 
     rating: '4.95', 
     totalRides: '3,100+ rides', 
     place: 'Science Complex', 
-    seats: 2, 
-    eta: '4 mins away', 
+    seats: '4 seats', 
+    eta: '6 mins away', 
     vehicleModel: 'Blue Hyundai Elantra', 
     vehicleType: 'Express Campus Fleet',
-    licensePlate: 'H-45-10'
+    licensePlate: 'H-45-10',
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400',
+    timeColor: PILL_BG,
+    timeTextColor: MUTED,
+  },
+  { 
+    id: '4', 
+    name: 'Jessica Taylor', 
+    rating: '4.7', 
+    totalRides: '900+ rides', 
+    place: 'Student Union', 
+    seats: '3 seats', 
+    eta: '8 mins away', 
+    vehicleModel: 'Black Nissan Sentra', 
+    vehicleType: 'Standard Campus Ride',
+    licensePlate: 'T-99-12',
+    avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=400',
+    timeColor: PILL_BG,
+    timeTextColor: MUTED,
   },
 ];
 
@@ -87,10 +115,7 @@ export default function StudentHome({ onLogout }) {
 
   const [countdown, setCountdown] = useState(30);
 
-  const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
-  const [scheduleDest, setScheduleDest] = useState('');
-  const [scheduleTime, setScheduleTime] = useState('');
-
+  // TODO: Implement actual WebSocket or backend timeout synchronization
   useEffect(() => {
     let timer;
     if (step === 'waiting-countdown' && countdown > 0) {
@@ -120,29 +145,19 @@ export default function StudentHome({ onLogout }) {
     return <HelpSupportScreen onNavigate={(tab) => setActiveTab(tab)} />;
   }
 
-  const handleConfirmSchedule = () => {
-    if (!scheduleDest.trim() || !scheduleTime.trim()) {
-      Alert.alert("Error", "Please fill in all scheduling fields.");
-      return;
-    }
-    Alert.alert("Ride Scheduled", `Your ride to ${scheduleDest} is locked in for ${scheduleTime}.`);
-    setScheduleDest('');
-    setScheduleTime('');
-    setScheduleModalVisible(false);
-  };
-
   const handleConfirmRideRequest = () => {
     if (!destination.trim()) {
-      setDestination(selectedRide?.place || 'Engineering Building');
+      setDestination(selectedRide?.place || 'Engineering Bldg');
     }
+    // TODO: Dispatch ride request API payload
     setStep('waiting-countdown');
   };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent={false} />
 
-      {/* App Header Area */}
+      {/* App Header Area - Left: Brand, Right: User Profile */}
       <View style={styles.header}>
         {step !== 'list' ? (
           <TouchableOpacity 
@@ -171,95 +186,122 @@ export default function StudentHome({ onLogout }) {
           onPress={() => setActiveTab('profile')} 
           activeOpacity={0.7}
         >
-          <Feather name="user" size={20} color={NAVY} />
+          {/* TODO: Replace with user profile image URI from auth context if available */}
+          <Image 
+            source={{ uri: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400' }} 
+            style={styles.avatarImg} 
+          />
         </TouchableOpacity>
       </View>
 
       {/* Main Content Body */}
-      <ScrollView showsVerticalScrollIndicator={false} bounces={false} contentContainerStyle={{ paddingBottom: 120 }}>
+      <ScrollView showsVerticalScrollIndicator={false} bounces={false} contentContainerStyle={{ paddingBottom: 100 }}>
         
-        {step !== 'waiting-countdown' && step !== 'request-form' && (
-          <ImageBackground source={{ uri: MAP_URI }} style={styles.map}>
-            {step === 'list' && (
-              <View style={styles.searchContainer}>
-                <View style={styles.searchBar}>
-                  <Ionicons name="location-outline" size={22} color={NAVY} />
-                  <TextInput 
-                    placeholder="Where are you going?" 
-                    placeholderTextColor="#6B7280" 
-                    style={styles.searchInput}
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                  />
-                  <TouchableOpacity activeOpacity={0.7} onPress={() => Alert.alert("Filters", "Filter options coming soon.")}>
-                    <Feather name="sliders" size={20} color={NAVY} />
-                  </TouchableOpacity>
-                </View>
+        {/* Map / Hero Section */}
+        <View style={styles.mapContainer}>
+          <MapView
+            style={styles.map}
+            initialRegion={{
+              latitude: 37.4419,
+              longitude: -122.1430,
+              latitudeDelta: 0.0922,
+              longitudeDelta: 0.0421,
+            }}
+            showsCompass={false}
+            showsMyLocationButton={false}
+          >
+            {/* TODO: Load live driver coordinates via socket connection */}
+            <Marker coordinate={{ latitude: 37.4520, longitude: -122.1250 }}>
+              <View style={styles.fleetBubble}>
+                <FontAwesome5 name="car" size={12} color="#FFFFFF" />
+                <Text style={styles.fleetBubbleText}>2</Text>
               </View>
-            )}
+            </Marker>
 
-            <MapPin top={110} left={90} count={3} />
-            <MapPin top={340} left={60} count={2} />
-            <MapPin top={260} left={250} count={1} />
+            <Marker coordinate={{ latitude: 37.4310, longitude: -122.1600 }}>
+              <View style={styles.fleetBubble}>
+                <FontAwesome5 name="car" size={12} color="#FFFFFF" />
+                <Text style={styles.fleetBubbleText}>3</Text>
+              </View>
+            </Marker>
+          </MapView>
 
-            <View style={[styles.userDotOuter, { top: 220, left: 170 }]}>
-              <View style={styles.userDotInner} />
-            </View>
-
-            {step === 'list' && (
+          {/* Floating Search Bar Overlay (Only shown on list step) */}
+          {step === 'list' && (
+            <View style={styles.searchBarContainer}>
+              <Ionicons name="location-outline" size={20} color={BLUE} style={styles.searchPinIcon} />
+              <TextInput 
+                placeholder="Where are you going?" 
+                placeholderTextColor={MUTED} 
+                style={styles.searchTextPlaceholder}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
               <TouchableOpacity 
-                style={styles.fab} 
-                activeOpacity={0.85}
-                onPress={() => setScheduleModalVisible(true)}
+                style={styles.filterIconWrap}
+                activeOpacity={0.7}
+                onPress={() => Alert.alert("Filters", "Filter options coming soon.")}
               >
-                <Feather name="plus" size={26} color="#fff" />
+                <Feather name="sliders" size={16} color={NAVY} />
               </TouchableOpacity>
-            )}
-          </ImageBackground>
-        )}
+            </View>
+          )}
+        </View>
 
+        {/* Bottom Sheet / Ride List Container (No Bottom Shadow) */}
         {step === 'list' && (
-          <View style={styles.sheet}>
-            <View style={styles.sheetHandle} />
-            <View style={styles.sheetHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.sheetTitle}>Nearby Available Rides</Text>
-                <Text style={styles.sheetSubtitle}>Find a match on your route</Text>
-              </View>
-              <TouchableOpacity onPress={() => Alert.alert("See All", "Displaying all active campus drivers.")}>
-                <Text style={styles.seeAll}>See All</Text>
+          <View style={styles.bottomSheet}>
+            <View style={styles.sheetHandleBar} />
+
+            <View style={styles.sheetHeaderRow}>
+              <Text style={styles.sheetTitle}>Nearby Available Rides</Text>
+              <TouchableOpacity activeOpacity={0.7} onPress={() => Alert.alert("See All", "Displaying all active campus drivers.")}>
+                <Text style={styles.seeAllText}>See All</Text>
               </TouchableOpacity>
             </View>
 
-            {rides.map((r) => (
-              <TouchableOpacity 
-                key={r.id} 
-                style={styles.rideCard} 
-                activeOpacity={0.8}
-                onPress={() => {
-                  setSelectedRide(r);
-                  setStep('details');
-                }}
-              >
-                <View style={styles.rideAvatarWrap}>
-                  <FontAwesome5 name="user-alt" size={20} color={NAVY} />
-                </View>
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.rideName}>{r.name}</Text>
-                  <Text style={styles.rideMeta}>{`${r.place}  •  ${r.seats} seats`}</Text>
-                </View>
-                <View style={styles.etaPill}>
-                  <Text style={styles.etaText}>{r.eta}</Text>
-                </View>
-                <View style={styles.seatsBadge}>
-                  <Ionicons name="person" size={14} color={NAVY} />
-                  <Text style={styles.seatsText}>{r.seats}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
+            <View style={styles.rideListScroll}>
+              {rides.map((r) => (
+                <TouchableOpacity 
+                  key={r.id} 
+                  style={styles.rideCard} 
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    setSelectedRide(r);
+                    setStep('details');
+                  }}
+                >
+                  <Image source={{ uri: r.avatar }} style={styles.driverAvatar} />
+                  
+                  <View style={styles.rideCardInfo}>
+                    <View style={styles.driverRow}>
+                      <Text style={styles.driverName}>{r.name}</Text>
+                      <View style={[styles.timeBadge, { backgroundColor: r.timeColor }]}>
+                        <Text style={[styles.timeBadgeText, { color: r.timeTextColor }]}>
+                          {r.eta}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.rideMetaRow}>
+                      <View style={styles.metaItem}>
+                        <Ionicons name="person-outline" size={13} color={MUTED} />
+                        <Text style={styles.metaText}>{r.seats}</Text>
+                      </View>
+                      <Text style={styles.metaDot}>•</Text>
+                      <View style={styles.metaItem}>
+                        <FontAwesome5 name="university" size={11} color={MUTED} style={{ marginRight: 2 }} />
+                        <Text style={styles.metaText}>{r.place}</Text>
+                      </View>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
         )}
 
+        {/* Details Step */}
         {step === 'details' && selectedRide && (
           <View style={styles.sheetStandalone}>
             <View style={styles.detailTopRow}>
@@ -269,13 +311,13 @@ export default function StudentHome({ onLogout }) {
               </View>
               <View style={styles.seatsBadgeLarge}>
                 <Ionicons name="person" size={14} color={NAVY} />
-                <Text style={styles.seatsBadgeTextLarge}>{selectedRide.seats} seats available</Text>
+                <Text style={styles.seatsBadgeTextLarge}>{selectedRide.seats} available</Text>
               </View>
             </View>
 
             <View style={styles.driverProfileRow}>
               <View style={styles.driverAvatarContainer}>
-                <FontAwesome5 name="user-alt" size={28} color={BLUE} />
+                <Image source={{ uri: selectedRide.avatar }} style={{ width: 60, height: 60, borderRadius: 30 }} />
                 <View style={styles.verifiedDot} />
               </View>
               <View style={{ flex: 1, marginLeft: 14 }}>
@@ -330,6 +372,7 @@ export default function StudentHome({ onLogout }) {
           </View>
         )}
 
+        {/* Request Form Step */}
         {step === 'request-form' && (
           <View style={styles.formContainer}>
             <View style={styles.locationCard}>
@@ -415,7 +458,7 @@ export default function StudentHome({ onLogout }) {
 
             <View style={styles.zonePill}>
               <Ionicons name="car-sport" size={16} color={NAVY} />
-              <Text style={styles.zonePillText}>{selectedRide?.seats || 3} seats available with {selectedRide?.name}</Text>
+              <Text style={styles.zonePillText}>{selectedRide?.seats || '3 seats'} available with {selectedRide?.name}</Text>
             </View>
 
             <TouchableOpacity 
@@ -428,9 +471,10 @@ export default function StudentHome({ onLogout }) {
           </View>
         )}
 
+        {/* Waiting Countdown Step */}
         {step === 'waiting-countdown' && (
           <View style={styles.waitingContainer}>
-            <View style={styles.mapCardMini}>
+            <View style={styles.mapCardMiniFull}>
               <ImageBackground source={{ uri: MAP_URI }} style={styles.mapImage} imageStyle={{ borderRadius: 16 }}>
                 <View style={styles.mapPinIndicator} />
               </ImageBackground>
@@ -462,51 +506,7 @@ export default function StudentHome({ onLogout }) {
 
       </ScrollView>
 
-      <Modal
-        visible={scheduleModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setScheduleModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeaderRow}>
-              <Text style={styles.modalTitle}>Schedule a Ride</Text>
-              <TouchableOpacity onPress={() => setScheduleModalVisible(false)}>
-                <Ionicons name="close" size={24} color={TEXT} />
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.modalSub}>Plan your commute ahead of time across campus.</Text>
-
-            <Text style={styles.inputLabel}>Destination</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="e.g. Science Complex Block B"
-              placeholderTextColor="#9CA3AF"
-              value={scheduleDest}
-              onChangeText={setScheduleDest}
-            />
-
-            <Text style={styles.inputLabel}>Pickup Time</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="e.g. Tomorrow at 8:30 AM"
-              placeholderTextColor="#9CA3AF"
-              value={scheduleTime}
-              onChangeText={setScheduleTime}
-            />
-
-            <TouchableOpacity 
-              style={styles.scheduleConfirmBtn} 
-              activeOpacity={0.85}
-              onPress={handleConfirmSchedule}
-            >
-              <Text style={styles.scheduleConfirmText}>Lock In Scheduled Ride</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
+      {/* Unified Bottom Tab Bar */}
       <View style={styles.tabBar}>
         <TabItem icon={<Ionicons name="home" size={22} color={BLUE} />} label="Home" active={true} onPress={() => setActiveTab('home')} />
         <TabItem icon={<FontAwesome5 name="car" size={18} color={MUTED} />} label="Rides" onPress={() => setActiveTab('history')} />
@@ -514,15 +514,6 @@ export default function StudentHome({ onLogout }) {
         <TabItem icon={<Feather name="user" size={22} color={MUTED} />} label="Profile" onPress={() => setActiveTab('profile')} />
       </View>
     </SafeAreaView>
-  );
-}
-
-function MapPin({ top, left, count }) {
-  return (
-    <View style={[styles.pinWrap, { top, left }]}>
-      <View style={styles.pin}><MaterialCommunityIcons name="car" size={18} color="#fff" /></View>
-      <View style={styles.pinBadge}><Text style={styles.pinBadgeText}>{count}</Text></View>
-    </View>
   );
 }
 
@@ -538,55 +529,154 @@ function TabItem({ icon, label, active, onPress }) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#fff' },
+  safe: { flex: 1, backgroundColor: SCREEN_BG },
+  
   header: { 
     height: 60,
     flexDirection: 'row', 
     alignItems: 'center', 
     justifyContent: 'space-between', 
     paddingHorizontal: 20, 
-    backgroundColor: '#fff',
+    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: BORDER,
     zIndex: 20,
   },
-  brand: { fontSize: 22, fontWeight: '800', color: NAVY },
+  brand: { fontSize: 22, fontWeight: '900', color: NAVY, letterSpacing: -0.3 },
   headerTitleCenter: { fontSize: 17, fontWeight: '700', color: TEXT },
   backButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  avatarRing: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: '#E5E7EB', backgroundColor: '#EEF0F4', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  map: { width: '100%', height: 440, position: 'relative' },
-  searchContainer: { width: '100%', position: 'absolute', top: 14, zIndex: 10 },
-  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EEF0F4', marginHorizontal: 16, paddingHorizontal: 16, height: 52, borderRadius: 26, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
-  searchInput: { flex: 1, marginLeft: 10, fontSize: 15, color: '#111827' },
-  pinWrap: { position: 'absolute', width: 44, height: 52 },
-  pin: { width: 36, height: 44, backgroundColor: NAVY, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  pinBadge: { position: 'absolute', right: -6, top: -6, backgroundColor: LIME, width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' },
-  pinBadgeText: { color: NAVY, fontWeight: '700', fontSize: 11 },
-  userDotOuter: { position: 'absolute', width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(59,130,246,0.25)', alignItems: 'center', justifyContent: 'center' },
-  userDotInner: { width: 14, height: 14, borderRadius: 7, backgroundColor: '#2563EB', borderWidth: 2, borderColor: '#fff' },
-  fab: { position: 'absolute', right: 20, bottom: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: BLUE, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 6, elevation: 6 },
-  sheet: { backgroundColor: '#fff', marginTop: -24, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 20, paddingTop: 10, shadowColor: '#000', shadowOpacity: 0.08, elevation: 4 },
+  avatarRing: { 
+    width: 40, 
+    height: 40, 
+    borderRadius: 20, 
+    borderWidth: 2, 
+    borderColor: '#FFFFFF', 
+    overflow: 'hidden', 
+    backgroundColor: '#fff',
+    elevation: 3,
+  },
+  avatarImg: { width: '100%', height: '100%' },
+
+  mapContainer: {
+    height: 400,
+    position: 'relative',
+  },
+  map: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  fleetBubble: {
+    backgroundColor: NAVY,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    gap: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  fleetBubbleText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+
+  searchBarContainer: {
+    position: 'absolute',
+    top: 20,
+    left: 20,
+    right: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 26,
+    height: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
+    zIndex: 10,
+  },
+  searchPinIcon: { marginRight: 10 },
+  searchTextPlaceholder: { flex: 1, fontSize: 15, color: TEXT, fontWeight: '500' },
+  filterIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: PILL_BG,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  bottomSheet: {
+    backgroundColor: CARD_BG,
+    marginTop: -24,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 30,
+    elevation: 0,
+  },
+  sheetHandleBar: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#CBD5E1',
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  sheetHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  sheetTitle: { fontSize: 18, fontWeight: '800', color: TEXT },
+  seeAllText: { fontSize: 13, fontWeight: '700', color: BLUE, backgroundColor: TAB_ACTIVE_BG, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14 },
+
+  rideListScroll: { gap: 12 },
+  rideCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: BORDER,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  driverAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#E2E8F0',
+  },
+  rideCardInfo: { flex: 1, marginLeft: 14 },
+  driverRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+  driverName: { fontSize: 16, fontWeight: '800', color: TEXT },
+  timeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  timeBadgeText: { fontSize: 11, fontWeight: '800' },
+
+  rideMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  metaText: { fontSize: 13, fontWeight: '600', color: MUTED },
+  metaDot: { color: MUTED, fontSize: 12 },
+
   sheetStandalone: { backgroundColor: '#fff', padding: 20, borderTopLeftRadius: 28, borderTopRightRadius: 28 },
-  sheetHandle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: '#D1D5DB', marginBottom: 16 },
-  sheetHeader: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 16 },
-  sheetTitle: { fontSize: 20, fontWeight: '800', color: NAVY },
-  sheetSubtitle: { fontSize: 14, color: '#6B7280', marginTop: 2 },
-  seeAll: { color: BLUE, fontWeight: '700', fontSize: 14 },
-  rideCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: CARD_BG, borderRadius: 16, padding: 14, marginBottom: 12 },
-  rideAvatarWrap: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#E2E8F0', alignItems: 'center', justifyContent: 'center' },
-  rideName: { fontSize: 16, fontWeight: '700', color: TEXT },
-  rideMeta: { fontSize: 13, color: '#6B7280', marginTop: 2 },
-  etaPill: { backgroundColor: PILL_BG, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, marginRight: 8 },
-  etaText: { color: NAVY, fontWeight: '700', fontSize: 12 },
-  seatsBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: LIME, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
-  seatsText: { color: NAVY, fontWeight: '700', marginLeft: 4, fontSize: 12 },
   detailTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
   estimatedArrivalLabel: { fontSize: 12, fontWeight: '700', color: MUTED, letterSpacing: 0.5 },
   estimatedArrivalTime: { fontSize: 24, fontWeight: '800', color: NAVY, marginTop: 2 },
   seatsBadgeLarge: { flexDirection: 'row', alignItems: 'center', backgroundColor: LIME, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
   seatsBadgeTextLarge: { color: NAVY, fontWeight: '700', marginLeft: 6, fontSize: 13 },
   driverProfileRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  driverAvatarContainer: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#E6EFFF', alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  driverAvatarContainer: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#E6EFFF', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' },
   verifiedDot: { position: 'absolute', bottom: 2, right: 2, width: 14, height: 14, borderRadius: 7, backgroundColor: '#22C55E', borderWidth: 2, borderColor: '#fff' },
   driverNameText: { fontSize: 18, fontWeight: '800', color: TEXT },
   driverMetaText: { fontSize: 13, color: MUTED, marginTop: 3, fontWeight: '600' },
@@ -601,6 +691,7 @@ const styles = StyleSheet.create({
   driverPerksText: { fontSize: 12, fontWeight: '700', color: '#166534' },
   requestRideBtn: { backgroundColor: NAVY, borderRadius: 16, height: 56, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 6, elevation: 3 },
   requestRideBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+
   formContainer: { padding: 16 },
   locationCard: { backgroundColor: CARD_BG, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: BORDER, marginBottom: 16 },
   locRow: { flexDirection: 'row', alignItems: 'center' },
@@ -609,6 +700,7 @@ const styles = StyleSheet.create({
   locLabel: { fontSize: 11, fontWeight: '700', color: MUTED, letterSpacing: 0.5 },
   locInputInline: { fontSize: 15, fontWeight: '700', color: TEXT, marginTop: 2, height: 30, padding: 0 },
   mapCardMini: { height: 160, borderRadius: 16, overflow: 'hidden', marginBottom: 20, borderWidth: 1, borderColor: BORDER },
+  mapCardMiniFull: { height: 200, borderRadius: 16, overflow: 'hidden', marginBottom: 10, borderWidth: 1, borderColor: BORDER },
   mapImage: { flex: 1, justifyContent: 'center', alignItems: 'center', position: 'relative' },
   mapPinIndicator: { width: 14, height: 14, borderRadius: 7, backgroundColor: '#22C55E', borderWidth: 2, borderColor: '#fff' },
   mapPillLeft: { position: 'absolute', bottom: 12, left: 12, backgroundColor: '#E0F2FE', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 4 },
@@ -620,12 +712,13 @@ const styles = StyleSheet.create({
   rideTypeIconWrap: { width: 44, height: 44, borderRadius: 22, backgroundColor: TAB_ACTIVE_BG, alignItems: 'center', justifyContent: 'center' },
   rideTypeName: { fontSize: 16, fontWeight: '700', color: TEXT },
   rideTypeDesc: { fontSize: 13, color: MUTED, marginTop: 2 },
-  popularBadge: { backgroundColor: LIME_POPULAR, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
+  popularBadge: { backgroundColor: LIME, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
   popularBadgeText: { fontSize: 10, fontWeight: '800', color: NAVY },
-  zonePill: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#E6E8F5', paddingVertical: 12, borderRadius: 14, gap: 8, marginTop: 6, marginBottom: 20 },
+  zonePill: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#EEF2FF', paddingVertical: 12, borderRadius: 14, gap: 8, marginTop: 6, marginBottom: 20 },
   zonePillText: { fontSize: 13, fontWeight: '700', color: NAVY },
   confirmRideBtn: { backgroundColor: NAVY, height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.2, elevation: 4 },
   confirmRideBtnText: { color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 0.5 },
+
   waitingContainer: { padding: 16, alignItems: 'center' },
   radarCard: { backgroundColor: CARD_BG, borderRadius: 20, padding: 24, width: '100%', alignItems: 'center', borderWidth: 1, borderColor: BORDER, marginVertical: 16 },
   timerRing: { width: 90, height: 90, borderRadius: 45, backgroundColor: TAB_ACTIVE_BG, alignItems: 'center', justifyContent: 'center', marginBottom: 16, borderWidth: 3, borderColor: BLUE },
@@ -634,27 +727,19 @@ const styles = StyleSheet.create({
   waitingSub: { fontSize: 13, color: MUTED, textAlign: 'center', lineHeight: 18 },
   cancelRequestBtn: { backgroundColor: '#EF4444', height: 56, borderRadius: 16, width: '100%', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.2, elevation: 4 },
   cancelRequestBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 40 },
-  modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  modalTitle: { fontSize: 22, fontWeight: '800', color: NAVY },
-  modalSub: { fontSize: 14, color: '#6B7280', marginBottom: 20 },
-  inputLabel: { fontSize: 14, fontWeight: '700', color: TEXT, marginBottom: 6 },
-  modalInput: { backgroundColor: '#F3F4F6', borderRadius: 12, paddingHorizontal: 16, height: 50, fontSize: 15, color: TEXT, marginBottom: 16, borderWidth: 1, borderColor: '#E5E7EB' },
-  scheduleConfirmBtn: { backgroundColor: BLUE, borderRadius: 14, height: 54, alignItems: 'center', justifyContent: 'center', marginTop: 10 },
-  scheduleConfirmText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+
   tabBar: { 
     position: 'absolute', left: 0, right: 0, bottom: 0, 
     backgroundColor: '#fff', 
     flexDirection: 'row', 
     paddingTop: 8, 
-    paddingBottom: Platform.OS === 'ios' ? 22 : 10, 
-    borderTopLeftRadius: 20, borderTopRightRadius: 20, 
-    shadowColor: '#000', shadowOpacity: 0.06, elevation: 8 
+    paddingBottom: Platform.OS === 'ios' ? 24 : 12, 
+    borderTopLeftRadius: 24, borderTopRightRadius: 24, 
+    shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 10, elevation: 10 
   },
   tabItem: { flex: 1, alignItems: 'center' },
-  tabIconWrap: { paddingHorizontal: 18, paddingVertical: 6, borderRadius: 16 },
+  tabIconWrap: { paddingHorizontal: 20, paddingVertical: 6, borderRadius: 16 },
   tabIconWrapActive: { backgroundColor: TAB_ACTIVE_BG },
   tabLabel: { fontSize: 12, color: MUTED, marginTop: 2 },
-  tabLabelActive: { color: TEXT, fontWeight: '600' },
+  tabLabelActive: { color: NAVY, fontWeight: '700' },
 });
