@@ -20,13 +20,10 @@ export const updateDriverProfile = async (req, res, next) => {
     if (req.body.fullName) allowedUpdates.fullName = req.body.fullName;
     if (req.body.phoneNumber) allowedUpdates.phoneNumber = req.body.phoneNumber;
     
-    // Capture expoPushToken payload from mobile app profile sync
     if (req.body.expoPushToken) allowedUpdates.expoPushToken = req.body.expoPushToken;
 
     if (req.file?.path) {
-      // 1. Convert backslashes to forward slashes for URL compatibility
       const normalizedPath = req.file.path.replace(/\\/g, "/");
-      // 2. Save it under both fields for absolute compatibility
       allowedUpdates.avatarUri = normalizedPath;
       allowedUpdates.avatarUrl = normalizedPath;
     }
@@ -42,11 +39,9 @@ export const updateDriverProfile = async (req, res, next) => {
         .json({ success: false, error: { message: "Driver not found" } });
     }
 
-    // Determine the host URL dynamically
     const host = req.get('host');
     const protocol = req.protocol;
     
-    // Build a fully qualified image URL if there's a file path saved
     let formattedAvatarUri = driver.avatarUri || driver.avatarUrl || null;
     if (formattedAvatarUri && !formattedAvatarUri.startsWith('http')) {
       formattedAvatarUri = `${protocol}://${host}/${formattedAvatarUri}`;
@@ -70,7 +65,6 @@ export const updateDriverProfile = async (req, res, next) => {
         isApproved: driver.isApproved,
         avatarUri: formattedAvatarUri,
         avatarUrl: formattedAvatarUri,
-        // Send the updated token back in the response
         expoPushToken: driver.expoPushToken, 
       },
     });
@@ -165,7 +159,6 @@ export const updateDriverPreferences = async (req, res, next) => {
 
 export const getDriverNotifications = async (req, res, next) => {
   try {
-    // Fetching the active driver by their authenticated session token ID
     const user = await User.findById(req.user._id).select("notifications");
     
     if (!user) {
@@ -176,8 +169,6 @@ export const getDriverNotifications = async (req, res, next) => {
     }
 
     const notificationsArray = user.notifications || [];
-    
-    // Sort by newest first
     const sortedNotifications = notificationsArray.sort(
       (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
     );
@@ -233,26 +224,82 @@ export const getPendingCampusRequests = async (req, res, next) => {
   }
 };
 
+export const updateDriverLocation = async (req, res, next) => {
+  try {
+    const driverId = req.user.id || req.user._id;
+    const { latitude, longitude, isOnline } = req.body;
+
+    const updateData = {
+      lastSeen: new Date() // 🔑 Updates heartbeat timestamp on every GPS ping
+    };
+
+    if (latitude !== undefined && longitude !== undefined) {
+      updateData.currentLocation = {
+        type: 'Point',
+        coordinates: [parseFloat(longitude), parseFloat(latitude)]
+      };
+    }
+    if (isOnline !== undefined) {
+      updateData.isOnline = isOnline;
+    }
+
+    const updatedDriver = await User.findByIdAndUpdate(
+      driverId,
+      { $set: updateData },
+      { new: true }
+    ).select('-password');
+
+    const io = req.app.get('io');
+    if (io) {
+      if (updatedDriver.isOnline === false) {
+        io.emit('driverWentOffline', { driverId: updatedDriver._id });
+      } else {
+        io.emit('driverLocationUpdate', {
+          id: updatedDriver._id,
+          fullName: updatedDriver.fullName,
+          vehicleModel: updatedDriver.vehicleModel,
+          vehicleLicensePlate: updatedDriver.vehicleLicensePlate,
+          latitude,
+          longitude,
+          isOnline: updatedDriver.isOnline
+        });
+      }
+    }
+
+    res.json({ success: true, data: { isOnline: updatedDriver.isOnline } });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getActiveDriverLocations = async (req, res, next) => {
   try {
-    // Find all active drivers that have shared latitude/longitude details
-    const onlineDrivers = await User.find({ 
-      role: 'driver', 
-      isApproved: true, 
+    const oneMinuteAgo = new Date(Date.now() - 60000); // 🔑 60-second activity window threshold
+
+    const activeDrivers = await User.find({
+      role: 'driver',
       isOnline: true,
-      currentLatitude: { $exists: true },
-      currentLongitude: { $exists: true }
-    }).select('fullName currentLatitude currentLongitude');
+      lastSeen: { $gte: oneMinuteAgo }, // Excludes drivers whose app crashed or went offline without cleanup
+      'currentLocation.coordinates': { $exists: true, $not: { $size: 0 } }
+    }).select('fullName phoneNumber vehicleModel vehicleLicensePlate currentLocation ratings avatarUri');
 
-    const locations = onlineDrivers.map(drv => ({
-      driverId: drv._id,
-      name: drv.fullName,
-      lat: drv.currentLatitude,
-      lng: drv.currentLongitude,
-      status: 'Active'
-    }));
+    const formattedDrivers = activeDrivers.map(driver => {
+      const coords = driver.currentLocation?.coordinates || [0, 0];
+      return {
+        _id: driver._id,
+        id: driver._id,
+        fullName: driver.fullName,
+        phoneNumber: driver.phoneNumber,
+        vehicleModel: driver.vehicleModel || 'Campus Vehicle',
+        vehicleLicensePlate: driver.vehicleLicensePlate || 'N/A',
+        avatarUri: driver.avatarUri,
+        lat: coords[1],
+        lng: coords[0],
+        eta: '2 mins away'
+      };
+    });
 
-    res.json({ success: true, data: locations });
+    res.json({ success: true, data: formattedDrivers });
   } catch (error) {
     next(error);
   }

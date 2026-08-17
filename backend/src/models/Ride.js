@@ -7,19 +7,20 @@ const rideSchema = new mongoose.Schema({
   dropoffLocation: { type: String, required: true },
   pickupCoordinates: {
     type: { type: String, enum: ['Point'], default: 'Point' },
-    coordinates: { type: [Number], required: true }
+    coordinates: { type: [Number], default: [0, 0] }
   },
   dropoffCoordinates: {
     type: { type: String, enum: ['Point'], default: 'Point' },
-    coordinates: { type: [Number], required: true }
+    coordinates: { type: [Number], default: [0, 0] }
   },
   status: { 
     type: String, 
-    enum: ['pending', 'accepted', 'in_progress', 'completed', 'cancelled_timeout', 'failed_no_drivers'], 
+    enum: ['pending', 'accepted', 'in_progress', 'completed', 'cancelled_timeout', 'failed_no_drivers', 'Scheduled'], 
     default: 'pending' 
   },
-  fare: { type: Number, required: true },
-  rideMode: { type: String, enum: ['shared', 'private'], default: 'private' }
+  fare: { type: Number, default: 0 },
+  rideMode: { type: String, enum: ['shared', 'private'], default: 'private' },
+  scheduledTime: { type: Date }
 }, { timestamps: true });
 
 rideSchema.index({ status: 1 });

@@ -1,12 +1,12 @@
-// University of Ghana, Legon Approximate Boundaries (Longitude, Latitude)
+// Expanded Accra / University of Ghana Region Boundaries for Development & Testing
 const UG_POLYGON = [
-  [-0.1980, 5.6600], // North West (Near Haatso-Atomic)
-  [-0.1700, 5.6600], // North East
-  [-0.1700, 5.6350], // South East (Near Okponglo)
-  [-0.1980, 5.6350]  // South West (Near GIMPA)
+  [-0.2500, 5.7000], // North West (Expanded)
+  [-0.1500, 5.7000], // North East (Expanded)
+  [-0.1500, 5.5500], // South East (Expanded)
+  [-0.2500, 5.5500]  // South West (Expanded)
 ];
 
-// Ray-Casting Algorithm to check if a point is inside a polygon
+// Ray-Casting Algorithm to check if a point is inside the polygon boundary
 export const isInsideUG = (longitude, latitude) => {
   let isInside = false;
   for (let i = 0, j = UG_POLYGON.length - 1; i < UG_POLYGON.length; j = i++) {

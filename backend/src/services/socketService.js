@@ -1,49 +1,47 @@
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
-import User from '../models/User.js';
 
 export const initializeSockets = (server) => {
   const io = new Server(server, {
     cors: { origin: '*', methods: ['GET', 'POST', 'PUT'] }
   });
 
-  // BUG 7 FIXED: JWT Handshake Middleware (No unauthorized access)
   io.use((socket, next) => {
-    const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.split(' ')[1];
-    if (!token) return next(new Error('Authentication error: No token provided'));
-    
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      socket.user = decoded; // Attach verified user to socket
-      next();
-    } catch (err) {
-      next(new Error('Authentication error: Invalid token'));
+  try {
+    let token = socket.handshake.auth?.token || socket.handshake.headers?.authorization;
+    if (!token) {
+      console.log(" Socket Authentication Attempt. Token found: NO TOKEN");
+      return next(new Error("No token provided"));
     }
-  });
+
+    // Clean up "Bearer " prefix if present
+    if (token.startsWith("Bearer ")) {
+      token = token.slice(7, token.length).trim();
+    }
+
+    console.log(` Socket Authentication Attempt. Token found: YES (Length: ${token.length})`);
+    
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    socket.user = decoded;
+    next();
+  } catch (err) {
+    console.error(" JWT Verification Error:", err.message);
+    next(new Error("invalid token"));
+  }
+});
 
   io.on('connection', (socket) => {
-    console.log(`🟢 Authenticated Device Connected: ${socket.user.id}`);
+    const userId = socket.user?.id || socket.user?._id || socket.user?.userId;
     
-    // Automatically join their secure private room
-    socket.join(socket.user.id);
-
-    socket.on('driver:location-update', async (data) => {
-      // BUG 8 FIXED: Never trust client payload for identity. Use socket.user.id
-      const driverId = socket.user.id;
-      const { latitude, longitude } = data;
-      
-      await User.findByIdAndUpdate(driverId, { 
-        currentLocation: { type: 'Point', coordinates: [longitude, latitude] }
-      });
-
-      socket.broadcast.emit('map:driver-moved', { driverId, latitude, longitude });
-    });
-
-    // BUG 2 FIXED: Removed 'ride:new-request' and 'ride:accepted' listeners. 
-    // The HTTP Controllers are now the absolute single source of truth for matchmaking.
+    if (userId) {
+      socket.join(userId.toString());
+      console.log(` Driver successfully joined personal room: ${userId}`);
+    } else {
+      console.log("Socket connected, but socket.user object is missing or invalid:", socket.user);
+    }
 
     socket.on('disconnect', () => {
-      console.log(`🔴 Device Disconnected: ${socket.user.id}`);
+      console.log(`Driver Disconnected: ${userId || 'Unknown'}`);
     });
   });
 

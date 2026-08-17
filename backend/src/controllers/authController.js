@@ -5,25 +5,19 @@ const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' });
 };
 
-// Helper function to safely extract and normalize upload file paths across Windows/Linux
 const extractFilePath = (fileArray) => {
   if (!fileArray || !fileArray[0]) return null;
   const fileObj = fileArray[0];
-  
-  // If using Cloudinary / S3 remote storage
   if (fileObj.secure_url) return fileObj.secure_url;
   if (fileObj.url) return fileObj.url;
-
-  // If using local multer storage, normalize Windows backslashes (\) to standard URIs (/)
   if (fileObj.path) {
     return fileObj.path.replace(/\\/g, '/');
   }
   return null;
 };
 
-export const register = async (req, res, next) => {
+export const register = async (req, res) => {
   try {
-    // 1. Destructure parameter fields passed from multi-part FormData
     const { 
       fullName, 
       email, 
@@ -37,7 +31,6 @@ export const register = async (req, res, next) => {
       nationalIdNumber 
     } = req.body;
 
-    // 2. Prevent duplicate profile registrations
     const userExists = await User.findOne({ $or: [{ email }, { phoneNumber }] });
     if (userExists) {
       return res.status(400).json({ 
@@ -46,14 +39,12 @@ export const register = async (req, res, next) => {
       });
     }
 
-    // 3. Extract uploaded media file locations safely
     const licenseUrl = extractFilePath(req.files?.licenseFile);
     const ghanaCardFrontUrl = extractFilePath(req.files?.ghanaCardFront);
     const ghanaCardBackUrl = extractFilePath(req.files?.ghanaCardBack);
     const insuranceUrl = extractFilePath(req.files?.insuranceFile);
     const registrationUrl = extractFilePath(req.files?.registrationFile);
     
-    // 4. Save everything directly to your unified User schema document
     const user = await User.create({ 
       fullName, 
       email, 
@@ -62,15 +53,11 @@ export const register = async (req, res, next) => {
       role: role || 'driver',
       isApproved: false,  
       isSuspended: false,
-
-      // Vehicle field assignments
       vehicleType: vehicleType || vehicleModel || 'Sedan',
       vehicleModel: vehicleModel || vehicleType || 'Not Specified',
       vehicleLicensePlate: vehicleLicensePlate || 'N/A',
       vehicleColor: vehicleColor || 'Unspecified',
       nationalIdNumber: nationalIdNumber || 'N/A',
-
-      // Upload file destination mappings
       licenseImg: licenseUrl,
       ghanaCardImg: ghanaCardFrontUrl,
       ghanaCardBackImg: ghanaCardBackUrl,
@@ -78,10 +65,7 @@ export const register = async (req, res, next) => {
       registrationImg: registrationUrl
     });
 
-    console.log(`[Auth API Hub] New driver registration logged successfully for: ${user.fullName}`);
-
-    // 5. Send response payload back to mobile app
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       data: {
         user: { 
@@ -89,38 +73,51 @@ export const register = async (req, res, next) => {
           fullName: user.fullName, 
           email: user.email, 
           role: user.role,
-          avatarUri: user.avatarUri || user.avatarUrl || null,  
-          avatarUrl: user.userAvatar || user.avatarUrl || null   
         },
         token: generateToken(user._id)
       }
     });
-
   } catch (error) { 
-    console.error(" Registration execution crash inside controller layer:", error);
-    next(error); 
+    console.error("Register Error:", error);
+    return res.status(500).json({ success: false, error: { message: error.message || 'Server error' } });
   }
 };
 
-export const login = async (req, res, next) => {
+export const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
-    const user = await User.findOne({ email });
+    const { email, password, role: requestedRole } = req.body;
+    
+    if (!email || !password) {
+      return res.status(400).json({ success: false, error: { message: 'Email/phone and password are required.' } });
+    }
+
+    const isEmailInput = email.includes('@');
+    const query = isEmailInput 
+      ? { email: email.trim().toLowerCase() } 
+      : { phoneNumber: email.trim().replace(/\s+/g, "") };
+
+    const user = await User.findOne(query);
 
     if (user && (await user.matchPassword(password))) {
       
-      //  ACCOUNT SUSPENSION ENFORCEMENT CHECK
-      if (user.isSuspended || user.isBlocked) {
+      // BLOCK ROLE CROSS-LOGIN: Prevent a driver from logging into student portal & vice versa
+      if (requestedRole && user.role !== requestedRole) {
         return res.status(403).json({ 
           success: false, 
           error: { 
-            code: 'ACCOUNT_SUSPENDED', 
-            message: 'Your account has been suspended by administration. Please contact support.' 
+            code: 'ROLE_MISMATCH', 
+            message: `This account is registered as a ${user.role}. Please use the correct login portal.` 
           } 
         });
       }
 
-      // Check driver approval status
+      if (user.isSuspended || user.isBlocked) {
+        return res.status(403).json({ 
+          success: false, 
+          error: { code: 'ACCOUNT_SUSPENDED', message: 'Your account has been suspended.' } 
+        });
+      }
+
       if (user.role === 'driver' && !user.isApproved) {
         return res.status(403).json({ 
           success: false, 
@@ -136,22 +133,105 @@ export const login = async (req, res, next) => {
         formattedAvatarUri = `${protocol}://${host}/${formattedAvatarUri}`;
       }
 
-      res.json({
+      // IF USER IS A DRIVER: Skip OTP and return token & profile instantly
+      if (user.role === 'driver') {
+        return res.json({
+          success: true,
+          data: {
+            user: { 
+              id: user._id, 
+              fullName: user.fullName, 
+              email: user.email, 
+              phoneNumber: user.phoneNumber,
+              role: user.role,
+              avatarUri: formattedAvatarUri,  
+              avatarUrl: formattedAvatarUri
+            },
+            token: generateToken(user._id)
+          }
+        });
+      }
+
+      // IF PASSENGER: Keep the OTP flow
+      const otpCode = Math.floor(1000 + Math.random() * 9000).toString();
+      user.otpCode = otpCode;
+      user.otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); 
+      await user.save();
+
+      if (isEmailInput) {
+        console.log(`[CampusRide Mailer] 📧 Sending OTP email to Gmail (${user.email}): Your verification code is ${otpCode}`);
+      } else {
+        console.log(`[CampusRide SMS Gateway] 📱 Sending SMS text to Phone Number (${user.phoneNumber}): Your verification code is ${otpCode}`);
+      }
+
+      return res.json({
         success: true,
-        data: {
-          user: { 
-            id: user._id, 
-            fullName: user.fullName, 
-            email: user.email, 
-            role: user.role,
-            avatarUri: formattedAvatarUri,  
-            avatarUrl: formattedAvatarUri
-          },
-          token: generateToken(user._id)
-        }
+        message: isEmailInput ? 'OTP sent to your Gmail address.' : 'OTP sent via SMS to your phone number.',
+        data: { requiresOtp: true }
       });
+
     } else {
-      res.status(401).json({ success: false, error: { code: 'AUTH_FAILED', message: 'Invalid email or password' } });
+      return res.status(401).json({ success: false, error: { code: 'AUTH_FAILED', message: 'Invalid credentials' } });
     }
-  } catch (error) { next(error); }
+  } catch (error) { 
+    console.error("Login Error:", error);
+    return res.status(500).json({ success: false, error: { message: error.message || 'Server error' } });
+  }
+};
+
+export const verifyLoginOtp = async (req, res) => {
+  try {
+    const { email, otpCode } = req.body;
+
+    if (!email || !otpCode) {
+      return res.status(400).json({ success: false, error: { message: 'Email/phone and OTP code are required.' } });
+    }
+
+    const query = email.includes('@') 
+      ? { email: email.trim().toLowerCase() } 
+      : { phoneNumber: email.trim().replace(/\s+/g, "") };
+
+    const user = await User.findOne(query);
+    if (!user) {
+      return res.status(404).json({ success: false, error: { message: 'User not found.' } });
+    }
+
+    if (!user.otpCode || user.otpCode !== otpCode.trim()) {
+      return res.status(400).json({ success: false, error: { message: 'Incorrect OTP verification code.' } });
+    }
+
+    if (user.otpExpiresAt && new Date() > user.otpExpiresAt) {
+      return res.status(400).json({ success: false, error: { message: 'OTP code has expired. Please request a new one.' } });
+    }
+
+    user.otpCode = undefined;
+    user.otpExpiresAt = undefined;
+    await user.save();
+
+    const host = req.get('host');
+    const protocol = req.protocol;
+    let formattedAvatarUri = user.avatarUri || user.avatarUrl || null;
+    if (formattedAvatarUri && !formattedAvatarUri.startsWith('http')) {
+      formattedAvatarUri = `${protocol}://${host}/${formattedAvatarUri}`;
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        user: { 
+          id: user._id, 
+          fullName: user.fullName, 
+          email: user.email, 
+          phoneNumber: user.phoneNumber,
+          role: user.role,
+          avatarUri: formattedAvatarUri,  
+          avatarUrl: formattedAvatarUri
+        },
+        token: generateToken(user._id)
+      }
+    });
+  } catch (error) { 
+    console.error("Verify OTP Error:", error);
+    return res.status(500).json({ success: false, error: { message: error.message || 'Server error' } });
+  }
 };

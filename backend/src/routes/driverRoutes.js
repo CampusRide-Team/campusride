@@ -8,28 +8,32 @@ import {
   markNotificationAsRead,
   updateDriverPreferences,
   updateDriverProfile,
+  updateDriverLocation,
+  getActiveDriverLocations
 } from "../controllers/driverController.js";
+import { acceptRide } from "../controllers/rideController.js";
 import { protect, requireRole } from "../middleware/authMiddleware.js";
 import { upload } from "../middleware/upload.js";
 
 const router = express.Router();
 
-// Authentication & Role Authorization Guard Layer
-router.use(protect);
-router.use(requireRole("driver"));
+// --- Public / Student Accessible Endpoints ---
+router.get("/active-locations", getActiveDriverLocations);
 
-// GET Endpoint Routes
-router.get("/analytics", getDriverAnalytics);
-router.get("/earnings", getDriverEarnings);
-router.get("/notifications", getDriverNotifications);
-router.get("/pending-requests", getPendingCampusRequests);
-router.get("/profile", getDriverProfile);
+// --- Driver Specific Endpoints (Protected) ---
+router.put("/location", protect, updateDriverLocation);
 
-// PUT Endpoint Routes
-router.put("/profile", upload.single("avatar"), updateDriverProfile);
+// Accept Ride Aliases
+router.put("/:id/accept", protect, requireRole("driver"), acceptRide);
+router.put("/accept/:id", protect, requireRole("driver"), acceptRide);
 
-// PATCH Endpoint Routes
-router.patch("/notifications/:id/read", markNotificationAsRead);
-router.patch("/profile/preferences", updateDriverPreferences);
+router.get("/analytics", protect, requireRole("driver"), getDriverAnalytics);
+router.get("/earnings", protect, requireRole("driver"), getDriverEarnings);
+router.get("/notifications", protect, requireRole("driver"), getDriverNotifications);
+router.get("/pending-requests", protect, requireRole("driver"), getPendingCampusRequests);
+router.get("/profile", protect, requireRole("driver"), getDriverProfile);
+router.put("/profile", protect, requireRole("driver"), upload.single("avatar"), updateDriverProfile);
+router.patch("/notifications/:id/read", protect, requireRole("driver"), markNotificationAsRead);
+router.patch("/profile/preferences", protect, requireRole("driver"), updateDriverPreferences);
 
 export default router;
