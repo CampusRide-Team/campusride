@@ -26,6 +26,9 @@
         "projectId": "c2d11632-12f3-4305-af3a-503412915b75"
       }
     },
-    "owner": "byk_moni1"
+    "owner": "byk_moni1",
+    "plugins": [
+      "@react-native-community/datetimepicker"
+    ]
   }
 }

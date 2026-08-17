@@ -1,3 +1,4 @@
+// StudentLogin.js
 import React, { useState } from "react";
 import {
   View,
@@ -12,6 +13,17 @@ import {
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+const NAVY = '#10206B';
+const BLUE = '#2F6BFF';
+const MUTED = '#8A8FA3';
+const TEXT = '#0F1733';
+const CARD_BG = '#FFFFFF';
+const SCREEN_BG = '#F8FAFC';
+const BORDER = '#E2E8F0';
+
+const API_BASE_URL = 'https://c5m62bwc-5000.uks1.devtunnels.ms/api/v1/auth';
 
 const InputField = ({
   label,
@@ -23,45 +35,51 @@ const InputField = ({
   icon,
   rightAction,
   rightLabel,
-}) => (
-  <View style={styles.fieldWrap}>
-    <View style={styles.fieldLabelRow}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      {rightLabel && (
-        <TouchableOpacity onPress={rightLabel.onPress} activeOpacity={0.7}>
-          <Text style={styles.fieldLabelRight}>{rightLabel.text}</Text>
-        </TouchableOpacity>
-      )}
+}) => {
+  const [isFocused, setIsFocused] = useState(false);
+
+  return (
+    <View style={styles.fieldWrap}>
+      <View style={styles.fieldLabelRow}>
+        <Text style={styles.fieldLabel}>{label}</Text>
+        {rightLabel && (
+          <TouchableOpacity onPress={rightLabel.onPress} activeOpacity={0.7}>
+            <Text style={styles.fieldLabelRight}>{rightLabel.text}</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+      <View style={[styles.inputRow, isFocused && styles.inputRowFocused]}>
+        <Ionicons
+          name={icon}
+          size={18}
+          color={isFocused ? BLUE : MUTED}
+          style={styles.inputIcon}
+        />
+        <TextInput
+          style={styles.input}
+          placeholder={placeholder}
+          placeholderTextColor="#94A3B8"
+          value={value}
+          onChangeText={onChangeText}
+          keyboardType={keyboardType}
+          secureTextEntry={secureTextEntry}
+          autoCapitalize="none"
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+        />
+        {rightAction && (
+          <TouchableOpacity
+            style={styles.inputRightAction}
+            onPress={rightAction.onPress}
+            activeOpacity={0.7}
+          >
+            <Ionicons name={rightAction.icon} size={18} color={MUTED} />
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
-    <View style={styles.inputRow}>
-      <Ionicons
-        name={icon}
-        size={18}
-        color="#64748B"
-        style={styles.inputIcon}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder={placeholder}
-        placeholderTextColor="#94A3B8"
-        value={value}
-        onChangeText={onChangeText}
-        keyboardType={keyboardType}
-        secureTextEntry={secureTextEntry}
-        autoCapitalize="none"
-      />
-      {rightAction && (
-        <TouchableOpacity
-          style={styles.inputRightAction}
-          onPress={rightAction.onPress}
-          activeOpacity={0.7}
-        >
-          <Ionicons name={rightAction.icon} size={18} color="#64748B" />
-        </TouchableOpacity>
-      )}
-    </View>
-  </View>
-);
+  );
+};
 
 const LogoIcon = () => (
   <View style={styles.iconWrap}>
@@ -83,7 +101,7 @@ const StudentLogin = ({
   onGoogleLogin,
   onBack,
 }) => {
-  const [phone, setPhone] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -93,10 +111,8 @@ const StudentLogin = ({
 
   const validateCredentials = () => {
     const newErrors = {};
-    if (!phone.trim()) {
-      newErrors.phone = "Phone number is required";
-    } else if (phone.replace(/\s/g, "").length < 10) {
-      newErrors.phone = "Enter a valid phone number";
+    if (!identifier.trim()) {
+      newErrors.identifier = "Email or phone number is required";
     }
     if (!password.trim()) newErrors.password = "Password is required";
 
@@ -109,62 +125,102 @@ const StudentLogin = ({
     if (!otpCode.trim()) {
       newErrors.otpCode = "Verification OTP code is required";
     } else if (otpCode.trim().length < 4) {
-      newErrors.otpCode = "Enter complete code verification payload";
+      newErrors.otpCode = "Enter complete verification code";
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleActionClick = async () => {
-    const sanitizedPhone = phone.trim().replace(/\s+/g, "");
+    const trimmedInput = identifier.trim();
 
     if (!isOtpSent) {
-      // STEP 1: Requesting OTP via Password check validation gateway
       if (!validateCredentials()) return;
       setLoading(true);
       setErrors({});
 
       try {
-        // TODO: BACKEND INTEGRATION (Verify Credentials & Request OTP stream)
-        // const response = await fetch('https://your-api-url/api/v1/auth/login/request-otp', {
-        //   method: 'POST',
-        //   headers: { 'Content-Type': 'application/json' },
-        //   body: JSON.stringify({ phone: sanitizedPhone, password, role: 'student' })
-        // })
-        // if (!response.ok) throw new Error('Invalid phone or password credentials.')
+        const payload = { 
+          email: trimmedInput, 
+          password, 
+          role: 'student' 
+        };
 
-        setTimeout(() => {
-          setLoading(false);
-          setIsOtpSent(true);
-        }, 1200);
+        const response = await fetch(`${API_BASE_URL}/login`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const textResponse = await response.text();
+        let result;
+        try {
+          result = JSON.parse(textResponse);
+        } catch (e) {
+          throw new Error(`Server error (${response.status}): Invalid response format.`);
+        }
+
+        if (!response.ok) {
+          let serverMsg = "Invalid credentials";
+          if (result && result.error && result.error.message) serverMsg = result.error.message;
+          else if (result && result.message) serverMsg = result.message;
+          throw new Error(serverMsg);
+        }
+
+        // Transition to OTP input state
+        setLoading(false);
+        setIsOtpSent(true);
+
       } catch (err) {
         setLoading(false);
-        setErrors({ general: err.message });
+        setErrors({ general: err.message || "Login failed. Please try again." });
       }
     } else {
-      // STEP 2: Submitting OTP to execute core authentication handshake
       if (!validateOtp()) return;
       setLoading(true);
       setErrors({});
 
       try {
-        // TODO: BACKEND INTEGRATION (Finalize auth token generation mapping)
-        // const response = await fetch('https://your-api-url/api/v1/auth/login/verify-otp', {
-        //   method: 'POST',
-        //   headers: { 'Content-Type': 'application/json' },
-        //   body: JSON.stringify({ phone: sanitizedPhone, otpCode })
-        // })
-        // const result = await response.json()
-        // if (!response.ok) throw new Error('Incorrect or expired OTP verification token code.')
-        // await AsyncStorage.setItem('token', result.token)
+        const payload = { email: trimmedInput, otpCode };
 
-        setTimeout(() => {
-          setLoading(false);
-          if (onStudentLogin) onStudentLogin();
-        }, 1200);
+        const response = await fetch(`${API_BASE_URL}/login/verify-otp`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const textResponse = await response.text();
+        let result;
+        try {
+          result = JSON.parse(textResponse);
+        } catch (e) {
+          throw new Error(`Server error (${response.status}): Invalid response format.`);
+        }
+
+        if (!response.ok) {
+          let serverMsg = "Incorrect or expired OTP verification code.";
+          if (result && result.error && result.error.message) serverMsg = result.error.message;
+          else if (result && result.message) serverMsg = result.message;
+          throw new Error(serverMsg);
+        }
+
+        if (result.data && result.data.token) {
+          await AsyncStorage.setItem('user_token', result.data.token);
+          await AsyncStorage.setItem('token', result.data.token);
+        }
+
+        setLoading(false);
+        if (onStudentLogin) onStudentLogin(result); // 🔑 Pass full result payload up to App.js
+
       } catch (err) {
         setLoading(false);
-        setErrors({ general: err.message });
+        setErrors({ general: err.message || "OTP verification failed." });
       }
     }
   };
@@ -202,23 +258,21 @@ const StudentLogin = ({
 
           {!isOtpSent ? (
             <>
-              {/* Phone Field */}
               <InputField
-                label="Phone Number"
-                placeholder="+233 XX XXX XXXX"
-                value={phone}
+                label="Email or Phone Number"
+                placeholder="Enter email or phone number"
+                value={identifier}
                 onChangeText={(v) => {
-                  setPhone(v);
-                  setErrors((e) => ({ ...e, phone: null }));
+                  setIdentifier(v);
+                  setErrors((e) => ({ ...e, identifier: null }));
                 }}
-                keyboardType="phone-pad"
-                icon="call-outline"
+                keyboardType="default"
+                icon="person-outline"
               />
-              {errors.phone && (
-                <Text style={styles.errorText}>{errors.phone}</Text>
+              {errors.identifier && (
+                <Text style={styles.errorText}>{errors.identifier}</Text>
               )}
 
-              {/* Password Field */}
               <InputField
                 label="Password"
                 placeholder="Enter your security password"
@@ -240,7 +294,6 @@ const StudentLogin = ({
             </>
           ) : (
             <>
-              {/* OTP Field (Shown only after step-1 runs successfully) */}
               <InputField
                 label="Verification OTP Code"
                 placeholder="e.g. 4082"
@@ -262,7 +315,6 @@ const StudentLogin = ({
             </>
           )}
 
-          {/* Core Multi-stage Transaction Execution Button */}
           <TouchableOpacity
             style={[styles.loginBtn, loading && styles.loginBtnDisabled]}
             onPress={handleActionClick}
@@ -320,7 +372,7 @@ const StudentLogin = ({
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F8FAFC" },
+  container: { flex: 1, backgroundColor: SCREEN_BG },
   scroll: {
     flexGrow: 1,
     alignItems: "center",
@@ -333,11 +385,11 @@ const styles = StyleSheet.create({
   iconCard: {
     width: 76,
     height: 76,
-    borderRadius: 16,
-    backgroundColor: "#1E3A8A",
+    borderRadius: 20,
+    backgroundColor: NAVY,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#1E3A8A",
+    shadowColor: NAVY,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 8,
@@ -345,11 +397,11 @@ const styles = StyleSheet.create({
   },
   appName: {
     fontSize: 26,
-    fontWeight: "800",
-    color: "#1E3A8A",
+    fontWeight: "900",
+    color: NAVY,
     letterSpacing: -0.5,
   },
-  appTagline: { fontSize: 14, color: "#64748B", fontWeight: "500" },
+  appTagline: { fontSize: 13, color: MUTED, fontWeight: "600" },
   carWrap: { alignItems: "center" },
   carRoof: {
     width: 24,
@@ -366,37 +418,37 @@ const styles = StyleSheet.create({
     width: 11,
     height: 11,
     borderRadius: 6,
-    backgroundColor: "#1E3A8A",
+    backgroundColor: NAVY,
     borderWidth: 2.5,
     borderColor: "white",
   },
   card: {
     width: "100%",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
+    backgroundColor: CARD_BG,
+    borderRadius: 24,
     padding: 24,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.02,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 3,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: BORDER,
   },
   cardTitle: {
     fontSize: 22,
-    fontWeight: "800",
-    color: "#1F2937",
+    fontWeight: "900",
+    color: TEXT,
     textAlign: "center",
     marginBottom: 4,
   },
   cardSubtitle: {
     fontSize: 14,
-    color: "#64748B",
+    color: MUTED,
     textAlign: "center",
     marginBottom: 20,
-    fontWeight: "500",
+    fontWeight: "600",
   },
   errorBanner: {
     backgroundColor: "#FEF2F2",
@@ -413,7 +465,7 @@ const styles = StyleSheet.create({
     marginTop: -10,
     marginBottom: 12,
     marginLeft: 4,
-    fontWeight: "500",
+    fontWeight: "600",
   },
   fieldWrap: { marginBottom: 16 },
   fieldLabelRow: {
@@ -422,36 +474,40 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 8,
   },
-  fieldLabel: { fontSize: 14, fontWeight: "600", color: "#1E2937" },
-  fieldLabelRight: { fontSize: 13, fontWeight: "700", color: "#1E3A8A" },
+  fieldLabel: { fontSize: 13, fontWeight: "700", color: TEXT, letterSpacing: 0.2 },
+  fieldLabelRight: { fontSize: 13, fontWeight: "800", color: NAVY },
   inputRow: {
     flexDirection: "row",
     alignItems: "center",
-    height: 56,
+    height: 52,
     paddingHorizontal: 16,
     backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderWidth: 1.5,
+    borderColor: BORDER,
     borderRadius: 16,
+  },
+  inputRowFocused: {
+    borderColor: BLUE,
+    backgroundColor: '#FAFCFF',
   },
   input: {
     flex: 1,
     fontSize: 15,
-    color: "#1F2937",
-    fontWeight: "500",
+    color: TEXT,
+    fontWeight: "600",
     height: "100%",
   },
   inputIcon: { marginRight: 10 },
   inputRightAction: { paddingLeft: 8 },
   loginBtn: {
     width: "100%",
-    height: 56,
+    height: 54,
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 8,
-    backgroundColor: "#1E3A8A",
-    shadowColor: "#1E3A8A",
+    backgroundColor: NAVY,
+    shadowColor: NAVY,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
@@ -460,43 +516,42 @@ const styles = StyleSheet.create({
   loginBtnDisabled: { opacity: 0.65 },
   loginBtnText: {
     fontSize: 16,
-    fontWeight: "700",
+    fontWeight: "800",
     color: "#FFFFFF",
-    letterSpacing: 0.2,
+    letterSpacing: 0.3,
   },
   createAccountBtn: { alignItems: "center", paddingVertical: 14 },
   createAccountText: {
     fontSize: 14,
-    color: "#64748B",
-    fontWeight: "500",
+    color: MUTED,
+    fontWeight: "600",
     textAlign: "center",
   },
-  createAccountLink: { color: "#1E3A8A", fontWeight: "700" },
+  createAccountLink: { color: NAVY, fontWeight: "800" },
   dividerRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     marginVertical: 4,
   },
-  dividerLine: { flex: 1, height: 1, backgroundColor: "#E2E8F0" },
-  dividerText: { fontSize: 13, fontWeight: "500", color: "#94A3B8" },
+  dividerLine: { flex: 1, height: 1, backgroundColor: BORDER },
+  dividerText: { fontSize: 13, fontWeight: "600", color: "#94A3B8" },
   googleBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
     width: "100%",
-    height: 54,
+    height: 52,
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: "#E2E8F0",
+    borderColor: BORDER,
     backgroundColor: "#FFFFFF",
     marginTop: 4,
   },
-  googleBtnText: { fontSize: 15, fontWeight: "600", color: "#1F2937" },
+  googleBtnText: { fontSize: 15, fontWeight: "700", color: TEXT },
   supportRow: { alignItems: "center", paddingVertical: 4 },
-  supportText: { fontSize: 14, color: "#64748B", textAlign: "center" },
-  supportLink: { color: "#1E3A8A", fontWeight: "700" },
+  supportLink: { color: NAVY, fontWeight: "800", fontSize: 14 },
 });
 
 export default StudentLogin;

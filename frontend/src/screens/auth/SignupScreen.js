@@ -1,3 +1,4 @@
+// SignupScreen.js
 import React, { useState } from "react";
 import {
   View,
@@ -12,8 +13,18 @@ import {
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// Reusable input field component
+const NAVY = '#10206B';
+const BLUE = '#2F6BFF';
+const MUTED = '#8A8FA3';
+const TEXT = '#0F1733';
+const CARD_BG = '#FFFFFF';
+const SCREEN_BG = '#F8FAFC';
+const BORDER = '#E2E8F0';
+
+const API_BASE_URL = 'https://c5m62bwc-5000.uks1.devtunnels.ms/api/v1/auth';
+
 const InputField = ({
   label,
   placeholder,
@@ -23,40 +34,47 @@ const InputField = ({
   secureTextEntry = false,
   icon,
   rightAction,
-}) => (
-  <View style={styles.fieldWrap}>
-    <Text style={styles.fieldLabel}>{label}</Text>
-    <View style={styles.inputRow}>
-      <Ionicons
-        name={icon}
-        size={18}
-        color="#64748B"
-        style={styles.inputIcon}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder={placeholder}
-        placeholderTextColor="#94A3B8"
-        value={value}
-        onChangeText={onChangeText}
-        keyboardType={keyboardType}
-        secureTextEntry={secureTextEntry}
-        autoCapitalize="none"
-      />
-      {rightAction && (
-        <TouchableOpacity
-          style={styles.inputRightAction}
-          onPress={rightAction.onPress}
-          activeOpacity={0.7}
-        >
-          <Ionicons name={rightAction.icon} size={18} color="#64748B" />
-        </TouchableOpacity>
-      )}
-    </View>
-  </View>
-);
+  editable = true,
+}) => {
+  const [isFocused, setIsFocused] = useState(false);
 
-// Branding vector car icon element
+  return (
+    <View style={styles.fieldWrap}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <View style={[styles.inputRow, isFocused && styles.inputRowFocused, !editable && { backgroundColor: '#F1F5F9' }]}>
+        <Ionicons
+          name={icon}
+          size={18}
+          color={isFocused ? BLUE : MUTED}
+          style={styles.inputIcon}
+        />
+        <TextInput
+          style={[styles.input, !editable && { color: MUTED }]}
+          placeholder={placeholder}
+          placeholderTextColor="#94A3B8"
+          value={value}
+          onChangeText={onChangeText}
+          keyboardType={keyboardType}
+          secureTextEntry={secureTextEntry}
+          autoCapitalize="none"
+          editable={editable}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+        />
+        {rightAction && editable && (
+          <TouchableOpacity
+            style={styles.inputRightAction}
+            onPress={rightAction.onPress}
+            activeOpacity={0.7}
+          >
+            <Ionicons name={rightAction.icon} size={18} color={MUTED} />
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
+};
+
 const CarIcon = () => (
   <View style={styles.carWrap}>
     <View style={styles.carRoof} />
@@ -67,7 +85,6 @@ const CarIcon = () => (
   </View>
 );
 
-// Main signup component controller
 const SignupScreen = ({ onDone, onSignIn }) => {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -78,9 +95,10 @@ const SignupScreen = ({ onDone, onSignIn }) => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
   const [errors, setErrors] = useState({});
 
-  // Client-side application data validation runner
   const validate = () => {
     const newErrors = {};
 
@@ -117,40 +135,92 @@ const SignupScreen = ({ onDone, onSignIn }) => {
     return Object.keys(newErrors).length === 0;
   };
 
-  // Asynchronous backend register application handshake
   const handleSignup = async () => {
     if (!validate()) return;
     setLoading(true);
     setErrors({});
+    setSuccessMessage("");
 
     const sanitizedPhone = phone.trim().replace(/\s+/g, "");
 
     try {
-      // TODO: BACKEND INTEGRATION (Universal Registration Network Payload)
-      // const response = await fetch('https://your-api-url/api/v1/auth/signup', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({
-      //     fullName: fullName.trim(),
-      //     phone: sanitizedPhone,
-      //     email: email.trim().toLowerCase(),
-      //     password,
-      //     role: 'student'
-      //   })
-      // })
-      // const result = await response.json()
-      // if (!response.ok) throw new Error(result.message || 'Registration failed')
-      // await AsyncStorage.setItem('token', result.token)
+      const payload = {
+        fullName: fullName.trim(),
+        phoneNumber: sanitizedPhone,
+        email: email.trim().toLowerCase(),
+        password,
+        role: 'student'
+      };
 
+      const response = await fetch(`${API_BASE_URL}/register`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const textResponse = await response.text();
+      let result;
+      try {
+        result = JSON.parse(textResponse);
+      } catch (e) {
+        throw new Error(`Server error (${response.status}): Invalid response format.`);
+      }
+
+      if (!response.ok) {
+        let serverMsg = "Registration failed";
+        if (result) {
+          if (typeof result.message === 'string') serverMsg = result.message;
+          else if (typeof result.error === 'string') serverMsg = result.error;
+          else if (typeof result.message === 'object') serverMsg = JSON.stringify(result.message);
+          else serverMsg = JSON.stringify(result);
+        }
+        throw new Error(serverMsg);
+      }
+
+      setLoading(false);
+      setSuccessMessage("Account created successfully! Redirecting to Sign In...");
+
+      // Redirect to sign in view after 1.5 seconds
       setTimeout(() => {
-        setLoading(false);
-        if (onDone) onDone();
-      }, 1200);
+        if (onSignIn) onSignIn();
+      }, 1500);
+
     } catch (err) {
       setLoading(false);
-      setErrors({
-        general: err.message || "Something went wrong. Please try again.",
+      let errorMessage = "Registration failed. Please check your details.";
+      if (typeof err.message === 'string') {
+        errorMessage = err.message;
+      } else if (err.message && typeof err.message === 'object') {
+        errorMessage = JSON.stringify(err.message);
+      }
+      setErrors({ general: errorMessage });
+    }
+  };
+
+  const handleGoogleSignup = async () => {
+    setGoogleLoading(true);
+    setErrors({});
+    try {
+      const response = await fetch(`${API_BASE_URL}/google`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
       });
+      const result = await response.json();
+
+      if (!response.ok) throw new Error(result.message || 'Google authentication failed.');
+
+      if (result.token) {
+        await AsyncStorage.setItem('user_token', result.token);
+      }
+
+      setGoogleLoading(false);
+      if (onDone) onDone();
+    } catch (err) {
+      setGoogleLoading(false);
+      setErrors({ general: err.message || "Google sign-up failed. Please try again." });
     }
   };
 
@@ -165,7 +235,6 @@ const SignupScreen = ({ onDone, onSignIn }) => {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Header system identity section */}
         <View style={styles.logoSection}>
           <View style={styles.iconCard}>
             <CarIcon />
@@ -176,12 +245,18 @@ const SignupScreen = ({ onDone, onSignIn }) => {
           </Text>
         </View>
 
-        {/* Master input layout card wrapper */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Create Account</Text>
           <Text style={styles.cardSubtitle}>
             Sign up using your personal details
           </Text>
+
+          {successMessage ? (
+            <View style={styles.successBanner}>
+              <Ionicons name="checkmark-circle" size={20} color="#16A34A" />
+              <Text style={styles.successBannerText}>{successMessage}</Text>
+            </View>
+          ) : null}
 
           {errors.general && (
             <View style={styles.errorBanner}>
@@ -189,7 +264,6 @@ const SignupScreen = ({ onDone, onSignIn }) => {
             </View>
           )}
 
-          {/* Full name configuration node */}
           <InputField
             label="Full Name"
             placeholder="Full name"
@@ -199,12 +273,12 @@ const SignupScreen = ({ onDone, onSignIn }) => {
               setErrors((e) => ({ ...e, fullName: null }));
             }}
             icon="person-outline"
+            editable={!successMessage}
           />
           {errors.fullName && (
             <Text style={styles.errorText}>{errors.fullName}</Text>
           )}
 
-          {/* Phone identity configuration node */}
           <InputField
             label="Phone Number"
             placeholder="Phone number"
@@ -215,10 +289,10 @@ const SignupScreen = ({ onDone, onSignIn }) => {
             }}
             keyboardType="phone-pad"
             icon="call-outline"
+            editable={!successMessage}
           />
           {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
 
-          {/* Communication channel email node */}
           <InputField
             label="Email Address"
             placeholder="Email address"
@@ -229,10 +303,10 @@ const SignupScreen = ({ onDone, onSignIn }) => {
             }}
             keyboardType="email-address"
             icon="mail-outline"
+            editable={!successMessage}
           />
           {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
 
-          {/* Security credential password input */}
           <InputField
             label="Password"
             placeholder="Password"
@@ -247,12 +321,12 @@ const SignupScreen = ({ onDone, onSignIn }) => {
               icon: showPassword ? "eye-off-outline" : "eye-outline",
               onPress: () => setShowPassword((s) => !s),
             }}
+            editable={!successMessage}
           />
           {errors.password && (
             <Text style={styles.errorText}>{errors.password}</Text>
           )}
 
-          {/* Secondary security verification confirmation */}
           <InputField
             label="Confirm Password"
             placeholder="Confirm password"
@@ -267,15 +341,16 @@ const SignupScreen = ({ onDone, onSignIn }) => {
               icon: showConfirmPassword ? "eye-off-outline" : "eye-outline",
               onPress: () => setShowConfirmPassword((s) => !s),
             }}
+            editable={!successMessage}
           />
           {errors.confirmPassword && (
             <Text style={styles.errorText}>{errors.confirmPassword}</Text>
           )}
 
-          {/* Interactive compliance selector box row */}
           <TouchableOpacity
             style={styles.termsRow}
             onPress={() => {
+              if (successMessage) return;
               setAgreed((a) => !a);
               setErrors((e) => ({ ...e, agreed: null }));
             }}
@@ -296,12 +371,11 @@ const SignupScreen = ({ onDone, onSignIn }) => {
             <Text style={styles.errorText}>{errors.agreed}</Text>
           )}
 
-          {/* Primary core account genesis submission hook */}
           <TouchableOpacity
-            style={[styles.submitBtn, loading && styles.submitBtnDisabled]}
+            style={[styles.submitBtn, (loading || successMessage) && styles.submitBtnDisabled]}
             onPress={handleSignup}
             activeOpacity={0.85}
-            disabled={loading}
+            disabled={loading || !!successMessage}
           >
             {loading ? (
               <ActivityIndicator color="#FFFFFF" size="small" />
@@ -310,7 +384,6 @@ const SignupScreen = ({ onDone, onSignIn }) => {
             )}
           </TouchableOpacity>
 
-          {/* View redirection control footer button */}
           <TouchableOpacity
             style={styles.signInBtn}
             onPress={onSignIn}
@@ -322,23 +395,26 @@ const SignupScreen = ({ onDone, onSignIn }) => {
             </Text>
           </TouchableOpacity>
 
-          {/* Structural layout design splitter group */}
           <View style={styles.dividerRow}>
             <View style={styles.dividerLine} />
             <Text style={styles.dividerText}>or</Text>
             <View style={styles.dividerLine} />
           </View>
 
-          {/* Secondary Google ecosystem sign in method */}
           <TouchableOpacity
-            style={styles.googleBtn}
-            onPress={handleSignup}
+            style={[styles.googleBtn, (googleLoading || successMessage) && styles.submitBtnDisabled]}
+            onPress={handleGoogleSignup}
             activeOpacity={0.85}
+            disabled={googleLoading || !!successMessage}
           >
-            <Ionicons name="logo-google" size={18} color="#DB4437" />
-            <Text style={styles.googleBtnText}>
-              Continue with Google Account
-            </Text>
+            {googleLoading ? (
+              <ActivityIndicator color={NAVY} size="small" />
+            ) : (
+              <>
+                <Ionicons name="logo-google" size={18} color="#DB4437" />
+                <Text style={styles.googleBtnText}>Continue with Google Account</Text>
+              </>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -347,258 +423,47 @@ const SignupScreen = ({ onDone, onSignIn }) => {
 };
 
 const styles = StyleSheet.create({
-  // ── Layout Canvas Bounds ──
-  container: {
-    flex: 1,
-    backgroundColor: "#F8FAFC",
-  },
-  scroll: {
-    flexGrow: 1,
-    alignItems: "center",
-    paddingTop: 60,
-    paddingBottom: 40,
-    paddingHorizontal: 24,
-  },
-  logoSection: {
-    alignItems: "center",
-    marginBottom: 24,
-    gap: 4,
-  },
-  iconCard: {
-    width: 76,
-    height: 76,
-    borderRadius: 16,
-    backgroundColor: "#1E3A8A",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 8,
-    shadowColor: "#1E3A8A",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  appName: {
-    fontSize: 26,
-    fontWeight: "800",
-    color: "#1E3A8A",
-    letterSpacing: -0.5,
-  },
-  appTagline: {
-    fontSize: 14,
-    color: "#64748B",
-    textAlign: "center",
-    fontWeight: "500",
-  },
-  carWrap: {
-    alignItems: "center",
-  },
-  carRoof: {
-    width: 24,
-    height: 12,
-    backgroundColor: "white",
-    borderTopLeftRadius: 7,
-    borderTopRightRadius: 7,
-    marginBottom: -1,
-  },
-  carBase: {
-    width: 38,
-    height: 15,
-    backgroundColor: "white",
-    borderRadius: 3,
-  },
-  wheel: {
-    position: "absolute",
-    bottom: -5,
-    width: 11,
-    height: 11,
-    borderRadius: 6,
-    backgroundColor: "#1E3A8A",
-    borderWidth: 2.5,
-    borderColor: "white",
-  },
-  card: {
-    width: "100%",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.02,
-    shadowRadius: 8,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-  },
-  cardTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#1F2937",
-    textAlign: "center",
-    marginBottom: 4,
-  },
-  cardSubtitle: {
-    fontSize: 14,
-    color: "#64748B",
-    textAlign: "center",
-    marginBottom: 16,
-    fontWeight: "500",
-  },
-  errorBanner: {
-    backgroundColor: "#FEF2F2",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: "#EF4444",
-  },
-  errorBannerText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#DC2626",
-  },
-  errorText: {
-    fontSize: 12,
-    color: "#EF4444",
-    marginTop: -10,
-    marginBottom: 12,
-    marginLeft: 4,
-    fontWeight: "500",
-  },
-  fieldWrap: {
-    marginBottom: 16,
-  },
-  fieldLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#1E2937",
-    marginBottom: 8,
-  },
-  inputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    height: 56,
-    paddingHorizontal: 16,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    borderRadius: 16,
-  },
-  input: {
-    flex: 1,
-    fontSize: 15,
-    color: "#1F2937",
-    fontWeight: "500",
-    height: "100%",
-  },
-  inputIcon: {
-    marginRight: 10,
-  },
-  inputRightAction: {
-    paddingLeft: 8,
-  },
-  termsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 16,
-  },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 6,
-    borderWidth: 1.5,
-    borderColor: "#CBD5E1",
-    backgroundColor: "#F8FAFC",
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  checkboxChecked: {
-    backgroundColor: "#1E3A8A",
-    borderColor: "#1E3A8A",
-  },
-  termsText: {
-    flex: 1,
-    fontSize: 13,
-    color: "#64748B",
-    fontWeight: "500",
-  },
-  termsLink: {
-    color: "#1E3A8A",
-    fontWeight: "700",
-  },
-  submitBtn: {
-    width: "100%",
-    height: 56,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 14,
-    backgroundColor: "#1E3A8A",
-    shadowColor: "#1E3A8A",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  submitBtnDisabled: {
-    opacity: 0.65,
-  },
-  submitBtnText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#FFFFFF",
-    letterSpacing: 0.2,
-  },
-  signInBtn: {
-    alignItems: "center",
-    paddingVertical: 4,
-    marginBottom: 14,
-  },
-  signInText: {
-    fontSize: 14,
-    color: "#64748B",
-    fontWeight: "500",
-    textAlign: "center",
-  },
-  signInLink: {
-    color: "#1E3A8A",
-    fontWeight: "700",
-  },
-  dividerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 14,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: "#E2E8F0",
-  },
-  dividerText: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: "#94A3B8",
-  },
-  googleBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    width: "100%",
-    height: 54,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: "#E2E8F0",
-    backgroundColor: "#FFFFFF",
-  },
-  googleBtnText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#1F2937",
-  },
+  container: { flex: 1, backgroundColor: SCREEN_BG },
+  scroll: { flexGrow: 1, alignItems: "center", paddingTop: 50, paddingBottom: 40, paddingHorizontal: 24 },
+  logoSection: { alignItems: "center", marginBottom: 24, gap: 4 },
+  iconCard: { width: 76, height: 76, borderRadius: 20, backgroundColor: NAVY, alignItems: "center", justifyContent: "center", marginBottom: 8, shadowColor: NAVY, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 4 },
+  appName: { fontSize: 26, fontWeight: "900", color: NAVY, letterSpacing: -0.5 },
+  appTagline: { fontSize: 13, color: MUTED, textAlign: "center", fontWeight: "600" },
+  carWrap: { alignItems: "center" },
+  carRoof: { width: 24, height: 12, backgroundColor: "white", borderTopLeftRadius: 7, borderTopRightRadius: 7, marginBottom: -1 },
+  carBase: { width: 38, height: 15, backgroundColor: "white", borderRadius: 3 },
+  wheel: { position: "absolute", bottom: -5, width: 11, height: 11, borderRadius: 6, backgroundColor: NAVY, borderWidth: 2.5, borderColor: "white" },
+  card: { width: "100%", backgroundColor: CARD_BG, borderRadius: 24, padding: 24, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 12, elevation: 3, borderWidth: 1, borderColor: BORDER },
+  cardTitle: { fontSize: 22, fontWeight: "900", color: TEXT, textAlign: "center", marginBottom: 4 },
+  cardSubtitle: { fontSize: 14, color: MUTED, textAlign: "center", marginBottom: 20, fontWeight: "600" },
+  errorBanner: { backgroundColor: "#FEF2F2", borderRadius: 12, padding: 12, marginBottom: 16, borderLeftWidth: 4, borderLeftColor: "#EF4444" },
+  errorBannerText: { fontSize: 13, fontWeight: "600", color: "#DC2626" },
+  successBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: "#DCFCE7", borderRadius: 12, padding: 12, marginBottom: 16, borderLeftWidth: 4, borderLeftColor: "#16A34A", gap: 8 },
+  successBannerText: { fontSize: 13, fontWeight: "700", color: "#166534", flex: 1 },
+  errorText: { fontSize: 12, color: "#EF4444", marginTop: -10, marginBottom: 12, marginLeft: 4, fontWeight: "600" },
+  fieldWrap: { marginBottom: 16 },
+  fieldLabel: { fontSize: 13, fontWeight: "700", color: TEXT, marginBottom: 8, letterSpacing: 0.2 },
+  inputRow: { flexDirection: "row", alignItems: "center", height: 52, paddingHorizontal: 16, backgroundColor: "#FFFFFF", borderWidth: 1.5, borderColor: BORDER, borderRadius: 16 },
+  inputRowFocused: { borderColor: BLUE, backgroundColor: '#FAFCFF' },
+  input: { flex: 1, fontSize: 15, color: TEXT, fontWeight: "600", height: "100%" },
+  inputIcon: { marginRight: 10 },
+  inputRightAction: { paddingLeft: 8 },
+  termsRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 18, marginTop: 4 },
+  checkbox: { width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: "#CBD5E1", backgroundColor: "#F8FAFC", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  checkboxChecked: { backgroundColor: NAVY, borderColor: NAVY },
+  termsText: { flex: 1, fontSize: 13, color: MUTED, fontWeight: "600" },
+  termsLink: { color: NAVY, fontWeight: "800" },
+  submitBtn: { width: "100%", height: 54, borderRadius: 16, alignItems: "center", justifyContent: "center", marginBottom: 16, backgroundColor: NAVY, shadowColor: NAVY, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 3 },
+  submitBtnDisabled: { opacity: 0.65 },
+  submitBtnText: { fontSize: 16, fontWeight: "800", color: "#FFFFFF", letterSpacing: 0.3 },
+  signInBtn: { alignItems: "center", paddingVertical: 4, marginBottom: 16 },
+  signInText: { fontSize: 14, color: MUTED, fontWeight: "600", textAlign: "center" },
+  signInLink: { color: NAVY, fontWeight: "800" },
+  dividerRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 16 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: BORDER },
+  dividerText: { fontSize: 13, fontWeight: "600", color: "#94A3B8" },
+  googleBtn: { flexDirection: "row", alignItems: 'center', justifyContent: 'center', gap: 10, width: '100%', height: 52, borderRadius: 16, borderWidth: 1.5, borderColor: BORDER, backgroundColor: '#FFFFFF' },
+  googleBtnText: { fontSize: 15, fontWeight: '700', color: TEXT },
 });
 
 export default SignupScreen;
