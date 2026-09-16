@@ -32,7 +32,7 @@ import DriverRegisterSuccess from "./src/screens/auth/DriverRegisterSuccess";
 
 // Student screens
 import StudentHome from "./src/screens/student/StudentHome";
-import RideBooking from "./src/screens/student/RideBooking"; // <-- UPDATED: Import your new active Rides Hub screen
+import RideBooking from "./src/screens/student/RideBooking"; 
 
 // Driver screens
 import DriverHome from "./src/screens/driver/DriverHome";
@@ -193,14 +193,24 @@ const RootNavigator = () => {
     if (screen === "student-login") {
       return (
         <StudentLogin
-          onStudentLogin={async () => {
-            await login({ fullName: "Student User", role: "student" }, "mock-student-token");
-            setScreen("home");
+          onStudentLogin={async (authPayload) => {
+            if (authPayload?.success) {
+              const { user, token } = authPayload.data || {};
+              if (user && token) {
+                await login({ ...user, role: "student" }, token);
+              }
+              setScreen("home");
+            }
           }}
           onCreateAccount={() => setScreen("signup")}
-          onGoogleLogin={async () => {
-            await login({ fullName: "Student User", role: "student" }, "google-mock-token");
-            setScreen("home");
+          onGoogleLogin={async (authPayload) => {
+            if (authPayload?.success) {
+              const { user, token } = authPayload.data || {};
+              if (user && token) {
+                await login({ ...user, role: "student" }, token);
+              }
+              setScreen("home");
+            }
           }}
           onBack={() => setScreen("role-selection")}
         />
@@ -281,8 +291,13 @@ const RootNavigator = () => {
     if (screen === "signup") {
       return (
         <SignupScreen
-          onDone={async () => {
-            await login({ fullName: "New Student", role: "student" }, "mock-signup-token");
+          onDone={async (authPayload) => {
+            if (authPayload?.success) {
+              const { user, token } = authPayload.data || {};
+              if (user && token) {
+                await login({ ...user, role: "student" }, token);
+              }
+            }
             setScreen("home");
           }}
           onSignIn={() => setScreen("student-login")}
@@ -317,9 +332,6 @@ const RootNavigator = () => {
       );
     }
     
-    // ==========================================
-    // NEW: RIDES SCREEN / RIDE BOOKING HUB ROUTE
-    // ==========================================
     if (screen === "rides" || screen === "history") {
       return (
         <RideBooking
@@ -534,7 +546,6 @@ const RootNavigator = () => {
     <View style={[styles.rootWrapper, { backgroundColor: theme.background }]}>
       {renderScreen()}
 
-      {/* Global Account Suspended Modal Interceptor */}
       <AccountSuspendedModal 
         visible={globalSuspendedModalVisible} 
         userEmail={globalAttemptedEmail}

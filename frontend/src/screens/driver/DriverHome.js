@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Platform,
   ActivityIndicator,
   Image,
+  Alert,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -17,29 +18,107 @@ import * as Location from "expo-location";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTheme } from "../../context/ThemeContext";  
 import api from "../../api/axios";
+import { getPersistentSocket } from "../../api/socketHelper";
 
 const { width, height } = Dimensions.get("window");
 
 const DriverHome = ({ driverData, onLogout, onViewRequests, onChangeTab }) => {
   const { theme, darkModeEnabled } = useTheme();  
-  const [isOnline, setIsOnline] = useState(true);
+  const [isOnline, setIsOnline] = useState(driverData?.isOnline ?? true);
   const [analytics, setAnalytics] = useState({ dailyTrips: 0, totalTrips: 0 });
   const [nearbyRequests, setNearbyRequests] = useState([]);
   const [loadingAnalytics, setLoadingAnalytics] = useState(true);
   
-  //  Added: Unread notification state tracker
   const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   const [driverLocation, setDriverLocation] = useState({
-    latitude: 5.6506,
-    longitude: -0.1873,
+    latitude: 5.6037,
+    longitude: -0.1870,
     latitudeDelta: 0.015,
     longitudeDelta: 0.012,
   });
 
-  const toggleOnlineStatus = () => setIsOnline((prev) => !prev);
+  const mapRef = useRef(null);
+  const isOnlineRef = useRef(isOnline);
+  
+  useEffect(() => {
+    isOnlineRef.current = isOnline;
+  }, [isOnline]);
 
-  // Added: Fetch and track live unread notification badge metrics
+  // Properly sync online/offline state change with backend database
+  const toggleOnlineStatus = async () => {
+    const nextState = !isOnline;
+    setIsOnline(nextState); // Optimistic UI update
+
+    try {
+      await api.put("/driver/location", {
+        isOnline: nextState,
+        latitude: driverLocation.latitude,
+        longitude: driverLocation.longitude,
+      });
+    } catch (error) {
+      console.error("Failed to update online status on backend:", error.message);
+      setIsOnline(!nextState); // Revert on failure
+      Alert.alert("Status Sync Error", "Could not update your online status. Please check your connection.");
+    }
+  };
+
+  // PERSISTENT REAL-TIME SOCKET CONNECTION
+  useEffect(() => {
+    let activeSocket = null;
+
+    const initSocket = async () => {
+      activeSocket = await getPersistentSocket();
+
+      activeSocket.on("driver:remove-request", (rideId) => {
+        setNearbyRequests((prevRequests) =>
+          prevRequests.filter((req) => (req.id || req._id) !== rideId)
+        );
+      });
+
+      activeSocket.on("driver:incoming-broadcast", (newRequest) => {
+        if (newRequest.status && newRequest.status !== 'pending') return;
+        if (isOnlineRef.current) {
+          setNearbyRequests((prev) => {
+            const reqId = newRequest.id || newRequest._id;
+            const exists = prev.some(r => (r.id || r._id) === reqId);
+            if (exists) return prev;
+            
+            const formatted = {
+              ...newRequest,
+              id: newRequest._id || newRequest.id,
+              pickupLocation: newRequest.pickupLocation || newRequest.pickup,
+              dropoffLocation: newRequest.dropoffLocation || newRequest.destination,
+            };
+            return [formatted, ...prev];
+          });
+        }
+      });
+
+      activeSocket.on("driver:incoming-request", (newRequest) => {
+        console.log("📥 Targeted Driver Request Received:", newRequest);
+        if (newRequest.status && newRequest.status !== 'pending') return;
+        if (isOnlineRef.current) {
+          setNearbyRequests((prev) => {
+            const reqId = newRequest.id || newRequest._id;
+            const exists = prev.some(r => (r.id || r._id) === reqId);
+            if (exists) return prev;
+            
+            const formatted = {
+              ...newRequest,
+              id: newRequest._id || newRequest.id,
+              pickupLocation: newRequest.pickupLocation || newRequest.pickup,
+              dropoffLocation: newRequest.dropoffLocation || newRequest.destination,
+            };
+            return [formatted, ...prev];
+          });
+        }
+      });
+    };
+
+    initSocket();
+  }, []);
+
   useEffect(() => {
     const fetchNotificationBadgeCount = async () => {
       try {
@@ -53,12 +132,10 @@ const DriverHome = ({ driverData, onLogout, onViewRequests, onChangeTab }) => {
     };
 
     fetchNotificationBadgeCount();
-    // Synchronize count context along a 10-second polling frame
     const badgeSyncInterval = setInterval(fetchNotificationBadgeCount, 10000);
     return () => clearInterval(badgeSyncInterval);
   }, []);
 
-  // Added: Formatter helper to cleanly display double-digit overflows
   const formatBadgeText = (count) => {
     if (count <= 0) return "";
     return count > 9 ? "9+" : `${count}`;
@@ -94,19 +171,21 @@ const DriverHome = ({ driverData, onLogout, onViewRequests, onChangeTab }) => {
       try {
         const response = await api.get("/rides/pending");
         if (response.data?.success && response.data?.data) {
-          setNearbyRequests(response.data.data);
+          const pendingRides = response.data.data.filter(r => r.status === 'pending');
+          setNearbyRequests(pendingRides);
         }
       } catch (error) {
-        console.error("Error streaming nearby campus dispatches:", error);
+        console.error("Error streaming nearby campus dispatches:", error.message);
       }
     };
 
     fetchNearbyFares();
-    const mapSyncInterval = setInterval(fetchNearbyFares, 5000);
+    const mapSyncInterval = setInterval(fetchNearbyFares, 3000);
 
     return () => clearInterval(mapSyncInterval);
   }, [isOnline]);
 
+  // 🔑 Continuous live GPS tracking & map animation with sync safeguards
   useEffect(() => {
     let locationSubscription;
 
@@ -114,34 +193,62 @@ const DriverHome = ({ driverData, onLogout, onViewRequests, onChangeTab }) => {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== "granted") {
-          console.warn(
-            "Location permission denied. Using default campus fallbacks.",
-          );
+          console.warn("Location permission denied. Using default campus fallbacks.");
           return;
         }
 
         const initialLoc = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
+          accuracy: Location.Accuracy.High,
         });
 
-        setDriverLocation((prev) => ({
-          ...prev,
-          latitude: initialLoc.coords.latitude,
-          longitude: initialLoc.coords.longitude,
-        }));
+        const latitude = initialLoc.coords.latitude;
+        const longitude = initialLoc.coords.longitude;
+
+        const newCoords = { latitude, longitude, latitudeDelta: 0.015, longitudeDelta: 0.012 };
+        setDriverLocation(newCoords);
+
+        if (mapRef.current) {
+          mapRef.current.animateToRegion(newCoords, 1000);
+        }
+
+        await api.put("/driver/location", {
+          latitude,
+          longitude,
+          isOnline: isOnlineRef.current,
+        }).catch(err => console.error("Initial GPS sync error:", err.message));
 
         locationSubscription = await Location.watchPositionAsync(
           {
             accuracy: Location.Accuracy.High,
-            timeInterval: 8000,
-            distanceInterval: 10,
+            timeInterval: 3000,
+            distanceInterval: 3,
           },
-          (updatedLoc) => {
-            setDriverLocation((prev) => ({
-              ...prev,
-              latitude: updatedLoc.coords.latitude,
-              longitude: updatedLoc.coords.longitude,
-            }));
+          async (updatedLoc) => {
+            const newLat = updatedLoc.coords.latitude;
+            const newLng = updatedLoc.coords.longitude;
+
+            const updatedCoords = {
+              latitude: newLat,
+              longitude: newLng,
+              latitudeDelta: 0.015,
+              longitudeDelta: 0.012,
+            };
+
+            setDriverLocation(updatedCoords);
+
+            if (mapRef.current) {
+              mapRef.current.animateToRegion(updatedCoords, 1000);
+            }
+
+            try {
+              await api.put("/driver/location", {
+                latitude: newLat,
+                longitude: newLng,
+                isOnline: isOnlineRef.current,
+              });
+            } catch (err) {
+              console.error("Live GPS broadcast error:", err.message);
+            }
           },
         );
       } catch (err) {
@@ -149,16 +256,14 @@ const DriverHome = ({ driverData, onLogout, onViewRequests, onChangeTab }) => {
       }
     };
 
-    if (isOnline) {
-      startLocationTracking();
-    }
+    startLocationTracking();
 
     return () => {
       if (locationSubscription) {
         locationSubscription.remove();
       }
     };
-  }, [isOnline]);
+  }, []);
 
   const darkMapStyle = [
     { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
@@ -226,7 +331,6 @@ const DriverHome = ({ driverData, onLogout, onViewRequests, onChangeTab }) => {
             )}
           </TouchableOpacity>
 
-          {/* Updated: Wrapped in a positioned container badge layout and linked to redirects */}
           <TouchableOpacity
             style={styles.notificationBtn}
             activeOpacity={0.7}
@@ -266,7 +370,7 @@ const DriverHome = ({ driverData, onLogout, onViewRequests, onChangeTab }) => {
             },
           ]}
         >
-          <View style={styles.toggleCardTextColumn} prefix="toggle">
+          <View style={styles.toggleCardTextColumn}>
             <Text style={[styles.toggleCardTitle, { color: theme.mainText }]}>
               {isOnline ? "Go Offline" : "Go Online"}
             </Text>
@@ -292,9 +396,10 @@ const DriverHome = ({ driverData, onLogout, onViewRequests, onChangeTab }) => {
       {/* Map Viewport Area */}
       <View style={styles.mapViewportContainer}>
         <MapView
+          ref={mapRef}
           provider={Platform.OS === "android" ? PROVIDER_GOOGLE : null}
           style={StyleSheet.absoluteFillObject}
-          region={driverLocation}
+          initialRegion={driverLocation}
           showsCompass={false}
           showsPointsOfInterest={true}
           customMapStyle={darkModeEnabled ? darkMapStyle : []}
@@ -324,8 +429,17 @@ const DriverHome = ({ driverData, onLogout, onViewRequests, onChangeTab }) => {
 
               {nearbyRequests.map((request) => {
                 const reqId = request.id || request._id;
-                const lat = parseFloat(request.latitude);
-                const lng = parseFloat(request.longitude);
+                
+                const lat = parseFloat(
+                  request.latitude || 
+                  request.pickupCoordinates?.coordinates?.[1] || 
+                  request.coordinates?.[1]
+                );
+                const lng = parseFloat(
+                  request.longitude || 
+                  request.pickupCoordinates?.coordinates?.[0] || 
+                  request.coordinates?.[0]
+                );
 
                 if (isNaN(lat) || isNaN(lng)) return null;
 
@@ -333,7 +447,7 @@ const DriverHome = ({ driverData, onLogout, onViewRequests, onChangeTab }) => {
                   <Marker
                     key={reqId}
                     coordinate={{ latitude: lat, longitude: lng }}
-                    title={request.pickup || "Ride Request"}
+                    title={request.pickupLocation || request.pickup || "Ride Request"}
                   >
                     <View
                       style={[
@@ -568,7 +682,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-   iconBadgeWrapper: {
+  iconBadgeWrapper: {
     position: "relative",
     padding: 2,
   },

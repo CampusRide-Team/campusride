@@ -1,5 +1,5 @@
 // RideBooking.js
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,14 +7,19 @@ import {
   ScrollView,
   TextInput,
   TouchableOpacity,
-  ImageBackground,
   StatusBar,
   Platform,
-  Modal,
   Alert,
+  ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, Feather, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
+import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { io } from 'socket.io-client';
 
 const NAVY = '#10206B';
 const BLUE = '#2F6BFF';
@@ -26,130 +31,378 @@ const TAB_ACTIVE_BG = '#EEF2FF';
 const BORDER = '#E2E8F0';
 const GREEN_TEXT = '#16a34a';
 
-const MAP_URI = 'https://images.unsplash.com/photo-1524661135-423995f22d0b?w=1200';
+const SOCKET_SERVER_URL = 'https://c5m62bwc-5000.uks1.devtunnels.ms';
+const API_BASE_URL = `${SOCKET_SERVER_URL}/api/v1`;
 
-export default function RideBooking({ onNavigate }) {
-  const [activeSubTab, setActiveSubTab] = useState('schedule');
+export default function RideBooking({ onNavigate, initialDestination }) {
+  const [activeSubTab, setActiveSubTab] = useState('zone'); // Zone Hub default view
   const [rideStep, setRideStep] = useState('hub');
   
-  // Schedule form state
-  const [schedulePickup, setSchedulePickup] = useState('Current Location');
+  // Schedule state with Clock/Alarm Picker integration
+  const [schedulePickup, setSchedulePickup] = useState('Detecting current GPS...');
   const [scheduleDestination, setScheduleDestination] = useState('');
   const [scheduleRideType, setScheduleRideType] = useState('shared');
-  const [scheduleTimeInput, setScheduleTimeInput] = useState('');
+  
+  const [scheduledTime, setScheduledTime] = useState(new Date(Date.now() + 45 * 60000));
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  
+  const [scheduledRides, setScheduledRides] = useState([]);
+  const [loadingSchedule, setLoadingSchedule] = useState(false);
+  const [isSubmittingSchedule, setIsSubmittingSchedule] = useState(false);
 
-  // Scheduled rides list state (TODO: Fetch from backend API)
-  const [scheduledRides, setScheduledRides] = useState([
-    {
-      id: 'sched-1',
-      pickup: 'Main Hostel',
-      destination: 'Science Complex',
-      rideType: 'Shared Ride',
-      time: 'Today at 4:30 PM',
-      status: 'Scheduled',
-    },
-  ]);
-
-  // Zone Hub form state
-  const [zonePickup, setZonePickup] = useState('Current Location (Auto-detected)');
-  const [zoneDestination, setZoneDestination] = useState('');
+  // Zone Hub broadcast state
+  const [currentLocation, setCurrentLocation] = useState({ latitude: 5.6037, longitude: -0.1870 });
+  const [zonePickup, setZonePickup] = useState('Detecting current GPS...');
+  const [zoneDestination, setZoneDestination] = useState(initialDestination || '');
   const [zoneRideType, setZoneRideType] = useState('shared');
   const [passengerNotes, setPassengerNotes] = useState('');
+  const [isSubmittingBroadcast, setIsSubmittingBroadcast] = useState(false);
+  const [activeRideId, setActiveRideId] = useState(null);
 
-  // Simulated Accepted Driver Details
-  const [acceptedDriver, setAcceptedDriver] = useState({
-    name: 'Marcus Chen',
-    rating: '4.9',
-    totalRides: '2,400+ rides',
-    vehicleModel: 'Honda Civic',
-    licensePlate: 'ABC-1234',
-    eta: '3 mins away'
-  });
+  // Accepted driver state & telemetry
+  const [acceptedDriver, setAcceptedDriver] = useState(null);
 
-  // Rating feedback state
+  // Review & Rating state
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
-  // Reminder state for scheduled rides
-  const [reminderModalVisible, setReminderModalVisible] = useState(false);
-  const [activeScheduledRide, setActiveScheduledRide] = useState(null);
+  const mapRef = useRef(null);
+  const socketRef = useRef(null);
 
-  const handleCreateSchedule = () => {
-    if (!scheduleDestination.trim() || !scheduleTimeInput.trim()) {
-      Alert.alert("Missing Fields", "Please provide both a destination and a scheduled time.");
-      return;
-    }
-
-    const minutesFromNow = parseInt(scheduleTimeInput, 10);
-    if (isNaN(minutesFromNow)) {
-      Alert.alert("Invalid Time", "Please enter valid minutes from now.");
-      return;
-    }
-
-    if (minutesFromNow < 30) {
-      Alert.alert("Too Soon", "Scheduled rides must be booked at least 30 minutes in advance. Use Zone Hub for instant live matching.");
-      return;
-    }
-    if (minutesFromNow > 1440) {
-      Alert.alert("Out of Range", "Rides can only be scheduled up to 24 hours in advance.");
-      return;
-    }
-
-    // TODO: POST schedule payload to backend database
-    const newRide = {
-      id: Date.now().toString(),
-      pickup: schedulePickup,
-      destination: scheduleDestination,
-      rideType: scheduleRideType === 'shared' ? 'Shared Ride' : 'Private Ride',
-      time: `In ${minutesFromNow} mins`,
-      status: 'Scheduled',
-    };
-
-    setScheduledRides([newRide, ...scheduledRides]);
-    setScheduleDestination('');
-    setScheduleTimeInput('');
-    Alert.alert("Ride Scheduled Successfully!", "Your ride is now visible under your Schedule tab.");
+  const getStoredToken = async () => {
+    return await AsyncStorage.getItem('token') || await AsyncStorage.getItem('user_token');
   };
 
-  const trigger30MinReminder = (ride) => {
-    setActiveScheduledRide(ride);
-    setReminderModalVisible(true);
-  };
-
-  const handleReminderAction = (action) => {
-    setReminderModalVisible(false);
-    if (action === 'cancel') {
-      // TODO: Call backend to cancel schedule
-      setScheduledRides(scheduledRides.filter(r => r.id !== activeScheduledRide.id));
-      Alert.alert("Ride Cancelled", "Your scheduled ride has been cancelled.");
-    } else {
+  useEffect(() => {
+    if (initialDestination) {
+      setZoneDestination(initialDestination);
       setActiveSubTab('zone');
     }
+  }, [initialDestination]);
+
+  useEffect(() => {
+    initializePassengerLocation();
+    fetchScheduledRides();
+
+    socketRef.current = io(SOCKET_SERVER_URL, {
+      transports: ['websocket'],
+      autoConnect: true,
+    });
+
+    socketRef.current.on('connect', () => {
+      console.log('[RideBooking Telemetry] Socket connected:', socketRef.current.id);
+    });
+
+    // Listen for live driver acceptance of zone broadcast
+    socketRef.current.on('rideAccepted', (rideData) => {
+      if (rideData && rideData.driver) {
+        setAcceptedDriver({
+          id: rideData.driver._id || rideData.driver.id,
+          name: rideData.driver.fullName || rideData.driver.name,
+          rating: rideData.driver.rating || '4.9',
+          totalRides: rideData.driver.totalRides || '1,000+ rides',
+          vehicleModel: rideData.driver.vehicleModel || 'Campus Fleet Vehicle',
+          licensePlate: rideData.driver.vehicleLicensePlate || 'N/A',
+          phoneNumber: rideData.driver.phoneNumber,
+          eta: '3 mins away',
+          latitude: rideData.driver.currentLocation?.coordinates?.[1],
+          longitude: rideData.driver.currentLocation?.coordinates?.[0],
+        });
+        setRideStep('driver-found');
+      }
+    });
+
+    // Listen for live 15-minute search window timeout/expiration
+    socketRef.current.on('passenger:ride-timeout', (data) => {
+      if (rideStep === 'searching') {
+        setRideStep('hub');
+        Alert.alert(
+          "Ride Search Timed Out",
+          data.message || "No drivers accepted your ride within the 15-minute window. Would you like to reschedule or try private dispatch?",
+          [
+            { text: "Try Private Dispatch", onPress: () => { setZoneRideType('private'); } },
+            { text: "Reschedule", onPress: () => setActiveSubTab('schedule') },
+            { text: "OK", style: "cancel" }
+          ]
+        );
+      }
+    });
+
+    // Listen for live driver GPS telemetry updates
+    socketRef.current.on('driverLocationUpdate', (telemetry) => {
+      if (acceptedDriver && (telemetry.id === acceptedDriver.id || telemetry._id === acceptedDriver.id)) {
+        setAcceptedDriver(prev => ({
+          ...prev,
+          latitude: telemetry.latitude || telemetry.currentLocation?.coordinates?.[1],
+          longitude: telemetry.longitude || telemetry.currentLocation?.coordinates?.[0],
+        }));
+      }
+    });
+
+    // Listen for milestone updates during transit
+    socketRef.current.on('tripStatusUpdate', ({ status }) => {
+      if (status === 'arrived') setRideStep('arrived');
+      if (status === 'in-progress') setRideStep('trip-active');
+      if (status === 'completed') setRideStep('completed');
+    });
+
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+    };
+  }, []);
+
+  const initializePassengerLocation = async () => {
+    try {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setZonePickup('Campus Central Area');
+        setSchedulePickup('Campus Central Area');
+        return;
+      }
+
+      let location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      const coords = {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      };
+      
+      setCurrentLocation(coords);
+      let reverseGeocode = await Location.reverseGeocodeAsync(coords);
+      if (reverseGeocode && reverseGeocode.length > 0) {
+        const place = reverseGeocode[0];
+        const formatted = [place.name, place.street, place.city].filter(Boolean).join(', ');
+        setZonePickup(formatted);
+        setSchedulePickup(formatted);
+      } else {
+        setZonePickup('Current GPS Location');
+        setSchedulePickup('Current GPS Location');
+      }
+    } catch (error) {
+      console.error("GPS Error:", error);
+      setZonePickup('Current Campus Location');
+      setSchedulePickup('Current Campus Location');
+    }
   };
 
-  const handleStartZoneSearch = () => {
-    if (!zoneDestination.trim()) {
-      Alert.alert("Destination Required", "Please enter your destination before searching for active drivers.");
-      return;
+  const fetchScheduledRides = async () => {
+    try {
+      setLoadingSchedule(true);
+      const token = await getStoredToken();
+      if (!token) return;
+
+      const response = await fetch(`${API_BASE_URL}/rides/scheduled`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      });
+      const result = await response.json();
+      if (response.ok && Array.isArray(result.data)) {
+        setScheduledRides(result.data);
+      }
+    } catch (err) {
+      console.error("Error fetching schedules:", err);
+    } finally {
+      setLoadingSchedule(false);
+    }
+  };
+
+  const handleTimeChange = (event, selectedDate) => {
+    setShowTimePicker(Platform.OS === 'ios');
+    if (selectedDate) {
+      setScheduledTime(selectedDate);
+    }
+  };
+
+  const handleCreateSchedule = async () => {
+    if (!scheduleDestination.trim()) {
+      return Alert.alert("Missing Destination", "Please provide a destination for your scheduled ride.");
     }
 
-    // TODO: BACKEND INTEGRATION - POST /api/v1/rides/broadcast-search
-    setRideStep('searching');
+    const now = new Date();
+    const diffMinutes = Math.round((scheduledTime - now) / 60000);
 
-    setTimeout(() => {
-      setRideStep('driver-found');
-    }, 3500);
+    if (diffMinutes < 30) {
+      return Alert.alert("Too Soon", "Scheduled rides must be set at least 30 minutes in advance. Use Zone Hub for instant matching.");
+    }
+    if (diffMinutes > 1440) {
+      return Alert.alert("Out of Range", "Rides can only be scheduled up to 24 hours in advance.");
+    }
+
+    setIsSubmittingSchedule(true);
+    try {
+      const token = await getStoredToken();
+      const response = await fetch(`${API_BASE_URL}/rides/schedule`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          pickup: schedulePickup,
+          destination: scheduleDestination,
+          rideType: scheduleRideType,
+          scheduledTime: scheduledTime.toISOString(),
+          scheduledMinutesFromNow: diffMinutes,
+        })
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error?.message || 'Failed to schedule ride.');
+
+      setIsSubmittingSchedule(false);
+      Alert.alert("Ride Scheduled!", `Your ride is locked in for ${scheduledTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`);
+      setScheduleDestination('');
+      fetchScheduledRides();
+    } catch (err) {
+      setIsSubmittingSchedule(false);
+      Alert.alert("Schedule Error", err.message || "Could not complete scheduled booking.");
+    }
   };
 
-  // Communication Handlers
+  const handleCancelScheduledRide = async (rideId) => {
+    Alert.alert(
+      "Cancel Scheduled Ride",
+      "Are you sure you want to cancel this scheduled ride?",
+      [
+        { text: "No", style: "cancel" },
+        {
+          text: "Yes, Cancel",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const token = await getStoredToken();
+              const response = await fetch(`${API_BASE_URL}/rides/scheduled/${rideId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+              });
+              
+              if (response.ok) {
+                Alert.alert("Cancelled", "Your scheduled ride has been successfully deleted.");
+                fetchScheduledRides();
+              } else {
+                Alert.alert("Error", "Could not cancel scheduled ride.");
+              }
+            } catch (err) {
+              console.error("Cancel Error:", err);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleStartZoneSearch = async () => {
+    if (!zoneDestination.trim()) {
+      return Alert.alert("Destination Required", "Please enter your campus destination.");
+    }
+
+    setIsSubmittingBroadcast(true);
+    try {
+      const token = await getStoredToken();
+      
+      const response = await fetch(`${API_BASE_URL}/rides/broadcast`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : '',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          pickup: zonePickup,
+          destination: zoneDestination,
+          rideType: zoneRideType,
+          notes: passengerNotes,
+          coordinates: [currentLocation.longitude, currentLocation.latitude]
+        })
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error?.message || 'Failed to broadcast ride.');
+
+      setActiveRideId(result.data?.rideId || result.data?._id);
+      setIsSubmittingBroadcast(false);
+      setRideStep('searching');
+    } catch (err) {
+      console.error("Broadcast Error:", err.message);
+      setIsSubmittingBroadcast(false);
+      Alert.alert("Broadcast Error", err.message);
+    }
+  };
+
+  const handleCancelBroadcast = () => {
+    Alert.alert(
+      "Cancel Broadcast",
+      "Are you sure you want to stop broadcasting to zone drivers?",
+      [
+        { text: "No", style: "cancel" },
+        {
+          text: "Yes, Cancel",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              if (activeRideId) {
+                const token = await getStoredToken();
+                await fetch(`${API_BASE_URL}/rides/${activeRideId}/cancel`, {
+                  method: 'POST',
+                  headers: { 'Authorization': token ? `Bearer ${token}` : '' }
+                });
+              }
+            } catch (err) {
+              console.error("Cancel Error:", err);
+            } finally {
+              setRideStep('hub');
+              setActiveRideId(null);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const handleCallDriver = () => {
-    // TODO: Integrate native linking for phone calls e.g., Linking.openURL(`tel:${driverPhone}`)
-    Alert.alert("Call Driver", `Connecting you securely with ${acceptedDriver.name}...`);
+    if (acceptedDriver?.phoneNumber) {
+      Linking.openURL(`tel:${acceptedDriver.phoneNumber}`);
+    } else {
+      Alert.alert("Call Driver", `Connecting securely with ${acceptedDriver?.name}...`);
+    }
   };
 
   const handleTextDriver = () => {
-    // TODO: Open in-app chat modal or message screen with driver
-    Alert.alert("Text Driver", `Opening secure messaging with ${acceptedDriver.name}. Note: "${passengerNotes || 'Hello'}"`);
+    Alert.alert("Secure Chat", `Opening messaging channel with ${acceptedDriver?.name}.`);
+  };
+
+  const handleSubmitReview = async () => {
+    setIsSubmittingReview(true);
+    try {
+      const token = await getStoredToken();
+      await fetch(`${API_BASE_URL}/rides/rate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify({
+          driverId: acceptedDriver?.id,
+          rating,
+          comment
+        })
+      });
+      setIsSubmittingReview(false);
+      Alert.alert("Thank you!", "Your feedback has been successfully saved.");
+      setRideStep('hub');
+      setActiveSubTab('zone');
+      setAcceptedDriver(null);
+    } catch (err) {
+      setIsSubmittingReview(false);
+      setRideStep('hub');
+      setActiveSubTab('zone');
+    }
   };
 
   return (
@@ -160,7 +413,7 @@ export default function RideBooking({ onNavigate }) {
       <View style={styles.header}>
         <Text style={styles.brandTitle}>
           {rideStep === 'hub' && (activeSubTab === 'schedule' ? 'Schedule a Ride' : 'Zone Hub')}
-          {rideStep === 'searching' && 'Searching for Drivers'}
+          {rideStep === 'searching' && 'Broadcasting to Drivers'}
           {rideStep === 'driver-found' && 'Driver Found!'}
           {rideStep === 'en-route' && 'Driver En Route'}
           {rideStep === 'arrived' && 'Driver Has Arrived'}
@@ -197,7 +450,7 @@ export default function RideBooking({ onNavigate }) {
               <View style={styles.locRow}>
                 <View style={styles.originDot} />
                 <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.locLabel}>PICKUP LOCATION</Text>
+                  <Text style={styles.locLabel}>PICKUP LOCATION (GPS)</Text>
                   <TextInput
                     style={styles.locInputInline}
                     value={schedulePickup}
@@ -246,41 +499,71 @@ export default function RideBooking({ onNavigate }) {
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.sectionHeader}>SCHEDULE TIME (30m to 24h window)</Text>
-            <TextInput
-              style={styles.timeInput}
-              placeholder="Enter minutes from now (e.g. 45)"
-              placeholderTextColor="#9CA3AF"
-              keyboardType="numeric"
-              value={scheduleTimeInput}
-              onChangeText={setScheduleTimeInput}
-            />
+            <Text style={styles.sectionHeader}>PICKUP TIME (ALARM SELECTOR)</Text>
+            <TouchableOpacity 
+              style={styles.alarmPickerButton}
+              activeOpacity={0.8}
+              onPress={() => setShowTimePicker(true)}
+            >
+              <Ionicons name="time-outline" size={20} color={BLUE} />
+              <Text style={styles.alarmPickerText}>
+                {scheduledTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ({scheduledTime.toLocaleDateString()})
+              </Text>
+              <Text style={styles.changeAlarmLabel}>Change</Text>
+            </TouchableOpacity>
 
-            <TouchableOpacity style={styles.primaryButton} activeOpacity={0.85} onPress={handleCreateSchedule}>
-              <Text style={styles.primaryButtonText}>Lock In Schedule</Text>
+            {showTimePicker && (
+              <DateTimePicker
+                value={scheduledTime}
+                mode="time"
+                is24Hour={false}
+                display="default"
+                onChange={handleTimeChange}
+              />
+            )}
+
+            <TouchableOpacity 
+              style={[styles.primaryButton, isSubmittingSchedule && { opacity: 0.7 }]} 
+              activeOpacity={0.85} 
+              onPress={handleCreateSchedule}
+              disabled={isSubmittingSchedule}
+            >
+              {isSubmittingSchedule ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.primaryButtonText}>Lock In Schedule</Text>
+              )}
             </TouchableOpacity>
 
             <Text style={[styles.sectionHeader, { marginTop: 24 }]}>YOUR SCHEDULED RIDES</Text>
-            {scheduledRides.length === 0 ? (
+            {loadingSchedule ? (
+              <ActivityIndicator size="small" color={NAVY} style={{ marginTop: 16 }} />
+            ) : scheduledRides.length === 0 ? (
               <Text style={styles.emptyText}>No scheduled rides found.</Text>
             ) : (
               scheduledRides.map((ride) => (
-                <View key={ride.id} style={styles.historyCard}>
+                <View key={ride.id || ride._id} style={styles.historyCard}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.historyDest}>{ride.destination}</Text>
-                    <Text style={styles.historySub}>{ride.pickup} • {ride.rideType}</Text>
-                    <Text style={styles.historyTime}>{ride.time}</Text>
+                    <Text style={styles.historyDest}>{ride.dropoffLocation || ride.destination}</Text>
+                    <Text style={styles.historySub}>{ride.pickupLocation || ride.pickup} • {ride.rideMode}</Text>
+                    <Text style={styles.historyTime}>
+                      {ride.scheduledTime ? new Date(ride.scheduledTime).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Scheduled'}
+                    </Text>
                   </View>
-                  <View style={styles.statusBadge}>
-                    <Text style={styles.statusText}>{ride.status}</Text>
+                  <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                    <View style={styles.statusBadge}>
+                      <Text style={styles.statusText}>Scheduled</Text>
+                    </View>
+                    <TouchableOpacity 
+                      onPress={() => handleCancelScheduledRide(ride.id || ride._id)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: '#EF4444' }}>Cancel</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               ))
             )}
-
-            <TouchableOpacity style={styles.testReminderBtn} onPress={() => trigger30MinReminder(scheduledRides[0] || { id: 'test', destination: 'Library' })}>
-              <Text style={styles.testReminderText}>[Test] Trigger 30-Min Reminder Popup</Text>
-            </TouchableOpacity>
           </View>
         )}
 
@@ -289,12 +572,12 @@ export default function RideBooking({ onNavigate }) {
           <View>
             <View style={styles.zoneBannerCard}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.zoneLabel}>ZONE: CAMPUS CENTRAL</Text>
-                <Text style={styles.zoneSub}>12 Active Drivers Nearby • Avg 3m wait</Text>
+                <Text style={styles.zoneLabel}>ZONE HUB: LIVE BROADCAST</Text>
+                <Text style={styles.zoneSub}>Instantly ping all online drivers in your campus sector</Text>
               </View>
               <View style={styles.liveIndicatorBadge}>
                 <View style={styles.greenDot} />
-                <Text style={styles.liveText}>LIVE</Text>
+                <Text style={styles.liveText}>READY</Text>
               </View>
             </View>
 
@@ -302,7 +585,7 @@ export default function RideBooking({ onNavigate }) {
               <View style={styles.locRow}>
                 <Ionicons name="locate" size={18} color={BLUE} style={{ marginLeft: -1 }} />
                 <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.locLabel}>CURRENT LOCATION (Auto / Editable)</Text>
+                  <Text style={styles.locLabel}>CURRENT LOCATION (GPS)</Text>
                   <TextInput
                     style={styles.locInputInline}
                     value={zonePickup}
@@ -323,7 +606,7 @@ export default function RideBooking({ onNavigate }) {
                     style={styles.locInputInline}
                     value={zoneDestination}
                     onChangeText={setZoneDestination}
-                    placeholder="Where are you going?"
+                    placeholder="Where are you going? (e.g. Main Gate)"
                     placeholderTextColor="#9CA3AF"
                   />
                 </View>
@@ -360,31 +643,57 @@ export default function RideBooking({ onNavigate }) {
               placeholderTextColor="#9CA3AF"
             />
 
-            <TouchableOpacity style={styles.primaryButton} activeOpacity={0.85} onPress={handleStartZoneSearch}>
-              <Ionicons name="search" size={18} color="#fff" style={{ marginRight: 8 }} />
-              <Text style={styles.primaryButtonText}>SEARCH ZONE DRIVERS</Text>
+            <TouchableOpacity 
+              style={[styles.primaryButton, isSubmittingBroadcast && { opacity: 0.7 }]} 
+              activeOpacity={0.85} 
+              onPress={handleStartZoneSearch}
+              disabled={isSubmittingBroadcast}
+            >
+              {isSubmittingBroadcast ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="search" size={18} color="#fff" style={{ marginRight: 8 }} />
+                  <Text style={styles.primaryButtonText}>BROADCAST TO ZONE DRIVERS</Text>
+                </>
+              )}
             </TouchableOpacity>
           </View>
         )}
 
-        {/* ================= STEP 2: SEARCHING ================= */}
+        {/* ================= STEP 2: SEARCHING / BROADCASTING ================= */}
         {rideStep === 'searching' && (
           <View style={styles.searchingContainer}>
             <View style={styles.searchMapCard}>
-              <ImageBackground source={{ uri: MAP_URI }} style={styles.mapImage} imageStyle={{ borderRadius: 20 }}>
-                <View style={styles.mapOverlayDark} />
-                <View style={styles.radarCenterWrapper}>
-                  <View style={styles.radarPulseRing1} />
-                  <View style={styles.radarPulseRing2} />
-                  <View style={styles.radarCoreDot}>
-                    <MaterialCommunityIcons name="car" size={20} color="#FFFFFF" />
-                  </View>
+              <MapView
+                ref={mapRef}
+                style={styles.map}
+                provider={PROVIDER_DEFAULT}
+                initialRegion={{
+                  latitude: currentLocation.latitude,
+                  longitude: currentLocation.longitude,
+                  latitudeDelta: 0.015,
+                  longitudeDelta: 0.015,
+                }}
+                showsCompass={false}
+                showsUserLocation={true}
+              />
+              <View style={styles.mapOverlayDark} />
+              
+              {/* Signal Wave Animation Wrapper */}
+              <View style={styles.radarCenterWrapper}>
+                <View style={styles.signalWaveRing3} />
+                <View style={styles.signalWaveRing2} />
+                <View style={styles.signalWaveRing1} />
+                <View style={styles.radarCoreDot}>
+                  <MaterialCommunityIcons name="car-wireless" size={22} color="#FFFFFF" />
                 </View>
-                <View style={styles.searchStatusPill}>
-                  <View style={styles.greenDotPulse} />
-                  <Text style={styles.searchStatusPillText}>Broadcasting to Zone Drivers...</Text>
-                </View>
-              </ImageBackground>
+              </View>
+
+              <View style={styles.searchStatusPill}>
+                <View style={styles.greenDotPulse} />
+                <Text style={styles.searchStatusPillText}>Broadcasting signal waves to zone drivers...</Text>
+              </View>
             </View>
 
             <View style={styles.searchSummaryCard}>
@@ -392,7 +701,7 @@ export default function RideBooking({ onNavigate }) {
                 <View style={styles.summaryBadge}>
                   <Text style={styles.summaryBadgeText}>{zoneRideType.toUpperCase()} RIDE</Text>
                 </View>
-                <Text style={styles.summaryEstTime}>Est. Match: ~30s</Text>
+                <Text style={styles.summaryEstTime}>Live Zone Search</Text>
               </View>
 
               <View style={styles.summaryRouteBox}>
@@ -415,24 +724,39 @@ export default function RideBooking({ onNavigate }) {
               ) : null}
             </View>
 
-            <TouchableOpacity style={styles.proCancelButton} activeOpacity={0.85} onPress={() => setRideStep('hub')}>
-              <Text style={styles.proCancelButtonText}>Cancel Search</Text>
+            <TouchableOpacity style={styles.proCancelButton} activeOpacity={0.85} onPress={handleCancelBroadcast}>
+              <Text style={styles.proCancelButtonText}>Cancel Broadcast</Text>
             </TouchableOpacity>
           </View>
         )}
 
         {/* ================= STEP 3: DRIVER FOUND ================= */}
-        {rideStep === 'driver-found' && (
+        {rideStep === 'driver-found' && acceptedDriver && (
           <View style={styles.foundContainer}>
             <View style={styles.successBanner}>
               <Ionicons name="checkmark-circle" size={24} color={GREEN_TEXT} />
-              <Text style={styles.successBannerText}>Driver Accepted Your Request!</Text>
+              <Text style={styles.successBannerText}>Driver Accepted Your Broadcast!</Text>
             </View>
 
             <View style={styles.mapCard}>
-              <ImageBackground source={{ uri: MAP_URI }} style={styles.mapImage} imageStyle={{ borderRadius: 16 }}>
-                <View style={styles.mapPinIndicator} />
-              </ImageBackground>
+              <MapView
+                style={styles.map}
+                provider={PROVIDER_DEFAULT}
+                initialRegion={{
+                  latitude: acceptedDriver.latitude || currentLocation.latitude,
+                  longitude: acceptedDriver.longitude || currentLocation.longitude,
+                  latitudeDelta: 0.015,
+                  longitudeDelta: 0.015,
+                }}
+              >
+                {acceptedDriver.latitude && acceptedDriver.longitude && (
+                  <Marker coordinate={{ latitude: acceptedDriver.latitude, longitude: acceptedDriver.longitude }}>
+                    <View style={styles.fleetBubble}>
+                      <FontAwesome5 name="car" size={12} color="#FFFFFF" />
+                    </View>
+                  </Marker>
+                )}
+              </MapView>
             </View>
 
             <Text style={styles.sectionTitle}>ACCEPTED DRIVER DETAILS</Text>
@@ -451,7 +775,6 @@ export default function RideBooking({ onNavigate }) {
                 </View>
               </View>
 
-              {/* Call & Text Actions */}
               <View style={styles.actionButtonRow}>
                 <TouchableOpacity style={styles.actionButton} onPress={handleCallDriver} activeOpacity={0.8}>
                   <Ionicons name="call-outline" size={18} color={NAVY} />
@@ -463,13 +786,6 @@ export default function RideBooking({ onNavigate }) {
                 </TouchableOpacity>
               </View>
 
-              {passengerNotes ? (
-                <View style={styles.passengerNotesBox}>
-                  <Ionicons name="document-text-outline" size={16} color={NAVY} />
-                  <Text style={styles.passengerNotesText}>Notes: {passengerNotes}</Text>
-                </View>
-              ) : null}
-
               <TouchableOpacity style={styles.primaryButton} activeOpacity={0.85} onPress={() => setRideStep('en-route')}>
                 <Text style={styles.primaryButtonText}>TRACK ACCEPTED DRIVER</Text>
               </TouchableOpacity>
@@ -478,22 +794,34 @@ export default function RideBooking({ onNavigate }) {
         )}
 
         {/* ================= STEP 4: EN ROUTE TRACKING ================= */}
-        {rideStep === 'en-route' && (
+        {rideStep === 'en-route' && acceptedDriver && (
           <View style={styles.trackingContainer}>
             <View style={styles.mapCardLarge}>
-              <ImageBackground source={{ uri: MAP_URI }} style={styles.mapImage} imageStyle={{ borderRadius: 16 }}>
-                <View style={styles.floatingStatusPill}>
-                  <View style={styles.greenDot} />
-                  <Text style={styles.mapPillText}>Driver is en route to pickup point</Text>
-                </View>
-              </ImageBackground>
+              <MapView
+                style={styles.map}
+                provider={PROVIDER_DEFAULT}
+                region={{
+                  latitude: acceptedDriver.latitude || currentLocation.latitude,
+                  longitude: acceptedDriver.longitude || currentLocation.longitude,
+                  latitudeDelta: 0.01,
+                  longitudeDelta: 0.01,
+                }}
+              >
+                {acceptedDriver.latitude && acceptedDriver.longitude && (
+                  <Marker coordinate={{ latitude: acceptedDriver.latitude, longitude: acceptedDriver.longitude }}>
+                    <View style={styles.fleetBubble}><FontAwesome5 name="car" size={12} color="#fff" /></View>
+                  </Marker>
+                )}
+              </MapView>
+              <View style={styles.floatingStatusPill}>
+                <View style={styles.greenDot} />
+                <Text style={styles.mapPillText}>Driver is en route to pickup point</Text>
+              </View>
             </View>
 
             <View style={styles.sheetStandalone}>
               <View style={styles.driverProfileRow}>
-                <View style={styles.avatarWrap}>
-                  <FontAwesome5 name="user-alt" size={22} color={BLUE} />
-                </View>
+                <View style={styles.avatarWrap}><FontAwesome5 name="user-alt" size={22} color={BLUE} /></View>
                 <View style={{ flex: 1, marginLeft: 12 }}>
                   <Text style={styles.driverName}>{acceptedDriver.name}</Text>
                   <Text style={styles.driverMeta}>{acceptedDriver.vehicleModel} • {acceptedDriver.licensePlate}</Text>
@@ -501,38 +829,25 @@ export default function RideBooking({ onNavigate }) {
                 <TouchableOpacity style={styles.iconCircleBtn} onPress={handleCallDriver}>
                   <Ionicons name="call-outline" size={18} color={NAVY} />
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.iconCircleBtn, { marginLeft: 8 }]} onPress={handleTextDriver}>
-                  <Ionicons name="chatbubble-outline" size={18} color={NAVY} />
-                </TouchableOpacity>
               </View>
-
-              <TouchableOpacity style={styles.simulationBtn} onPress={() => setRideStep('arrived')}>
-                <Text style={styles.simulationBtnText}>[Simulate Driver Arrival]</Text>
-              </TouchableOpacity>
             </View>
           </View>
         )}
 
         {/* ================= STEP 5: ARRIVED ================= */}
-        {rideStep === 'arrived' && (
+        {rideStep === 'arrived' && acceptedDriver && (
           <View style={styles.arrivedContainer}>
             <View style={styles.arrivedAlertBanner}>
               <Ionicons name="notifications" size={22} color={NAVY} />
               <View style={{ flex: 1, marginLeft: 10 }}>
                 <Text style={styles.arrivedTitle}>Your driver has arrived!</Text>
-                <Text style={styles.arrivedSub}>Please board the car at your pickup zone.</Text>
+                <Text style={styles.arrivedSub}>Please board the vehicle at your pickup zone.</Text>
               </View>
-            </View>
-
-            <View style={styles.mapCard}>
-              <ImageBackground source={{ uri: MAP_URI }} style={styles.mapImage} imageStyle={{ borderRadius: 16 }} />
             </View>
 
             <View style={styles.driverHighlightCard}>
               <View style={styles.driverProfileRow}>
-                <View style={styles.avatarWrap}>
-                  <FontAwesome5 name="user-alt" size={20} color={BLUE} />
-                </View>
+                <View style={styles.avatarWrap}><FontAwesome5 name="user-alt" size={20} color={BLUE} /></View>
                 <View style={{ flex: 1, marginLeft: 12 }}>
                   <Text style={styles.driverName}>{acceptedDriver.name}</Text>
                   <Text style={styles.driverMeta}>Plate: {acceptedDriver.licensePlate}</Text>
@@ -550,31 +865,33 @@ export default function RideBooking({ onNavigate }) {
         {rideStep === 'trip-active' && (
           <View style={styles.trackingContainer}>
             <View style={styles.mapCardLarge}>
-              <ImageBackground source={{ uri: MAP_URI }} style={styles.mapImage} imageStyle={{ borderRadius: 16 }}>
-                <View style={styles.floatingStatusPill}>
-                  <View style={styles.greenDot} />
-                  <Text style={styles.mapPillText}>Tracking trip to {zoneDestination || 'Destination'}</Text>
-                </View>
-              </ImageBackground>
+              <MapView
+                style={styles.map}
+                provider={PROVIDER_DEFAULT}
+                initialRegion={{
+                  latitude: currentLocation.latitude,
+                  longitude: currentLocation.longitude,
+                  latitudeDelta: 0.02,
+                  longitudeDelta: 0.02,
+                }}
+              />
+              <View style={styles.floatingStatusPill}>
+                <View style={styles.greenDot} />
+                <Text style={styles.mapPillText}>Tracking active trip to {zoneDestination}</Text>
+              </View>
             </View>
 
             <View style={styles.sheetStandalone}>
               <Text style={styles.sectionTitle}>ACTIVE TRIP IN PROGRESS</Text>
-              <Text style={styles.tripDestText}>Destination: {zoneDestination || 'Engineering Building'}</Text>
-
-              <TouchableOpacity style={styles.primaryButton} onPress={() => setRideStep('completed')}>
-                <Text style={styles.primaryButtonText}>[Simulate Arrival at Destination]</Text>
-              </TouchableOpacity>
+              <Text style={styles.tripDestText}>Destination: {zoneDestination}</Text>
             </View>
           </View>
         )}
 
         {/* ================= STEP 7: COMPLETED ================= */}
-        {rideStep === 'completed' && (
+        {rideStep === 'completed' && acceptedDriver && (
           <View style={styles.completedContainer}>
-            <View style={styles.successCheckWrap}>
-              <Ionicons name="checkmark" size={32} color="#fff" />
-            </View>
+            <View style={styles.successCheckWrap}><Ionicons name="checkmark" size={32} color="#fff" /></View>
             <Text style={styles.completedTitle}>Ride Completed</Text>
             <Text style={styles.completedSub}>You have arrived safely at your destination.</Text>
 
@@ -602,17 +919,17 @@ export default function RideBooking({ onNavigate }) {
                 onChangeText={setComment}
               />
 
-              {/* Optimized compact review button */}
               <TouchableOpacity 
-                style={styles.compactReviewButton} 
+                style={[styles.compactReviewButton, isSubmittingReview && { opacity: 0.7 }]} 
                 activeOpacity={0.85}
-                onPress={() => {
-                  Alert.alert("Thank you!", "Your feedback has been recorded.");
-                  setRideStep('hub');
-                  setActiveSubTab('schedule');
-                }}
+                onPress={handleSubmitReview}
+                disabled={isSubmittingReview}
               >
-                <Text style={styles.compactReviewButtonText}>Submit Review & Exit</Text>
+                {isSubmittingReview ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.compactReviewButtonText}>Submit Review & Exit</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -620,36 +937,6 @@ export default function RideBooking({ onNavigate }) {
 
         <View style={{ height: 100 }} />
       </ScrollView>
-
-      {/* Reminder Modal */}
-      <Modal
-        visible={reminderModalVisible}
-        animationType="fade"
-        transparent={true}
-        onRequestClose={() => setReminderModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.reminderContent}>
-            <View style={styles.warningIconWrap}>
-              <Ionicons name="time-outline" size={28} color={BLUE} />
-            </View>
-            <Text style={styles.reminderTitle}>Upcoming Ride Reminder</Text>
-            <Text style={styles.reminderSub}>
-              Your scheduled ride to {activeScheduledRide?.destination} goes live in 30 minutes. Do you wish to continue or cancel?
-            </Text>
-
-            <View style={styles.reminderBtnRow}>
-              <TouchableOpacity style={styles.cancelRideOptionBtn} onPress={() => handleReminderAction('cancel')}>
-                <Text style={styles.cancelRideOptionText}>Cancel Ride</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.continueRideOptionBtn} onPress={() => handleReminderAction('continue')}>
-                <Text style={styles.continueRideOptionText}>Continue</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
 
       {/* Unified Bottom Tab Navigation */}
       <View style={styles.tabBar}>
@@ -718,24 +1005,28 @@ const styles = StyleSheet.create({
   typeTitleActive: { color: NAVY },
 
   timeInput: { backgroundColor: CARD_BG, borderRadius: 14, paddingHorizontal: 16, height: 50, fontSize: 15, color: TEXT, borderWidth: 1, borderColor: BORDER, marginBottom: 16 },
+  
+  alarmPickerButton: { backgroundColor: CARD_BG, borderRadius: 14, paddingHorizontal: 16, height: 52, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: BORDER, marginBottom: 16, gap: 10 },
+  alarmPickerText: { flex: 1, fontSize: 15, fontWeight: '700', color: TEXT },
+  changeAlarmLabel: { fontSize: 13, fontWeight: '700', color: BLUE },
 
   primaryButton: { backgroundColor: NAVY, height: 52, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.15, elevation: 3 },
   primaryButtonText: { color: '#fff', fontSize: 15, fontWeight: '800', letterSpacing: 0.5 },
 
-  // Call & Text action row styling inside driver found state
   actionButtonRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
   actionButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: BORDER, borderRadius: 12, height: 42, gap: 6 },
   actionButtonText: { fontSize: 13, fontWeight: '700', color: NAVY },
 
-  // Professional Searching Styles
   searchingContainer: { paddingHorizontal: 4 },
   searchMapCard: { height: 260, width: '100%', borderRadius: 24, overflow: 'hidden', marginBottom: 16, borderWidth: 1, borderColor: BORDER, position: 'relative' },
+  map: { ...StyleSheet.absoluteFillObject },
   mapOverlayDark: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(16, 32, 107, 0.2)' },
   
-  radarCenterWrapper: { position: 'absolute', top: '50%', left: '50%', transform: [{ translateX: -40 }, { translateY: -40 }], width: 80, height: 80, alignItems: 'center', justifyContent: 'center' },
-  radarPulseRing1: { position: 'absolute', width: 90, height: 90, borderRadius: 45, backgroundColor: 'rgba(47, 107, 255, 0.25)' },
-  radarPulseRing2: { position: 'absolute', width: 140, height: 140, borderRadius: 70, backgroundColor: 'rgba(47, 107, 255, 0.12)' },
-  radarCoreDot: { width: 44, height: 44, borderRadius: 22, backgroundColor: NAVY, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.3, elevation: 6 },
+  radarCenterWrapper: { position: 'absolute', top: '50%', left: '50%', transform: [{ translateX: -50 }, { translateY: -50 }], width: 100, height: 100, alignItems: 'center', justifyContent: 'center' },
+  signalWaveRing1: { position: 'absolute', width: 70, height: 70, borderRadius: 35, borderWidth: 1.5, borderColor: 'rgba(47, 107, 255, 0.5)', backgroundColor: 'rgba(47, 107, 255, 0.15)' },
+  signalWaveRing2: { position: 'absolute', width: 110, height: 110, borderRadius: 55, borderWidth: 1.5, borderColor: 'rgba(47, 107, 255, 0.35)', backgroundColor: 'rgba(47, 107, 255, 0.08)' },
+  signalWaveRing3: { position: 'absolute', width: 160, height: 160, borderRadius: 80, borderWidth: 1, borderColor: 'rgba(47, 107, 255, 0.2)', backgroundColor: 'rgba(47, 107, 255, 0.03)' },
+  radarCoreDot: { width: 48, height: 48, borderRadius: 24, backgroundColor: NAVY, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.3, elevation: 6, zIndex: 5 },
 
   searchStatusPill: { position: 'absolute', top: 16, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16, gap: 8, shadowColor: '#000', shadowOpacity: 0.15, elevation: 4 },
   greenDotPulse: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E' },
@@ -760,9 +1051,8 @@ const styles = StyleSheet.create({
 
   mapCard: { height: 180, width: '100%', borderRadius: 16, overflow: 'hidden', marginBottom: 20, borderWidth: 1, borderColor: BORDER },
   mapCardLarge: { height: 320, width: '100%', borderRadius: 16, overflow: 'hidden', marginBottom: 16, borderWidth: 1, borderColor: BORDER },
-  mapImage: { flex: 1, justifyContent: 'flex-end', padding: 12, position: 'relative' },
-  mapPinIndicator: { width: 14, height: 14, borderRadius: 7, backgroundColor: '#22C55E', borderWidth: 2, borderColor: '#fff', alignSelf: 'center', marginBottom: 40 },
-  floatingStatusPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, gap: 6 },
+  fleetBubble: { backgroundColor: NAVY, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, borderWidth: 2, borderColor: '#fff' },
+  floatingStatusPill: { position: 'absolute', top: 12, left: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, gap: 6 },
   mapPillText: { fontSize: 12, fontWeight: '700', color: NAVY },
 
   foundContainer: {},
@@ -776,14 +1066,10 @@ const styles = StyleSheet.create({
   driverMeta: { fontSize: 13, color: MUTED, marginTop: 2 },
   etaBadge: { backgroundColor: '#E6E8F5', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
   etaBadgeText: { fontSize: 12, fontWeight: '700', color: NAVY },
-  passengerNotesBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', gap: 6, marginBottom: 16 },
-  passengerNotesText: { fontSize: 12, color: MUTED, flex: 1 },
 
   trackingContainer: {},
   sheetStandalone: { backgroundColor: CARD_BG, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: BORDER },
   iconCircleBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#E5E7EB' },
-  simulationBtn: { marginTop: 12, alignItems: 'center', padding: 8 },
-  simulationBtnText: { color: BLUE, fontSize: 13, fontWeight: '700' },
 
   arrivedContainer: {},
   arrivedAlertBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: TAB_ACTIVE_BG, padding: 16, borderRadius: 16, marginBottom: 16, borderWidth: 1, borderColor: BLUE },
@@ -801,7 +1087,6 @@ const styles = StyleSheet.create({
   starsRow: { flexDirection: 'row', marginBottom: 20 },
   commentInput: { backgroundColor: '#fff', borderRadius: 12, width: '100%', paddingHorizontal: 16, height: 48, fontSize: 14, color: TEXT, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 16 },
 
-  // Optimized compact review button style
   compactReviewButton: { backgroundColor: NAVY, height: 46, borderRadius: 14, width: '100%', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.1, elevation: 2 },
   compactReviewButtonText: { color: '#fff', fontSize: 14, fontWeight: '800', letterSpacing: 0.3 },
 
@@ -812,19 +1097,6 @@ const styles = StyleSheet.create({
   statusBadge: { backgroundColor: TAB_ACTIVE_BG, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
   statusText: { fontSize: 11, fontWeight: '800', color: NAVY },
   emptyText: { textAlign: 'center', color: MUTED, marginTop: 20, fontSize: 14 },
-  testReminderBtn: { marginTop: 14, alignItems: 'center', padding: 10 },
-  testReminderText: { fontSize: 12, color: BLUE, fontWeight: '700' },
-
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
-  reminderContent: { backgroundColor: '#FFFFFF', borderRadius: 24, padding: 24, alignItems: 'center' },
-  warningIconWrap: { width: 56, height: 56, borderRadius: 28, backgroundColor: TAB_ACTIVE_BG, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  reminderTitle: { fontSize: 18, fontWeight: '800', color: TEXT, marginBottom: 8, textAlign: 'center' },
-  reminderSub: { fontSize: 13, color: MUTED, textAlign: 'center', lineHeight: 18, marginBottom: 20 },
-  reminderBtnRow: { flexDirection: 'row', gap: 12, width: '100%' },
-  cancelRideOptionBtn: { flex: 1, backgroundColor: '#F1F5F9', height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  cancelRideOptionText: { color: '#EF4444', fontWeight: '800', fontSize: 14 },
-  continueRideOptionBtn: { flex: 1, backgroundColor: NAVY, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  continueRideOptionText: { color: '#FFFFFF', fontWeight: '800', fontSize: 14 },
 
   tabBar: { 
     position: 'absolute', left: 0, right: 0, bottom: 0, 

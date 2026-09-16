@@ -14,6 +14,7 @@ import { StatusBar } from "expo-status-bar";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTheme } from "../../context/ThemeContext"; 
 import api from "../../api/axios";
+import { getPersistentSocket } from "../../api/socketHelper";
 
 const { width } = Dimensions.get("window");
 
@@ -24,57 +25,114 @@ const ActiveRequests = ({ onBack, onChangeTab, onAcceptRide }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 1. FETCH LIVE CAMPUS DISPATCHES FROM THE CORRECT RIDES ENDPOINT
+  // 1. FETCH LIVE CAMPUS DISPATCHES & STRICTLY FILTER FOR PENDING STATUS ONLY
   const fetchActiveDispatches = async () => {
     try {
-      //  OPTION B ALIGNMENT: Switched seamlessly to match rideRoutes layout prefix
       const response = await api.get("/rides/pending");
       if (response.data?.success && response.data?.data) {
-        const requests = response.data.data;
+        const requests = response.data.data.filter(r => r.status === 'pending');
         setAllRequests(requests);
 
-        // Auto-spotlight the first request index if nothing is selected yet
-        if (requests.length > 0 && !selectedId) {
+        if (requests.length > 0 && (!selectedId || !requests.some(r => (r.id || r._id) === selectedId))) {
           setSelectedId(requests[0].id || requests[0]._id);
+        } else if (requests.length === 0) {
+          setSelectedId(null);
         }
       }
     } catch (error) {
-      console.error("Production API Fetch Error:", error);
+      console.error("ActiveRequests Fetch Error:", error.message);
     } finally {
       setIsLoading(false);
     }
   };
 
+  // PERSISTENT REAL-TIME SOCKET LISTENERS
+  useEffect(() => {
+    let activeSocket = null;
+
+    const initSocket = async () => {
+      activeSocket = await getPersistentSocket();
+
+      activeSocket.on("driver:remove-request", (rideId) => {
+        setAllRequests((prevRequests) => {
+          const updated = prevRequests.filter((req) => (req.id || req._id) !== rideId);
+          if (selectedId === rideId) {
+            setSelectedId(updated.length > 0 ? (updated[0].id || updated[0]._id) : null);
+          }
+          return updated;
+        });
+      });
+
+      activeSocket.on("driver:incoming-broadcast", (newRequest) => {
+        if (newRequest.status && newRequest.status !== 'pending') return;
+        setAllRequests((prev) => {
+          const exists = prev.some(r => (r.id || r._id) === (newRequest.id || newRequest._id));
+          if (exists) return prev;
+          return [newRequest, ...prev];
+        });
+      });
+
+      activeSocket.on("driver:incoming-request", (newRequest) => {
+        if (newRequest.status && newRequest.status !== 'pending') return;
+        setAllRequests((prev) => {
+          const exists = prev.some(r => (r.id || r._id) === (newRequest.id || newRequest._id));
+          if (exists) return prev;
+          return [newRequest, ...prev];
+        });
+      });
+    };
+
+    initSocket();
+  }, [selectedId]);
+
   useEffect(() => {
     fetchActiveDispatches();
-
-    // Background polling stream to instantly grab new student ride requests
-    const trackingInterval = setInterval(fetchActiveDispatches, 4000);
+    const trackingInterval = setInterval(fetchActiveDispatches, 3000);
     return () => clearInterval(trackingInterval);
-  }, [selectedId]);
+  }, []);
 
   // 🚀 2. EXECUTE PRODUCTION RIDE ACCEPTANCE TRANSACTION
   const handleAcceptRide = async (request) => {
     const requestId = request.id || request._id;
     try {
       setIsSubmitting(true);
-      const response = await api.post("/trips/accept", { requestId });
+      const response = await api.put(`/rides/${requestId}/accept`);
 
       if (response.data?.success) {
-        onAcceptRide(response.data.trip || request);
+        // 🔑 Pass the fully populated backend response data directly
+        const acceptedRide = response.data.data || request;
+        onAcceptRide(acceptedRide);
       } else {
-        Alert.alert(
-          "Ride Unavailable",
-          "Another campus vehicle has accepted this dispatch.",
-        );
+        Alert.alert("Ride Unavailable", "Another campus vehicle has accepted this dispatch.");
         fetchActiveDispatches();
       }
     } catch (error) {
       console.error("Acceptance Mutation Error:", error);
-      Alert.alert(
-        "Connection Failure",
-        "Failed to sync transaction with server.",
-      );
+      Alert.alert("Connection Failure", "Failed to sync transaction with server.");
+      fetchActiveDispatches();
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // 🚀 3. EXECUTE CLEAN DECLINE
+  const handleDeclineRide = async (request) => {
+    const requestId = request.id || request._id;
+    try {
+      setIsSubmitting(true);
+      
+      // Try hitting a decline/cancel route if configured, otherwise dismiss cleanly locally
+      await api.put(`/rides/${requestId}/decline`).catch(() => {
+        api.put(`/rides/${requestId}/status`, { status: 'cancelled' }).catch(() => {});
+      });
+
+      setAllRequests((prev) => {
+        const updated = prev.filter((req) => (req.id || req._id) !== requestId);
+        setSelectedId(updated.length > 0 ? (updated[0].id || updated[0]._id) : null);
+        return updated;
+      });
+    } catch (error) {
+      console.error("Decline error:", error);
     } finally {
       setIsSubmitting(false);
     }
@@ -145,7 +203,10 @@ const ActiveRequests = ({ onBack, onChangeTab, onAcceptRide }) => {
                 <View style={styles.profileTextContainer}>
                   <View style={styles.nameAndTagRow}>
                     <Text style={[styles.passengerName, { color: theme.mainText }]} numberOfLines={1}>
-                      {currentSpotlightRequest.name}
+                      {currentSpotlightRequest.passenger?.fullName || 
+                       currentSpotlightRequest.passengerName || 
+                       currentSpotlightRequest.name || 
+                       "Student Rider"}
                     </Text>
 
                     <View
@@ -193,13 +254,13 @@ const ActiveRequests = ({ onBack, onChangeTab, onAcceptRide }) => {
                   <View style={styles.addressBlock}>
                     <Text style={[styles.addressLabelText, { color: theme.subText }]}>PICKUP</Text>
                     <Text style={[styles.addressMainText, { color: theme.mainText }]}>
-                      {currentSpotlightRequest.pickup}
+                      {currentSpotlightRequest.pickupLocation || currentSpotlightRequest.pickup || "Campus Pickup Point"}
                     </Text>
                   </View>
                   <View style={styles.addressBlock}>
                     <Text style={[styles.addressLabelText, { color: theme.subText }]}>DESTINATION</Text>
                     <Text style={[styles.addressMainText, { color: theme.mainText }]}>
-                      {currentSpotlightRequest.destination}
+                      {currentSpotlightRequest.dropoffLocation || currentSpotlightRequest.destination || "Campus Destination"}
                     </Text>
                   </View>
                 </View>
@@ -240,7 +301,7 @@ const ActiveRequests = ({ onBack, onChangeTab, onAcceptRide }) => {
               <TouchableOpacity
                 style={[styles.declineButton, { backgroundColor: theme.background, borderColor: theme.borderColor }]}
                 activeOpacity={0.85}
-                onPress={onBack}
+                onPress={() => handleDeclineRide(currentSpotlightRequest)}
                 disabled={isSubmitting}
               >
                 <Text style={[styles.declineButtonText, { color: theme.subText }]}>Decline</Text>
@@ -295,7 +356,7 @@ const ActiveRequests = ({ onBack, onChangeTab, onAcceptRide }) => {
                               style={[styles.miniMapPlaceText, { color: theme.mainText }]}
                               numberOfLines={1}
                             >
-                              {item.pickup}
+                              {item.pickupLocation || item.pickup || "Pickup"}
                             </Text>
                           </View>
                           <View style={styles.miniRouteLineRow}>
@@ -308,7 +369,7 @@ const ActiveRequests = ({ onBack, onChangeTab, onAcceptRide }) => {
                               style={[styles.miniMapPlaceText, { color: theme.mainText }]}
                               numberOfLines={1}
                             >
-                              {item.destination}
+                              {item.dropoffLocation || item.destination || "Destination"}
                             </Text>
                           </View>
                         </View>

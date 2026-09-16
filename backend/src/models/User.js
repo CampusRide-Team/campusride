@@ -49,6 +49,7 @@ const userSchema = new mongoose.Schema(
     expoPushToken: { type: String, default: null },
 
     isOnline: { type: Boolean, default: false },
+    lastSeen: { type: Date, default: Date.now }, // 🔑 Added heartbeat timestamp field
     currentLocation: {
       type: { type: String, enum: ["Point"], default: "Point" },
       coordinates: { type: [Number], default: [0, 0] },
@@ -56,10 +57,14 @@ const userSchema = new mongoose.Schema(
     walletBalance: { type: Number, default: 0 },
     isApproved: { type: Boolean, default: false },
 
-    // ACCOUNT ENFORCEMENT & SAFETY FIELDS (Added)
+    // ACCOUNT ENFORCEMENT & SAFETY FIELDS
     isSuspended: { type: Boolean, default: false },
     isBlocked: { type: Boolean, default: false },
     warnings: [warningSchema],
+
+    // OTP Verification Fields
+    otpCode: { type: String, default: null },
+    otpExpiresAt: { type: Date, default: null },
 
     // Vehicle & Verification Data
     vehicleType: { type: String, default: null },
@@ -85,9 +90,11 @@ const userSchema = new mongoose.Schema(
 
 userSchema.index({ currentLocation: "2dsphere" });
 userSchema.index({ isOnline: 1, role: 1 });
+userSchema.index({ lastSeen: 1 }); // Index for fast heartbeat filtering
 
-userSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) return next();
+// Clean modern pre-save hook without 'next' to prevent execution context crashes
+userSchema.pre("save", async function () {
+  if (!this.isModified("password")) return;
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
 });

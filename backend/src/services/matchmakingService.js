@@ -5,21 +5,27 @@ export const processPrivateMatch = async (rideId, io, batchIndex = 0) => {
   const ride = await Ride.findById(rideId).populate('passenger', 'fullName phoneNumber');
   if (!ride || ride.status !== 'pending') return;
 
-  const nearestDrivers = await User.find({
+  // Fallback: Find any online driver if geo-query returns nothing
+  let nearestDrivers = await User.find({
     role: 'driver',
     isOnline: true,
     currentLocation: {
       $near: {
-        $geometry: { type: 'Point', coordinates: ride.pickupCoordinates.coordinates },
-        $maxDistance: 2500 
+        $geometry: { type: 'Point', coordinates: ride.pickupCoordinates?.coordinates || [0, 0] },
+        $maxDistance: 50000 // expanded range
       }
     }
   }).limit(10); 
 
-  // BUG 1 FIXED: Proper array slicing for batch progression
+  if (nearestDrivers.length === 0) {
+    console.log("⚠️ Geo-query found no drivers nearby. Falling back to any online driver...");
+    nearestDrivers = await User.find({ role: 'driver', isOnline: true }).limit(10);
+  }
+
   const batch = nearestDrivers.slice(batchIndex * 3, (batchIndex + 1) * 3);
 
   if (batch.length === 0) {
+    console.log("❌ No online drivers found anywhere in database.");
     if (batchIndex === 0) {
        ride.status = 'failed_no_drivers';
        await ride.save();
@@ -28,6 +34,7 @@ export const processPrivateMatch = async (rideId, io, batchIndex = 0) => {
     return;
   }
 
+  console.log(`🚀 Emitting 'driver:incoming-request' to ${batch.length} driver(s)`);
   batch.forEach(driver => {
     io.to(driver._id.toString()).emit('driver:incoming-request', ride);
   });

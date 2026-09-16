@@ -27,7 +27,7 @@ const app = express();
 const server = http.createServer(app);
 app.set('trust proxy', 1);
 
-//  Ensure uploads directory exists on disk on server startup
+// Ensure uploads directory exists on disk on server startup
 const uploadDir = path.join(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
@@ -41,17 +41,19 @@ app.use(helmet({
 app.use(cors());
 app.use(express.json());
 
-//  4b. SERVE UPLOADS DIRECTORY AS STATIC ASSETS FOR DOCUMENT VIEWING
+// 4b. SERVE UPLOADS DIRECTORY AS STATIC ASSETS FOR DOCUMENT VIEWING
 app.use('/uploads', express.static(uploadDir));
 
 if (process.env.NODE_ENV === 'development') { 
   app.use(morgan('dev'));
 }
 
-// 5. REST API Route Bindings
+// 5. REST API Route Bindings (Mapping both singular/plural and user aliases to prevent 404s)
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/users', authRoutes);
 app.use('/api/v1/driver', driverRoutes);
+app.use('/api/v1/drivers', driverRoutes);
 app.use('/api/v1/rides', rideRoutes);
 app.use('/api/v1/upload', uploadRoutes);
 

@@ -3,7 +3,7 @@ import rateLimit from 'express-rate-limit';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { register, login } from '../controllers/authController.js';
+import { register, login, verifyLoginOtp } from '../controllers/authController.js';
 
 const router = express.Router();
 
@@ -36,6 +36,7 @@ const authLimiter = rateLimit({
 });
 
 router.post('/login', login);
+router.post('/login/verify-otp', verifyLoginOtp); // Added missing OTP verification route
 
  router.post(
   '/register', 
