@@ -9,7 +9,9 @@ import {
 import { StatusBar } from 'expo-status-bar'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 
-const RoleSelection = ({ onSelectStudent, onSelectDriver }) => {
+const RoleSelection = ({ onSelectPassenger, onSelectStudent, onSelectDriver }) => {
+  const handleSelectPassenger = onSelectPassenger || onSelectStudent;
+
   return (
     <View style={styles.container}>
       <StatusBar style="dark" />
@@ -30,17 +32,17 @@ const RoleSelection = ({ onSelectStudent, onSelectDriver }) => {
           <Text style={styles.cardSubtitle}>Please select your role to continue</Text>
 
           <View style={styles.roleGrid}>
-            {/* Student Option */}
+            {/* Passenger Option */}
             <TouchableOpacity 
               style={styles.roleOption} 
-              onPress={onSelectStudent}
+              onPress={handleSelectPassenger}
               activeOpacity={0.75}
             >
               <View style={styles.roleOptionIconCard}>
                 <MaterialCommunityIcons name="school" size={26} color="#1E3A8A" />
               </View>
               <View style={styles.roleOptionMeta}>
-                <Text style={styles.roleOptionTitle}>Student</Text>
+                <Text style={styles.roleOptionTitle}>Passenger</Text>
                 <Text style={styles.roleOptionSubtitle}>Campus living made easy: just book, ride, and arrive</Text>
               </View>
             </TouchableOpacity>

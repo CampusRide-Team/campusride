@@ -1,4 +1,3 @@
-// SignupScreen.js
 import React, { useState } from "react";
 import {
   View,
@@ -14,6 +13,7 @@ import {
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import api from "../../api/axios";
 
 const NAVY = '#10206B';
 const BLUE = '#2F6BFF';
@@ -23,7 +23,6 @@ const CARD_BG = '#FFFFFF';
 const SCREEN_BG = '#F8FAFC';
 const BORDER = '#E2E8F0';
 
-const API_BASE_URL = 'https://c5m62bwc-5000.uks1.devtunnels.ms/api/v1/auth';
 
 const InputField = ({
   label,
@@ -149,54 +148,41 @@ const SignupScreen = ({ onDone, onSignIn }) => {
         phoneNumber: sanitizedPhone,
         email: email.trim().toLowerCase(),
         password,
-        role: 'student'
+        role: 'passenger'
       };
 
-      const response = await fetch(`${API_BASE_URL}/register`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      });
+      const response = await api.post('/auth/register', payload);
+      const result = response.data;
 
-      const textResponse = await response.text();
-      let result;
-      try {
-        result = JSON.parse(textResponse);
-      } catch (e) {
-        throw new Error(`Server error (${response.status}): Invalid response format.`);
-      }
-
-      if (!response.ok) {
+      if (!result.success) {
         let serverMsg = "Registration failed";
-        if (result) {
-          if (typeof result.message === 'string') serverMsg = result.message;
-          else if (typeof result.error === 'string') serverMsg = result.error;
-          else if (typeof result.message === 'object') serverMsg = JSON.stringify(result.message);
-          else serverMsg = JSON.stringify(result);
-        }
+        if (typeof result.message === 'string') serverMsg = result.message;
+        else if (typeof result.error === 'string') serverMsg = result.error;
+        else if (result.error?.message) serverMsg = result.error.message;
         throw new Error(serverMsg);
       }
 
-      setLoading(false);
-      setSuccessMessage("Account created successfully! Redirecting to Sign In...");
+      if (result.data?.token) {
+        await AsyncStorage.setItem('user_token', result.data.token);
+        await AsyncStorage.setItem('token', result.data.token);
+      }
 
-      // Redirect to sign in view after 1.5 seconds
+      setLoading(false);
+      setSuccessMessage("Account created successfully! Entering CampusRide...");
+
+      // Transition to authenticated session or fallback to sign-in
       setTimeout(() => {
-        if (onSignIn) onSignIn();
-      }, 1500);
+        if (onDone) {
+          onDone(result);
+        } else if (onSignIn) {
+          onSignIn();
+        }
+      }, 1000);
 
     } catch (err) {
       setLoading(false);
-      let errorMessage = "Registration failed. Please check your details.";
-      if (typeof err.message === 'string') {
-        errorMessage = err.message;
-      } else if (err.message && typeof err.message === 'object') {
-        errorMessage = JSON.stringify(err.message);
-      }
-      setErrors({ general: errorMessage });
+      const errorMsg = err.response?.data?.error?.message || err.response?.data?.message || err.message || "Registration failed. Please check your details.";
+      setErrors({ general: errorMsg });
     }
   };
 
@@ -204,25 +190,26 @@ const SignupScreen = ({ onDone, onSignIn }) => {
     setGoogleLoading(true);
     setErrors({});
     try {
-      const response = await fetch(`${API_BASE_URL}/google`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      const result = await response.json();
+      const response = await api.post('/auth/google');
+      const result = response.data;
 
-      if (!response.ok) throw new Error(result.message || 'Google authentication failed.');
+      if (!result.success) throw new Error(result.error?.message || result.message || 'Google authentication failed.');
 
-      if (result.token) {
-        await AsyncStorage.setItem('user_token', result.token);
+      if (result.data?.token || result.token) {
+        const token = result.data?.token || result.token;
+        await AsyncStorage.setItem('user_token', token);
+        await AsyncStorage.setItem('token', token);
       }
 
       setGoogleLoading(false);
-      if (onDone) onDone();
+      if (onDone) onDone(result);
     } catch (err) {
       setGoogleLoading(false);
-      setErrors({ general: err.message || "Google sign-up failed. Please try again." });
+      const errorMsg = err.response?.data?.error?.message || err.response?.data?.message || err.message || "Google sign-up failed. Please try again.";
+      setErrors({ general: errorMsg });
     }
   };
+
 
   return (
     <KeyboardAvoidingView

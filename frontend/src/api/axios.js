@@ -1,8 +1,18 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
+
+// Resolves base API URL dynamically from environment or local development fallback
+export const getApiBaseUrl = () => {
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
+  }
+  // Local development default fallback (10.0.2.2 for Android emulator, localhost for iOS/Web)
+  return Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://localhost:5000';
+};
 
 const api = axios.create({
-  baseURL: "https://c5m62bwc-5000.uks1.devtunnels.ms/",
+  baseURL: getApiBaseUrl(),
   timeout: 15000,
   headers: {
     "Content-Type": "application/json",
@@ -34,9 +44,6 @@ api.interceptors.request.use(
         // Sanitize token: remove wrapping quotes and any accidental "Bearer " prefix
         const cleanToken = rawToken.replace(/^["']|["']$/g, '').trim().replace(/^Bearer\s+/i, '');
         config.headers.Authorization = `Bearer ${cleanToken}`;
-        console.log(`[Axios] Attached token to ${config.url} (Token preview: ${cleanToken.substring(0, 10)}...)`);
-      } else {
-        console.warn(`[Axios] NO TOKEN FOUND in AsyncStorage for request: ${config.url}`);
       }
     } catch (error) {
       console.error("Failed to retrieve token:", error);
@@ -46,4 +53,4 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-export default api;
+export default api;

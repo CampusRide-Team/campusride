@@ -51,15 +51,23 @@ const DriverHome = ({ driverData, onLogout, onViewRequests, onChangeTab }) => {
     setIsOnline(nextState); // Optimistic UI update
 
     try {
-      await api.put("/driver/location", {
+      await api.put("/driver/availability", {
         isOnline: nextState,
         latitude: driverLocation.latitude,
         longitude: driverLocation.longitude,
       });
     } catch (error) {
-      console.error("Failed to update online status on backend:", error.message);
-      setIsOnline(!nextState); // Revert on failure
-      Alert.alert("Status Sync Error", "Could not update your online status. Please check your connection.");
+      try {
+        await api.put("/driver/location", {
+          isOnline: nextState,
+          latitude: driverLocation.latitude,
+          longitude: driverLocation.longitude,
+        });
+      } catch (locErr) {
+        console.error("Failed to update online status on backend:", locErr.message);
+        setIsOnline(!nextState); // Revert on failure
+        Alert.alert("Status Sync Error", "Could not update your online status. Please check your connection.");
+      }
     }
   };
 
@@ -67,56 +75,57 @@ const DriverHome = ({ driverData, onLogout, onViewRequests, onChangeTab }) => {
   useEffect(() => {
     let activeSocket = null;
 
+    const handleRemoveRequest = (rideId) => {
+      setNearbyRequests((prevRequests) =>
+        prevRequests.filter((req) => (req.id || req._id || req.bookingId) !== rideId)
+      );
+    };
+
+    const handleIncomingDispatch = (newRequest) => {
+      if (newRequest.status && newRequest.status !== 'pending') return;
+      if (isOnlineRef.current) {
+        setNearbyRequests((prev) => {
+          const reqId = newRequest.bookingId || newRequest.id || newRequest._id;
+          const exists = prev.some(r => (r.bookingId || r.id || r._id) === reqId);
+          if (exists) return prev;
+          
+          const formatted = {
+            ...newRequest,
+            id: reqId,
+            bookingId: reqId,
+            pickupLocation: newRequest.pickup?.name || newRequest.pickupLocation || newRequest.pickup,
+            dropoffLocation: newRequest.dropoff?.name || newRequest.dropoffLocation || newRequest.destination,
+            fare: newRequest.fare?.estimatedAmount || newRequest.fare || 0,
+            rideMode: newRequest.offerType === 'pool_join' || newRequest.rideMode === 'shared' ? 'shared' : 'solo',
+          };
+          return [formatted, ...prev];
+        });
+      }
+    };
+
     const initSocket = async () => {
       activeSocket = await getPersistentSocket();
 
-      activeSocket.on("driver:remove-request", (rideId) => {
-        setNearbyRequests((prevRequests) =>
-          prevRequests.filter((req) => (req.id || req._id) !== rideId)
-        );
-      });
-
-      activeSocket.on("driver:incoming-broadcast", (newRequest) => {
-        if (newRequest.status && newRequest.status !== 'pending') return;
-        if (isOnlineRef.current) {
-          setNearbyRequests((prev) => {
-            const reqId = newRequest.id || newRequest._id;
-            const exists = prev.some(r => (r.id || r._id) === reqId);
-            if (exists) return prev;
-            
-            const formatted = {
-              ...newRequest,
-              id: newRequest._id || newRequest.id,
-              pickupLocation: newRequest.pickupLocation || newRequest.pickup,
-              dropoffLocation: newRequest.dropoffLocation || newRequest.destination,
-            };
-            return [formatted, ...prev];
-          });
-        }
-      });
-
-      activeSocket.on("driver:incoming-request", (newRequest) => {
-        console.log("📥 Targeted Driver Request Received:", newRequest);
-        if (newRequest.status && newRequest.status !== 'pending') return;
-        if (isOnlineRef.current) {
-          setNearbyRequests((prev) => {
-            const reqId = newRequest.id || newRequest._id;
-            const exists = prev.some(r => (r.id || r._id) === reqId);
-            if (exists) return prev;
-            
-            const formatted = {
-              ...newRequest,
-              id: newRequest._id || newRequest.id,
-              pickupLocation: newRequest.pickupLocation || newRequest.pickup,
-              dropoffLocation: newRequest.dropoffLocation || newRequest.destination,
-            };
-            return [formatted, ...prev];
-          });
-        }
-      });
+      activeSocket.on("dispatch:offer", handleIncomingDispatch);
+      activeSocket.on("dispatch:offer_cancelled", handleRemoveRequest);
+      activeSocket.on("dispatch:offer_expired", handleRemoveRequest);
+      activeSocket.on("driver:remove-request", handleRemoveRequest);
+      activeSocket.on("driver:incoming-broadcast", handleIncomingDispatch);
+      activeSocket.on("driver:incoming-request", handleIncomingDispatch);
     };
 
     initSocket();
+
+    return () => {
+      if (activeSocket) {
+        activeSocket.off("dispatch:offer", handleIncomingDispatch);
+        activeSocket.off("dispatch:offer_cancelled", handleRemoveRequest);
+        activeSocket.off("dispatch:offer_expired", handleRemoveRequest);
+        activeSocket.off("driver:remove-request", handleRemoveRequest);
+        activeSocket.off("driver:incoming-broadcast", handleIncomingDispatch);
+        activeSocket.off("driver:incoming-request", handleIncomingDispatch);
+      }
+    };
   }, []);
 
   useEffect(() => {

@@ -22,7 +22,7 @@ Notifications.setNotificationHandler({
 import SplashScreen from "./src/screens/auth/SplashScreen";
 import Onboarding from "./src/screens/auth/Onboarding";
 import RoleSelection from "./src/screens/auth/RoleSelection";
-import StudentLogin from "./src/screens/auth/StudentLogin";
+import PassengerLogin from "./src/screens/auth/PassengerLogin";
 import DriverLogin from "./src/screens/auth/DriverLogin";
 import SignupScreen from "./src/screens/auth/SignupScreen";
 import DriverRegisterStep1 from "./src/screens/auth/DriverRegisterStep1";
@@ -30,9 +30,9 @@ import DriverRegisterStep2 from "./src/screens/auth/DriverRegisterStep2";
 import DriverRegisterStep3 from "./src/screens/auth/DriverRegisterStep3";
 import DriverRegisterSuccess from "./src/screens/auth/DriverRegisterSuccess";
 
-// Student screens
-import StudentHome from "./src/screens/student/StudentHome";
-import RideBooking from "./src/screens/student/RideBooking"; 
+// Passenger screens
+import PassengerHome from "./src/screens/passenger/PassengerHome";
+import RideBooking from "./src/screens/passenger/RideBooking"; 
 
 // Driver screens
 import DriverHome from "./src/screens/driver/DriverHome";
@@ -51,8 +51,9 @@ import AccountSuspendedModal from "./src/context/AccountSuspendedModal";
 
 const RootNavigator = () => {
   const [screen, setScreen] = useState("splash");
-  const { role, login, logout, user: authUser, token: authToken } = useAuth();
+  const { role, login, logout, user: authUser, token: authToken, isLoggedIn } = useAuth();
   const { theme } = useTheme();
+
 
   // GLOBAL SUSPENDED MODAL STATE & ERROR INTERCEPTION
   const [globalSuspendedModalVisible, setGlobalSuspendedModalVisible] = useState(false);
@@ -177,7 +178,7 @@ const RootNavigator = () => {
   // Helper render wrapper function
   const renderScreen = () => {
     if (screen === "splash") {
-      return <SplashScreen onFinish={() => setScreen("onboarding")} />;
+      return <SplashScreen onFinish={() => setScreen(isLoggedIn ? "home" : "onboarding")} />;
     }
     if (screen === "onboarding") {
       return <Onboarding onFinish={() => setScreen("role-selection")} />;
@@ -185,19 +186,20 @@ const RootNavigator = () => {
     if (screen === "role-selection") {
       return (
         <RoleSelection
-          onSelectStudent={() => setScreen("student-login")}
+          onSelectPassenger={() => setScreen("passenger-login")}
+          onSelectStudent={() => setScreen("passenger-login")}
           onSelectDriver={() => setScreen("driver-login")}
         />
       );
     }
-    if (screen === "student-login") {
+    if (screen === "passenger-login" || screen === "student-login") {
       return (
-        <StudentLogin
-          onStudentLogin={async (authPayload) => {
+        <PassengerLogin
+          onPassengerLogin={async (authPayload) => {
             if (authPayload?.success) {
               const { user, token } = authPayload.data || {};
               if (user && token) {
-                await login({ ...user, role: "student" }, token);
+                await login({ ...user, role: "passenger" }, token);
               }
               setScreen("home");
             }
@@ -207,7 +209,7 @@ const RootNavigator = () => {
             if (authPayload?.success) {
               const { user, token } = authPayload.data || {};
               if (user && token) {
-                await login({ ...user, role: "student" }, token);
+                await login({ ...user, role: "passenger" }, token);
               }
               setScreen("home");
             }
@@ -216,6 +218,7 @@ const RootNavigator = () => {
         />
       );
     }
+
     if (screen === "driver-login") {
       return (
         <DriverLogin
@@ -277,7 +280,7 @@ const RootNavigator = () => {
         <DriverRegisterStep3
           initialData={registrationForm}
           onSubmit={async () => {
-            await login({ fullName: registrationForm.fullName, role: "driver" }, "mock-driver-token");
+            // Driver registration completes in pending status; navigate to success acknowledgement
             setScreen("driver-reg-success");
           }}
           onBack={() => setScreen("driver-reg-step2")}
@@ -295,19 +298,19 @@ const RootNavigator = () => {
             if (authPayload?.success) {
               const { user, token } = authPayload.data || {};
               if (user && token) {
-                await login({ ...user, role: "student" }, token);
+                await login({ ...user, role: "passenger" }, token);
               }
             }
             setScreen("home");
           }}
-          onSignIn={() => setScreen("student-login")}
+          onSignIn={() => setScreen("passenger-login")}
         />
       );
     }
     if (screen === "home") {
-      if (role === "student" || authUser?.role === "student") {
+      if (role === "passenger" || authUser?.role === "passenger") {
         return (
-          <StudentHome
+          <PassengerHome
             onLogout={() => {
               logout();
               setScreen("role-selection");
@@ -315,6 +318,7 @@ const RootNavigator = () => {
           />
         );
       }
+
 
       return (
         <DriverHome
@@ -362,34 +366,41 @@ const RootNavigator = () => {
       );
     }
     if (screen === "driver-navigation") {
+      const handleFinishTrip = () => {
+        const endTime = Date.now();
+        const totalElapsedMs = endTime - (tripStartTime || Date.now());
+        const durationCalculated = tripStartTime ? Math.max(1, Math.round(totalElapsedMs / 60000)) : 12;
+
+        let durationTextValue = "12 minutes";
+        let distanceTextValue = "4.2 km";
+
+        if (durationCalculated > 0) {
+          durationTextValue = `${durationCalculated} ${durationCalculated === 1 ? "minute" : "minutes"}`;
+          distanceTextValue = `${(durationCalculated * 0.35).toFixed(1)} km`;
+        }
+
+        const pickupName = activeTripData?.pickupLocation || activeTripData?.pickup?.name || activeTripData?.pickup || "Campus Pickup Point";
+        const dropoffName = activeTripData?.dropoffLocation || activeTripData?.dropoff?.name || activeTripData?.destination || "Campus Destination";
+
+        const dynamicTripPayload = {
+          driverName: driverProfileData?.fullName ? driverProfileData.fullName.split(" ")[0] : "Driver",
+          pickupLocation: pickupName,
+          destinationLocation: dropoffName,
+          durationText: durationTextValue,
+          distanceText: distanceTextValue,
+        };
+
+        setFinalCalculatedTrip(dynamicTripPayload);
+        setScreen("trip-summary");
+      };
+
       return (
         <DriverNavigation
           passenger={activeTripData}
+          rideData={activeTripData}
           onBack={() => setScreen("active-requests")}
-          onArrive={() => {
-            const endTime = Date.now();
-            const totalElapsedMs = endTime - tripStartTime;
-            const durationCalculated = tripStartTime ? Math.round(totalElapsedMs / 60000) : 12;
-
-            let durationTextValue = "12 minutes";
-            let distanceTextValue = "4.2 km";
-
-            if (durationCalculated > 0) {
-              durationTextValue = `${durationCalculated} ${durationCalculated === 1 ? "minute" : "minutes"}`;
-              distanceTextValue = `${(durationCalculated * 0.35).toFixed(1)} km`;
-            }
-
-            const dynamicTripPayload = {
-              driverName: driverProfileData?.fullName ? driverProfileData.fullName.split(" ")[0] : "Driver",
-              pickupLocation: activeTripData?.pickup || "Engineering Block C",
-              destinationLocation: activeTripData?.destination || "Student Union North",
-              durationText: durationTextValue,
-              distanceText: distanceTextValue,
-            };
-
-            setFinalCalculatedTrip(dynamicTripPayload);
-            setScreen("trip-summary");
-          }}
+          onTripCompleted={handleFinishTrip}
+          onArrive={handleFinishTrip}
           onCancelNoPenalty={() => {
             Alert.alert(
               "Trip Canceled",
@@ -409,7 +420,7 @@ const RootNavigator = () => {
           }}
           onChangeTab={(targetTab) => {
             if (targetTab === "home") setScreen("home");
-            if (targetTab === "active-requests") setScreen("active-requests");
+            if (targetTab === "active-requests" || targetTab === "trips") setScreen("active-requests");
             if (targetTab === "profile") setScreen("driver-profile");
           }}
         />

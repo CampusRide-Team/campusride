@@ -30,13 +30,31 @@ const ActiveRequests = ({ onBack, onChangeTab, onAcceptRide }) => {
     try {
       const response = await api.get("/rides/pending");
       if (response.data?.success && response.data?.data) {
-        const requests = response.data.data.filter(r => r.status === 'pending');
-        setAllRequests(requests);
+        const requests = response.data.data
+          .filter(r => r.status === 'pending')
+          .map(r => ({
+            ...r,
+            id: r._id || r.id,
+            bookingId: r._id || r.id,
+            pickupLocation: r.pickupLocation || r.pickup,
+            dropoffLocation: r.dropoffLocation || r.destination,
+            fare: r.fare || 0,
+            expiresAt: r.expiresAt ? new Date(r.expiresAt).getTime() : Date.now() + 15000,
+          }));
+
+        setAllRequests((prev) => {
+          // Merge preserving real-time offers
+          const merged = [...requests];
+          prev.forEach(p => {
+            if (!merged.some(m => (m.id || m._id) === (p.id || p._id)) && (p.expiresAt > Date.now())) {
+              merged.push(p);
+            }
+          });
+          return merged;
+        });
 
         if (requests.length > 0 && (!selectedId || !requests.some(r => (r.id || r._id) === selectedId))) {
           setSelectedId(requests[0].id || requests[0]._id);
-        } else if (requests.length === 0) {
-          setSelectedId(null);
         }
       }
     } catch (error) {
@@ -50,65 +68,167 @@ const ActiveRequests = ({ onBack, onChangeTab, onAcceptRide }) => {
   useEffect(() => {
     let activeSocket = null;
 
-    const initSocket = async () => {
-      activeSocket = await getPersistentSocket();
-
-      activeSocket.on("driver:remove-request", (rideId) => {
-        setAllRequests((prevRequests) => {
-          const updated = prevRequests.filter((req) => (req.id || req._id) !== rideId);
-          if (selectedId === rideId) {
-            setSelectedId(updated.length > 0 ? (updated[0].id || updated[0]._id) : null);
-          }
-          return updated;
-        });
-      });
-
-      activeSocket.on("driver:incoming-broadcast", (newRequest) => {
-        if (newRequest.status && newRequest.status !== 'pending') return;
-        setAllRequests((prev) => {
-          const exists = prev.some(r => (r.id || r._id) === (newRequest.id || newRequest._id));
-          if (exists) return prev;
-          return [newRequest, ...prev];
-        });
-      });
-
-      activeSocket.on("driver:incoming-request", (newRequest) => {
-        if (newRequest.status && newRequest.status !== 'pending') return;
-        setAllRequests((prev) => {
-          const exists = prev.some(r => (r.id || r._id) === (newRequest.id || newRequest._id));
-          if (exists) return prev;
-          return [newRequest, ...prev];
-        });
+    const handleRemoveRequest = (rideId) => {
+      setAllRequests((prevRequests) => {
+        const updated = prevRequests.filter((req) => (req.id || req._id || req.bookingId) !== rideId);
+        if (selectedId === rideId) {
+          setSelectedId(updated.length > 0 ? (updated[0].id || updated[0]._id || updated[0].bookingId) : null);
+        }
+        return updated;
       });
     };
 
+    const handleIncomingDispatch = (newRequest) => {
+      if (newRequest.status && newRequest.status !== 'pending') return;
+      
+      const reqId = newRequest.bookingId || newRequest.id || newRequest._id;
+      const ttlMs = newRequest.ttlMs || 15000;
+      const expiresAt = newRequest.expiresAt 
+        ? new Date(newRequest.expiresAt).getTime() 
+        : Date.now() + ttlMs;
+
+      const formatted = {
+        ...newRequest,
+        id: reqId,
+        _id: reqId,
+        bookingId: reqId,
+        tripId: newRequest.tripId,
+        detourMetrics: newRequest.detourMetrics,
+        pickupLocation: newRequest.pickup?.name || newRequest.pickupLocation || newRequest.pickup || "Campus Pickup Point",
+        dropoffLocation: newRequest.dropoff?.name || newRequest.dropoffLocation || newRequest.destination || "Campus Destination",
+        pickupCoordinates: newRequest.pickup?.coordinates || newRequest.pickupCoordinates,
+        dropoffCoordinates: newRequest.dropoff?.coordinates || newRequest.dropoffCoordinates,
+        fare: newRequest.estimatedFare || newRequest.fare?.estimatedAmount || newRequest.fare || 0,
+        rideMode: newRequest.offerType === 'pool_join' || newRequest.rideMode === 'shared' ? 'shared' : 'solo',
+        offerType: newRequest.offerType || (newRequest.rideMode === 'shared' ? 'new_shared_trip' : 'solo'),
+        expiresAt,
+      };
+
+      setAllRequests((prev) => {
+        const exists = prev.some(r => (r.id || r._id || r.bookingId) === reqId);
+        if (exists) return prev;
+        return [formatted, ...prev];
+      });
+
+      setSelectedId((prevSelected) => prevSelected || reqId);
+    };
+
+    const initSocket = async () => {
+      activeSocket = await getPersistentSocket();
+
+      activeSocket.on("dispatch:offer", handleIncomingDispatch);
+      activeSocket.on("dispatch:offer_cancelled", handleRemoveRequest);
+      activeSocket.on("dispatch:offer_expired", handleRemoveRequest);
+      activeSocket.on("driver:remove-request", handleRemoveRequest);
+      activeSocket.on("driver:incoming-broadcast", handleIncomingDispatch);
+      activeSocket.on("driver:incoming-request", handleIncomingDispatch);
+    };
+
     initSocket();
+
+    return () => {
+      if (activeSocket) {
+        activeSocket.off("dispatch:offer", handleIncomingDispatch);
+        activeSocket.off("dispatch:offer_cancelled", handleRemoveRequest);
+        activeSocket.off("dispatch:offer_expired", handleRemoveRequest);
+        activeSocket.off("driver:remove-request", handleRemoveRequest);
+        activeSocket.off("driver:incoming-broadcast", handleIncomingDispatch);
+        activeSocket.off("driver:incoming-request", handleIncomingDispatch);
+      }
+    };
+  }, [selectedId]);
+
+  // Periodic TTL expiry cleaner interval
+  useEffect(() => {
+    const ttlInterval = setInterval(() => {
+      const now = Date.now();
+      setAllRequests((prev) => {
+        const valid = prev.filter((req) => !req.expiresAt || req.expiresAt > now);
+        if (valid.length !== prev.length) {
+          if (selectedId && !valid.some((r) => (r.id || r._id || r.bookingId) === selectedId)) {
+            setSelectedId(valid.length > 0 ? (valid[0].id || valid[0]._id || valid[0].bookingId) : null);
+          }
+          return valid;
+        }
+        return prev;
+      });
+    }, 1000);
+
+    return () => clearInterval(ttlInterval);
   }, [selectedId]);
 
   useEffect(() => {
     fetchActiveDispatches();
-    const trackingInterval = setInterval(fetchActiveDispatches, 3000);
+    const trackingInterval = setInterval(fetchActiveDispatches, 5000);
     return () => clearInterval(trackingInterval);
   }, []);
 
   // 🚀 2. EXECUTE PRODUCTION RIDE ACCEPTANCE TRANSACTION
   const handleAcceptRide = async (request) => {
-    const requestId = request.id || request._id;
+    const requestId = request.bookingId || request.id || request._id;
+    const isShared = request.offerType === "pool_join" || request.offerType === "new_shared_trip" || request.rideMode === "shared";
+    
     try {
       setIsSubmitting(true);
-      const response = await api.put(`/rides/${requestId}/accept`);
+      const socket = await getPersistentSocket();
 
-      if (response.data?.success) {
-        // 🔑 Pass the fully populated backend response data directly
-        const acceptedRide = response.data.data || request;
-        onAcceptRide(acceptedRide);
+      // Try Socket dispatch:response first
+      let acceptedData = null;
+      let socketSucceeded = false;
+
+      if (socket && socket.connected) {
+        try {
+          const socketPromise = new Promise((resolve) => {
+            socket.emit(
+              "dispatch:response",
+              {
+                bookingId: requestId,
+                response: "accept",
+                offerType: request.offerType || (isShared ? "new_shared_trip" : "solo"),
+                tripId: request.tripId,
+              },
+              (ack) => resolve(ack)
+            );
+            setTimeout(() => resolve({ success: false, timeout: true }), 3000);
+          });
+
+          const ack = await socketPromise;
+          if (ack?.success && ack?.data) {
+            socketSucceeded = true;
+            acceptedData = ack.data?.trip || ack.data?.booking || ack.data;
+          }
+        } catch (socketErr) {
+          console.warn("Socket accept error, attempting REST fallback:", socketErr);
+        }
+      }
+
+      // Authoritative REST fallback if socket didn't finish
+      if (!socketSucceeded) {
+        if (isShared) {
+          const tripRes = await api.post("/trips/shared", {
+            bookingId: requestId,
+            tripId: request.tripId,
+          });
+          if (tripRes.data?.success) {
+            acceptedData = tripRes.data.data?.trip || tripRes.data.data;
+          }
+        } else {
+          const tripRes = await api.post("/trips/solo", { bookingId: requestId });
+          if (tripRes.data?.success) {
+            acceptedData = tripRes.data.data?.trip || tripRes.data.data;
+          }
+        }
+      }
+
+      if (acceptedData) {
+        onAcceptRide(acceptedData);
       } else {
-        Alert.alert("Ride Unavailable", "Another campus vehicle has accepted this dispatch.");
+        Alert.alert("Ride Unavailable", "This ride has already been claimed by another driver.");
         fetchActiveDispatches();
       }
     } catch (error) {
-      console.error("Acceptance Mutation Error:", error);
-      Alert.alert("Connection Failure", "Failed to sync transaction with server.");
+      const errMsg = error.response?.data?.error?.message || "Failed to accept ride dispatch.";
+      Alert.alert("Ride Unavailable", errMsg);
       fetchActiveDispatches();
     } finally {
       setIsSubmitting(false);
@@ -117,18 +237,22 @@ const ActiveRequests = ({ onBack, onChangeTab, onAcceptRide }) => {
 
   // 🚀 3. EXECUTE CLEAN DECLINE
   const handleDeclineRide = async (request) => {
-    const requestId = request.id || request._id;
+    const requestId = request.bookingId || request.id || request._id;
     try {
       setIsSubmitting(true);
-      
-      // Try hitting a decline/cancel route if configured, otherwise dismiss cleanly locally
-      await api.put(`/rides/${requestId}/decline`).catch(() => {
-        api.put(`/rides/${requestId}/status`, { status: 'cancelled' }).catch(() => {});
-      });
+      const socket = await getPersistentSocket();
+      if (socket && socket.connected) {
+        socket.emit("dispatch:response", {
+          bookingId: requestId,
+          response: "decline",
+          offerType: request.offerType || "solo",
+        });
+      }
 
+      // Clean local state immediately
       setAllRequests((prev) => {
-        const updated = prev.filter((req) => (req.id || req._id) !== requestId);
-        setSelectedId(updated.length > 0 ? (updated[0].id || updated[0]._id) : null);
+        const updated = prev.filter((req) => (req.id || req._id || req.bookingId) !== requestId);
+        setSelectedId(updated.length > 0 ? (updated[0].id || updated[0]._id || updated[0].bookingId) : null);
         return updated;
       });
     } catch (error) {
@@ -139,10 +263,10 @@ const ActiveRequests = ({ onBack, onChangeTab, onAcceptRide }) => {
   };
 
   const currentSpotlightRequest =
-    allRequests.find((req) => (req.id || req._id) === selectedId) ||
+    allRequests.find((req) => (req.id || req._id || req.bookingId) === selectedId) ||
     allRequests[0];
   const lowerQueueRequests = allRequests.filter(
-    (req) => (req.id || req._id) !== selectedId,
+    (req) => (req.id || req._id || req.bookingId) !== selectedId,
   );
 
   return (
@@ -206,20 +330,24 @@ const ActiveRequests = ({ onBack, onChangeTab, onAcceptRide }) => {
                       {currentSpotlightRequest.passenger?.fullName || 
                        currentSpotlightRequest.passengerName || 
                        currentSpotlightRequest.name || 
-                       "Student Rider"}
+                       "Campus Passenger"}
                     </Text>
 
                     <View
                       style={[
                         styles.modeTagCapsule,
-                        currentSpotlightRequest.rideMode === "shared"
+                        currentSpotlightRequest.offerType === "pool_join"
+                          ? styles.sharedTagBackground
+                          : currentSpotlightRequest.rideMode === "shared"
                           ? styles.sharedTagBackground
                           : styles.privateTagBackground,
                       ]}
                     >
                       <MaterialCommunityIcons
                         name={
-                          currentSpotlightRequest.rideMode === "shared"
+                          currentSpotlightRequest.offerType === "pool_join"
+                            ? "account-plus"
+                            : currentSpotlightRequest.rideMode === "shared"
                             ? "account-multiple-plus"
                             : "shield-lock"
                         }
@@ -227,7 +355,7 @@ const ActiveRequests = ({ onBack, onChangeTab, onAcceptRide }) => {
                         color={theme.iconColor}
                       />
                       <Text style={[styles.modeTagText, { color: theme.iconColor }]}>
-                        {currentSpotlightRequest.rideMode?.toUpperCase()}
+                        {currentSpotlightRequest.offerType === "pool_join" ? "POOL JOIN" : currentSpotlightRequest.rideMode?.toUpperCase()}
                       </Text>
                     </View>
                   </View>
@@ -280,6 +408,15 @@ const ActiveRequests = ({ onBack, onChangeTab, onAcceptRide }) => {
                   </Text>
                 </View>
               </View>
+
+              {currentSpotlightRequest.detourMetrics ? (
+                <View style={[styles.metricCard, { backgroundColor: theme.background, borderColor: theme.borderColor, marginTop: 8, marginBottom: 12, paddingVertical: 10, paddingHorizontal: 12 }]}>
+                  <Text style={[styles.metricLabel, { color: theme.subText }]}>POOLED ROUTE DETOUR</Text>
+                  <Text style={[styles.metricValue, { color: theme.iconColor, fontSize: 13, marginTop: 2 }]}>
+                    +{((currentSpotlightRequest.detourMetrics.additionalDistanceMeters || 0) / 1000).toFixed(1)} km (+{Math.round(((currentSpotlightRequest.detourMetrics.additionalDurationSeconds || currentSpotlightRequest.detourMetrics.additionalTimeSeconds || 0) / 60))} min)
+                  </Text>
+                </View>
+              ) : null}
 
               <TouchableOpacity
                 style={[

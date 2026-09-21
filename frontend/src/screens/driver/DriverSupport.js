@@ -88,7 +88,7 @@ const DriverSupport = ({ onBack, onChangeTab }) => {
     {
       question: "How do I accept a ride request?",
       answer:
-        'When a student places a request, it will appear on your "Active Requests" dashboard. Review the pickup point, destination, and whether it is a Private or Shared ride, then tap "Accept Ride" to initialize navigation tracking.',
+        'When a passenger places a request, it will appear on your "Active Requests" dashboard. Review the pickup point, destination, and whether it is a Private or Shared ride, then tap "Accept Ride" to initialize navigation tracking.',
     },
     {
       question: "How do multi-stop Shared rides work?",
@@ -98,7 +98,7 @@ const DriverSupport = ({ onBack, onChangeTab }) => {
     {
       question: "What is the penalty-free cancellation policy?",
       answer:
-        'Once you arrive at the designated campus pickup spot, a 5-minute countdown clock begins. If the student fails to arrive within 5 minutes (300 seconds), a "Cancel Ride (No Penalty)" option unlocks to preserve your driver rating score.',
+        'Once you arrive at the designated campus pickup spot, a 5-minute countdown clock begins. If the passenger fails to arrive within 5 minutes (300 seconds), a "Cancel Ride (No Penalty)" option unlocks to preserve your driver rating score.',
     },
     {
       question: "How do I report a vehicle or map location issue?",

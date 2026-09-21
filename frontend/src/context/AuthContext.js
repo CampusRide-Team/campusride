@@ -1,8 +1,16 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import api from "../api/axios"; // Mapped directly to your updated folder tree setup
+import api from "../api/axios";
 
 const AuthContext = createContext(null);
+
+// Canonical role normalizer (maps legacy 'student' or 'rider' to 'passenger')
+export const normalizeRole = (role) => {
+  if (!role) return null;
+  const lower = role.toLowerCase().trim();
+  if (lower === 'student' || lower === 'rider') return 'passenger';
+  return lower;
+};
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -13,24 +21,30 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const hydrateAuthSession = async () => {
       try {
-        const storedToken = await AsyncStorage.getItem("token");
+        const storedToken = await AsyncStorage.getItem("token") ||
+                            await AsyncStorage.getItem("user_token") ||
+                            await AsyncStorage.getItem("passenger_token") ||
+                            await AsyncStorage.getItem("driver_token") ||
+                            await AsyncStorage.getItem("auth_token");
+
         const storedUser = await AsyncStorage.getItem("user");
 
         if (storedToken && storedUser) {
           const parsedUser = JSON.parse(storedUser);
-          setToken(storedToken);
-          setUser(parsedUser);
+          const normalizedUser = {
+            ...parsedUser,
+            role: normalizeRole(parsedUser.role)
+          };
+
+          const cleanToken = storedToken.replace(/^["']|["']$/g, '').trim().replace(/^Bearer\s+/i, '');
+          setToken(cleanToken);
+          setUser(normalizedUser);
 
           // Seed the axios authorization header manually for this session instance
-          api.defaults.headers.common[
-            "Authorization"
-          ] = `Bearer ${storedToken}`;
+          api.defaults.headers.common["Authorization"] = `Bearer ${cleanToken}`;
         }
       } catch (error) {
-        console.error(
-          "Failed to hydrate persistent local authentication session:",
-          error
-        );
+        console.error("Failed to hydrate persistent local authentication session:", error);
       } finally {
         setLoading(false);
       }
@@ -42,18 +56,21 @@ export const AuthProvider = ({ children }) => {
   // Complete Login Routine
   const login = async (userData, authToken) => {
     try {
-      await AsyncStorage.setItem("token", authToken);
-      await AsyncStorage.setItem("user", JSON.stringify(userData));
+      const cleanToken = authToken.replace(/^["']|["']$/g, '').trim().replace(/^Bearer\s+/i, '');
+      const normalizedUser = {
+        ...userData,
+        role: normalizeRole(userData.role)
+      };
 
-      api.defaults.headers.common["Authorization"] = `Bearer ${authToken}`;
+      await AsyncStorage.setItem("token", cleanToken);
+      await AsyncStorage.setItem("user", JSON.stringify(normalizedUser));
 
-      setUser(userData);
-      setToken(authToken);
+      api.defaults.headers.common["Authorization"] = `Bearer ${cleanToken}`;
+
+      setUser(normalizedUser);
+      setToken(cleanToken);
     } catch (error) {
-      console.error(
-        "Failed to commit user session tokens to persistent storage:",
-        error
-      );
+      console.error("Failed to commit user session tokens to persistent storage:", error);
       throw error;
     }
   };
@@ -61,16 +78,20 @@ export const AuthProvider = ({ children }) => {
   // Complete Logout Routine
   const logout = async () => {
     try {
-      await AsyncStorage.multiRemove(["token", "user"]);
+      await AsyncStorage.multiRemove([
+        "token",
+        "user",
+        "user_token",
+        "passenger_token",
+        "driver_token",
+        "auth_token"
+      ]);
       delete api.defaults.headers.common["Authorization"];
 
       setUser(null);
       setToken(null);
     } catch (error) {
-      console.error(
-        "Failed to cleanly evict authentication keys during session termination:",
-        error
-      );
+      console.error("Failed to cleanly evict authentication keys during session termination:", error);
     }
   };
 
@@ -93,3 +114,4 @@ export const useAuth = () => {
 };
 
 export default AuthContext;
+
