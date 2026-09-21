@@ -10,6 +10,7 @@ import SettingsScreen from './screens/SettingsScreen'
 import AdminProfileScreen from './screens/AdminProfileScreen'
 import LoginScreen from './screens/LoginScreen'
 import { Search, Bell } from 'lucide-react'
+import api from './api/axios'
 
 export default function App() {
   const [activePage, setActivePage] = useState('dashboard')
@@ -37,10 +38,22 @@ export default function App() {
     const verifyAdminSessionToken = async () => {
       try {
         setSessionLoading(true)
-        // Staging Framework Toggle (Resolves to expose login screen)
-        setIsAuthenticated(false) 
+        const token = localStorage.getItem('adminToken')
+        if (token) {
+          const response = await api.get('/auth/profile')
+          if (response.data?.success && response.data?.data?.user?.role === 'admin') {
+            setIsAuthenticated(true)
+          } else {
+            localStorage.removeItem('adminToken')
+            setIsAuthenticated(false)
+          }
+        } else {
+          setIsAuthenticated(false)
+        }
       } catch (err) {
         console.error("Unauthorized administrative intercept. Redirecting to login session.", err)
+        localStorage.removeItem('adminToken')
+        setIsAuthenticated(false)
       } finally {
         setSessionLoading(false)
       }
@@ -48,6 +61,7 @@ export default function App() {
 
     verifyAdminSessionToken()
   }, [])
+
 
   if (sessionLoading) {
     return (
@@ -115,7 +129,7 @@ export default function App() {
           {activePage === 'user-directory' && <StudentsManagementScreen />}
           {activePage === 'analytics' && <AnalyticsScreen />} 
           {activePage === 'notifications' && <NotificationsScreen />} 
-          {activePage === 'settings' && <SettingsScreen />}
+          {activePage === 'settings' && <SettingsScreen onLogout={() => setIsAuthenticated(false)} />}
           {activePage === 'admin-profile' && <AdminProfileScreen />}
 
           {/* FALLBACK SAFEGUARD BLOCK */}

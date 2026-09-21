@@ -1,247 +1,257 @@
 import React, { useState, useEffect } from 'react'
 import { 
-  BarChart3, 
-  Clock, 
-  TrendingUp, 
-  Zap, 
-  Star
+  Shield, 
+  Mail, 
+  Phone, 
+  MapPin, 
+  Calendar, 
+  Laptop, 
+  Smartphone, 
+  ShieldCheck, 
+  Activity, 
+  Clock,
+  Edit3,
+  CheckCircle2,
+  RefreshCw
 } from 'lucide-react'
 import api from '../api/axios'
 
-export default function AnalyticsScreen() {
-  const [metrics, setMetrics] = useState([])
-  const [popularZones, setPopularZones] = useState([])
-  const [driverPerformance, setDriverPerformance] = useState([])
-  const [chartData, setChartData] = useState([])
-  const [activityOverview, setActivityOverview] = useState(null)
+export default function AdminProfileScreen() {
+  const [profile, setProfile] = useState(null)
+  const [sessions, setSessions] = useState([])
+  const [auditLogs, setAuditLogs] = useState([])
   const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  // Edit form state
+  const [fullName, setFullName] = useState('')
+  const [phone, setPhone] = useState('')
+  const [department, setDepartment] = useState('')
+
+  const fetchProfileData = async () => {
+    try {
+      setLoading(true)
+      const res = await api.get('/admin/profile')
+      if (res.data?.success && res.data?.data) {
+        const { profileData, activeSessions = [], auditLogs: logs = [] } = res.data.data
+        setProfile(profileData)
+        setSessions(activeSessions)
+        setAuditLogs(logs)
+        setFullName(profileData.name || '')
+        setPhone(profileData.phone || '')
+        setDepartment(profileData.department || '')
+      }
+    } catch (err) {
+      console.error("Failed loading admin profile:", err)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    const fetchAnalyticsData = async () => {
-      try {
-        setLoading(true)
-        const res = await api.get('/admin/analytics/snapshot')
-        
-        if (res.data?.success && res.data?.data) {
-          const { metrics: rawMetrics, popularZones: rawZones, driverPerformance: rawDrivers, chartData: rawChart, activityOverview: rawOverview } = res.data.data
-
-          const iconLookup = {
-            barChart: <BarChart3 size={18} color="#1E3A8A" />,
-            clock: <Clock size={18} color="#1E3A8A" />,
-            zap: <Zap size={18} color="#1E3A8A" />,
-            trendingUp: <TrendingUp size={18} color="#CA8A04" />
-          }
-
-          setMetrics(rawMetrics.map(item => ({
-            ...item,
-            icon: iconLookup[item.icon] || <BarChart3 size={18} />
-          })))
-
-          setPopularZones(rawZones)
-          setDriverPerformance(rawDrivers)
-          setChartData(rawChart)
-          setActivityOverview(rawOverview)
-        }
-      } catch (error) {
-        console.error("Analytics synchronization issue:", error)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchAnalyticsData()
+    fetchProfileData()
   }, [])
+
+  const handleSaveProfile = async (e) => {
+    e.preventDefault()
+    try {
+      setSaving(true)
+      const res = await api.put('/auth/profile', {
+        fullName,
+        phoneNumber: phone,
+        locationResidence: department
+      })
+      if (res.data?.success) {
+        alert("Admin profile updated successfully.")
+        setEditing(false)
+        fetchProfileData()
+      }
+    } catch (err) {
+      console.error("Failed saving admin profile:", err)
+      alert(err.response?.data?.error?.message || "Failed to update profile.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const getInitials = (name) => {
+    if (!name || typeof name !== 'string') return 'AD'
+    const parts = name.trim().split(/\s+/)
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+  }
 
   if (loading) {
     return (
-      <div style={anStyles.loadingFallbackFrame}>
-        <span style={anStyles.loadingSpinnerPlaceholder}>Loading System Metrics...</span>
+      <div style={apStyles.loadingFrame}>
+        <span style={apStyles.loadingText}>Hydrating Admin Profile Context...</span>
       </div>
     )
   }
 
-  // Find the maximum value in chartData to scale heights proportionally safely
-  const maxVal = Math.max(...chartData.map(d => Math.max(d.standard, d.premium, 1)), 10)
-
   return (
-    <div style={anStyles.workspaceWrapperContainer}>
-
-      {/* HEADER SECTION */}
-      <div style={anStyles.screenHeaderRow}>
-        <h2 style={anStyles.screenTitleMainText}>Analytics Overview</h2>
-        <p style={anStyles.screenSubtitleSupportingText}>System-wide transportation insights, behavioral performance indicators, and dispatch activity trends.</p>
+    <div style={apStyles.container}>
+      {/* HEADER ROW */}
+      <div style={apStyles.screenHeaderRow}>
+        <div>
+          <h2 style={apStyles.screenTitle}>Administrative Profile & Access</h2>
+          <p style={apStyles.screenSubtitle}>Manage system operator credentials, security clearance attributes, and active authorization sessions.</p>
+        </div>
+        <button 
+          style={apStyles.editTriggerButton}
+          onClick={() => setEditing(!editing)}
+        >
+          <Edit3 size={14} /> {editing ? 'Cancel Editing' : 'Edit Profile'}
+        </button>
       </div>
 
-      {/* 1. TOP SUMMARY METRICS GRID */}
-      <div style={anStyles.metricsGrid}>
-        {metrics.map((m) => (
-          <div key={m.id} style={anStyles.statCard}>
-            <div style={anStyles.statBodyBlock}>
-              <span style={anStyles.statLabelText}>{m.label}</span>
-              <div style={anStyles.statNumberGroup}>
-                <span style={anStyles.statNumberText}>{m.value}</span>
-                <span style={anStyles.statTrendText}>{m.change}</span>
-              </div>
-            </div>
-            <div style={{ ...anStyles.statIconBadge, backgroundColor: m.bg }}>{m.icon}</div>
+      {/* EDIT MODAL / FORM */}
+      {editing && (
+        <div style={apStyles.editCard}>
+          <div style={apStyles.cardHeaderRow}>
+            <ShieldCheck size={16} color="#1E3A8A" />
+            <h3 style={apStyles.cardTitle}>Update Administrator Details</h3>
           </div>
-        ))}
-      </div>
-
-      {/* 2. MIDDLE AREA CANVAS */}
-      <div style={anStyles.splitContentRowCanvas}>
-
-        {/* CHART VISUAL CANVAS PANEL */}
-        <div style={anStyles.leftWorkspaceMainColumn}>
-          <div style={anStyles.chartContainerCard}>
-            <div style={anStyles.panelHeaderRowFlexHeader}>
-              <h3 style={anStyles.containerBlockTitle}>Trip Activity Distribution</h3>
-              <span style={anStyles.timeframeBadgeIndicator}>Last 7 Days</span>
-            </div>
-
-            <div style={anStyles.chartBarsTrackViewportFrame}>
-              {chartData.map((data, idx) => {
-                // Proportional bar scaling calculation
-                const standardHeight = (data.standard / maxVal) * 140
-                const premiumHeight = (data.premium / maxVal) * 140
-
-                return (
-                  <div key={idx} style={anStyles.chartColumnTrackWrapper}>
-                    <div style={anStyles.dualBarGroupClusterContainer}>
-                      <div style={{ ...anStyles.chartBarColumnElement, height: `${Math.max(standardHeight, 4)}px`, opacity: data.standard === 0 ? 0.15 : 1 }} title={`Standard: ${data.standard}`} />
-                      <div style={{ ...anStyles.chartBarColumnElementShared, height: `${Math.max(premiumHeight, 4)}px`, opacity: data.premium === 0 ? 0.15 : 1 }} title={`Shared: ${data.premium}`} />
-                    </div>
-                    <span style={anStyles.chartAxisDayLabel}>{data.day}</span>
-                  </div>
-                )
-              })}
-            </div>
-
-            <div style={anStyles.chartLegendsFlexContainerRow}>
-              <div style={anStyles.legendIndicatorUnitItem}>
-                <span style={anStyles.legendDotBlue} /> Standard Single Rides
+          <form onSubmit={handleSaveProfile} style={apStyles.editForm}>
+            <div style={apStyles.formGrid}>
+              <div style={apStyles.inputUnit}>
+                <label style={apStyles.inputLabel}>Full Name</label>
+                <input 
+                  type="text" 
+                  value={fullName} 
+                  onChange={(e) => setFullName(e.target.value)} 
+                  required
+                  style={apStyles.textInput}
+                />
               </div>
-              <div style={anStyles.legendIndicatorUnitItem}>
-                <span style={anStyles.legendDotGreen} /> Shared Group Rides
+              <div style={apStyles.inputUnit}>
+                <label style={apStyles.inputLabel}>Phone Number</label>
+                <input 
+                  type="text" 
+                  value={phone} 
+                  onChange={(e) => setPhone(e.target.value)} 
+                  required
+                  style={apStyles.textInput}
+                />
               </div>
+              <div style={{ ...apStyles.inputUnit, gridColumn: 'span 2' }}>
+                <label style={apStyles.inputLabel}>Department / Office Residence</label>
+                <input 
+                  type="text" 
+                  value={department} 
+                  onChange={(e) => setDepartment(e.target.value)} 
+                  style={apStyles.textInput}
+                />
+              </div>
+            </div>
+            <div style={apStyles.editActionsRow}>
+              <button type="submit" disabled={saving} style={apStyles.saveBtn}>
+                {saving ? 'Saving...' : 'Save Profile Changes'}
+              </button>
+              <button type="button" onClick={() => setEditing(false)} style={apStyles.cancelBtn}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* TOP PROFILE CARD */}
+      <div style={apStyles.profileHeroCard}>
+        <div style={apStyles.avatarContainer}>
+          <div style={apStyles.avatarCircle}>{getInitials(profile?.name)}</div>
+        </div>
+
+        <div style={apStyles.heroInfoStack}>
+          <div style={apStyles.heroTopRow}>
+            <h2 style={apStyles.heroName}>{profile?.name || 'Administrator'}</h2>
+            <span style={apStyles.clearanceBadge}>
+              <Shield size={12} style={{ marginRight: '4px' }} /> {profile?.clearance || 'Level 5 (Full Read/Write)'}
+            </span>
+          </div>
+          <p style={apStyles.heroRole}>{profile?.role || 'System Administrator'} • {profile?.department || 'Campus Security & Logistics'}</p>
+
+          <div style={apStyles.metaBadgesRow}>
+            <div style={apStyles.metaBadgeItem}>
+              <Mail size={13} color="#94A3B8" />
+              <span>{profile?.email || 'admin@campusride.ug.edu.gh'}</span>
+            </div>
+            <div style={apStyles.metaBadgeItem}>
+              <Phone size={13} color="#94A3B8" />
+              <span>{profile?.phone || 'N/A'}</span>
+            </div>
+            <div style={apStyles.metaBadgeItem}>
+              <Calendar size={13} color="#94A3B8" />
+              <span>Joined {profile?.joinedDate || 'September 2026'}</span>
             </div>
           </div>
         </div>
+      </div>
 
-        {/* POPULAR PICKUP HUBS SIDEBAR */}
-        <div style={anStyles.rightWorkspaceSidebarPanel}>
-          <div style={anStyles.popularHubsContainerCard}>
-            <h3 style={anStyles.containerBlockTitle}>Popular Pickup Hubs</h3>
+      {/* TWO COLUMN LOWER LAYOUT */}
+      <div style={apStyles.lowerSplitGrid}>
+        {/* ACTIVE SESSIONS */}
+        <div style={apStyles.sectionCard}>
+          <div style={apStyles.cardHeaderRow}>
+            <Laptop size={16} color="#1E3A8A" />
+            <h3 style={apStyles.cardTitle}>Active Authenticated Sessions</h3>
+          </div>
 
-            <div style={anStyles.hubsVerticalStackListContainer}>
-              {popularZones.map((zone) => (
-                <div key={zone.rank} style={anStyles.hubListItemBlockStrip}>
-                  <div style={{ ...anStyles.hubRankBadgeCircle, backgroundColor: zone.color, color: zone.textColor }}>
-                    {zone.rank}
-                  </div>
-                  <div style={anStyles.hubTextDetailsMetadataStackGroup}>
-                    <span style={anStyles.hubPrimaryLocationNameTitleText}>{zone.name}</span>
-                    <span style={anStyles.hubSecondaryVolumeCounterText}>{zone.trips}</span>
-                  </div>
-                  <span style={{ ...anStyles.hubStatusIndicatorLabelTagPillMarkup, color: zone.textColor }}>{zone.status}</span>
+          <div style={apStyles.sessionsList}>
+            {sessions.map((sess) => (
+              <div key={sess.id} style={{
+                ...apStyles.sessionItem,
+                borderLeft: sess.current ? '4px solid #16A34A' : '4px solid #E2E8F0'
+              }}>
+                <div style={apStyles.sessionIcon}>
+                  {sess.device?.includes('iPhone') || sess.device?.includes('Mobile') ? (
+                    <Smartphone size={18} color="#1E3A8A" />
+                  ) : (
+                    <Laptop size={18} color="#1E3A8A" />
+                  )}
                 </div>
-              ))}
-            </div>
+                <div style={apStyles.sessionTextStack}>
+                  <div style={apStyles.sessionTitleRow}>
+                    <span style={apStyles.sessionDeviceName}>{sess.device}</span>
+                    {sess.current && <span style={apStyles.currentPill}>Current Device</span>}
+                  </div>
+                  <span style={apStyles.sessionSubText}>IP: {sess.ip} • Last active: {sess.activity}</span>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
-      </div>
+        {/* AUDIT LOGS */}
+        <div style={apStyles.sectionCard}>
+          <div style={apStyles.cardHeaderRow}>
+            <Activity size={16} color="#1E3A8A" />
+            <h3 style={apStyles.cardTitle}>Recent Administrative Actions</h3>
+          </div>
 
-      {/* 3. BOTTOM AREA CANVAS */}
-      <div style={anStyles.bottomDoubleGridCanvasRow}>
-
-        {/* DRIVER PERFORMANCE TABLE */}
-        <div style={anStyles.tableWorkspaceCardContainer}>
-          <h3 style={anStyles.containerBlockTitle}>Driver Performance Summary</h3>
-          <div style={anStyles.tableScrollFrameworkWrapper}>
-            {driverPerformance.length > 0 ? (
-              <table style={anStyles.tableStructureMarkup}>
-                <thead>
-                  <tr>
-                    <th style={anStyles.thLeftAligned}>DRIVER OPERATOR NAME</th>
-                    <th style={anStyles.thCenterAligned}>PERFORMANCE RATING</th>
-                    <th style={anStyles.thCenterAligned}>COMPLETED DISPATCHES</th>
-                    <th style={anStyles.thRightAligned}>CURRENT STATUS</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {driverPerformance.map((drv, idx) => (
-                    <tr key={idx} style={anStyles.tableDataRowMarkup}>
-                      <td style={anStyles.tdPrimaryDriverNameCellText}>{drv.name}</td>
-                      <td style={anStyles.tdCenterAlignedDataCellRowText}>
-                        <span style={anStyles.ratingStarFlexBadgeLine}>
-                          <Star size={12} fill={drv.rating === 'N/A' ? 'transparent' : '#CA8A04'} color="#CA8A04" /> {drv.rating}
-                        </span>
-                      </td>
-                      <td style={anStyles.tdBoldTripsCounterCellRowText}>{drv.trips} trips</td>
-                      <td style={anStyles.tdRightAlignedDataCellRowText}>
-                        <span style={{ ...anStyles.statusBadgeIndicatorPillMarkup, backgroundColor: drv.statusBg, color: drv.statusColor }}>
-                          {drv.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <div style={anStyles.emptyStateTextWrapper}>No performance data logged. Onboarded active drivers array empty.</div>
-            )}
+          <div style={apStyles.auditLogsList}>
+            {auditLogs.map((log) => (
+              <div key={log.id} style={apStyles.auditLogItem}>
+                <div style={{ ...apStyles.auditDot, backgroundColor: log.color || '#16A34A' }} />
+                <div style={apStyles.auditTextStack}>
+                  <div style={apStyles.auditTitleRow}>
+                    <span style={apStyles.auditActionTitle}>{log.action}</span>
+                    <span style={apStyles.auditTime}>{log.time}</span>
+                  </div>
+                  <p style={apStyles.auditDetails}>{log.details}</p>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
-
-        {/* RIDER ACTIVITY OVERVIEW */}
-        {activityOverview && (
-          <div style={anStyles.engagementOverviewCardContainer}>
-            <h3 style={anStyles.containerBlockTitle}>Rider Activity Overview</h3>
-
-            <div style={anStyles.engagementMetricsDataSplitRowContainer}>
-              <div style={anStyles.engagementDataColumnBlockStack}>
-                <span style={anStyles.engagementMicroTitleFieldLabel}>REGISTRATION GROWTH</span>
-                <span style={anStyles.engagementMetricPrimaryLargeValueText}>{activityOverview.growth}</span>
-              </div>
-              <div style={anStyles.engagementDataColumnBlockStack}>
-                <span style={anStyles.engagementMicroTitleFieldLabel}>RIDE REQUEST TRENDS</span>
-                <span style={anStyles.engagementMetricPrimaryLargeValueText}>{activityOverview.trends}</span>
-              </div>
-            </div>
-
-            <div style={anStyles.progressionBarsStackTrackContainer}>
-              <div style={anStyles.progressUnitGroupTrackBlock}>
-                <div style={anStyles.progressLabelFlexRowLine}>
-                  <span style={anStyles.progressLabelTitleText}>MORNINGS (7-11 AM)</span>
-                  <span style={anStyles.progressPercentageCounterLabelValueText}>{activityOverview.morningProgress}</span>
-                </div>
-                <div style={anStyles.progressBarBaseTrackLine}>
-                  <div style={{ ...anStyles.progressBarFilledInnerActiveLine, width: activityOverview.morningProgress }} />
-                </div>
-              </div>
-
-              <div style={anStyles.progressUnitGroupTrackBlock}>
-                <div style={anStyles.progressLabelFlexRowLine}>
-                  <span style={anStyles.progressLabelTitleText}>AFTERNOONS (1-5 PM)</span>
-                  <span style={anStyles.progressPercentageCounterLabelValueText}>{activityOverview.afternoonProgress}</span>
-                </div>
-                <div style={anStyles.progressBarBaseTrackLine}>
-                  <div style={{ ...anStyles.progressBarFilledInnerActiveLine, width: activityOverview.afternoonProgress, backgroundColor: '#64748B' }} />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
       </div>
-
     </div>
   )
 }
 
- const anStyles = {
-  workspaceWrapperContainer: {
+const apStyles = {
+  container: {
     display: 'flex',
     flexDirection: 'column',
     gap: '24px',
@@ -250,108 +260,205 @@ export default function AnalyticsScreen() {
   },
   screenHeaderRow: {
     display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-    textAlign: 'left',
-    marginBottom: '4px'
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    textAlign: 'left'
   },
-  screenTitleMainText: {
+  screenTitle: {
     fontSize: '22px',
     fontWeight: 800,
     color: '#1E3A8A',
     margin: 0
   },
-  screenSubtitleSupportingText: {
+  screenSubtitle: {
     fontSize: '13px',
     color: '#64748B',
-    fontWeight: 500,
-    margin: 0,
-    lineHeight: '1.4'
+    margin: '4px 0 0 0',
+    fontWeight: 500
   },
-  metricsGrid: {
+  editTriggerButton: {
     display: 'flex',
-    gap: '20px',
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    justifyContent: 'space-between'
+    alignItems: 'center',
+    gap: '8px',
+    backgroundColor: '#ffffff',
+    border: '1px solid #E2E8F0',
+    borderRadius: '10px',
+    padding: '10px 18px',
+    fontSize: '12px',
+    fontWeight: 700,
+    color: '#1E3A8A',
+    cursor: 'pointer',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
   },
-  statCard: {
+  editCard: {
     backgroundColor: '#ffffff',
     borderRadius: '16px',
-    border: '1px solid #E2E8F0',
-    padding: '20px',
+    border: '1px solid #DBEAFE',
+    padding: '24px',
+    boxShadow: '0 4px 12px rgba(30,58,138,0.05)',
     display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    boxShadow: '0 1px 2px rgba(0,0,0,0.01)',
-    flex: 1
+    flexDirection: 'column',
+    gap: '16px'
   },
-  statBodyBlock: {
+  editForm: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px'
+  },
+  formGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '16px'
+  },
+  inputUnit: {
     display: 'flex',
     flexDirection: 'column',
     gap: '6px',
     textAlign: 'left'
   },
-  statLabelText: {
-    fontSize: '12px',
-    color: '#64748B',
-    fontWeight: 600
-  },
-  statNumberGroup: {
-    display: 'flex',
-    alignItems: 'baseline',
-    gap: '8px'
-  },
-  statNumberText: {
-    fontSize: '20px',
-    fontWeight: 800,
-    color: '#0F172A'
-  },
-  statTrendText: {
+  inputLabel: {
     fontSize: '11px',
     fontWeight: 700,
-    color: '#16A34A'
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: '0.3px'
   },
-  statIconBadge: {
-    width: '36px',
-    height: '36px',
-    borderRadius: '12px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  splitContentRowCanvas: {
-    display: 'flex',
-    gap: '32px',
+  textInput: {
     width: '100%',
     boxSizing: 'border-box',
-    alignItems: 'stretch'
+    backgroundColor: '#F8FAFC',
+    border: '1px solid #E2E8F0',
+    borderRadius: '10px',
+    padding: '10px 14px',
+    fontSize: '13px',
+    color: '#334155',
+    fontWeight: 600,
+    outline: 'none'
   },
-  leftWorkspaceMainColumn: {
+  editActionsRow: {
+    display: 'flex',
+    gap: '12px',
+    justifyContent: 'flex-end',
+    borderTop: '1px solid #F1F5F9',
+    paddingTop: '16px'
+  },
+  saveBtn: {
+    backgroundColor: '#1E3A8A',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '10px',
+    padding: '10px 20px',
+    fontSize: '12px',
+    fontWeight: 700,
+    cursor: 'pointer'
+  },
+  cancelBtn: {
+    backgroundColor: '#F1F5F9',
+    color: '#475569',
+    border: 'none',
+    borderRadius: '10px',
+    padding: '10px 16px',
+    fontSize: '12px',
+    fontWeight: 700,
+    cursor: 'pointer'
+  },
+  profileHeroCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: '20px',
+    border: '1px solid #E2E8F0',
+    padding: '32px',
+    display: 'flex',
+    gap: '24px',
+    alignItems: 'center',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+  },
+  avatarContainer: {
+    flexShrink: 0
+  },
+  avatarCircle: {
+    width: '84px',
+    height: '84px',
+    borderRadius: '24px',
+    backgroundColor: '#1E3A8A',
+    color: '#ffffff',
+    fontSize: '28px',
+    fontWeight: 800,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 4px 14px rgba(30,58,138,0.2)'
+  },
+  heroInfoStack: {
     display: 'flex',
     flexDirection: 'column',
-    flex: 2.2,
+    gap: '8px',
+    flex: 1,
+    textAlign: 'left'
+  },
+  heroTopRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px'
+  },
+  heroName: {
+    fontSize: '22px',
+    fontWeight: 900,
+    color: '#0F172A',
+    margin: 0
+  },
+  clearanceBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    backgroundColor: '#DCFCE7',
+    color: '#15803D',
+    fontSize: '11px',
+    fontWeight: 800,
+    padding: '4px 12px',
+    borderRadius: '50px'
+  },
+  heroRole: {
+    fontSize: '13px',
+    color: '#64748B',
+    fontWeight: 600,
+    margin: 0
+  },
+  metaBadgesRow: {
+    display: 'flex',
+    gap: '20px',
+    marginTop: '4px',
+    flexWrap: 'wrap'
+  },
+  metaBadgeItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    fontSize: '12px',
+    color: '#475569',
+    fontWeight: 500
+  },
+  lowerSplitGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '24px',
+    width: '100%',
     boxSizing: 'border-box'
   },
-  chartContainerCard: {
+  sectionCard: {
     backgroundColor: '#ffffff',
     borderRadius: '16px',
     border: '1px solid #E2E8F0',
     padding: '24px',
-    height: '100%',
     display: 'flex',
     flexDirection: 'column',
-    gap: '24px',
+    gap: '20px',
     boxSizing: 'border-box'
   },
-  panelHeaderRowFlexHeader: {
+  cardHeaderRow: {
     display: 'flex',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    width: '100%'
+    gap: '10px'
   },
-  containerBlockTitle: {
+  cardTitle: {
     fontSize: '14px',
     fontWeight: 800,
     color: '#1E3A8A',
@@ -360,332 +467,118 @@ export default function AnalyticsScreen() {
     letterSpacing: '0.4px',
     textAlign: 'left'
   },
-  timeframeBadgeIndicator: {
-    fontSize: '11px',
-    fontWeight: 700,
-    color: '#64748B',
-    backgroundColor: '#F1F5F9',
-    padding: '4px 10px',
-    borderRadius: '6px'
-  },
-  chartBarsTrackViewportFrame: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    height: '180px',
-    borderBottom: '1px solid #E2E8F0',
-    paddingBottom: '12px',
-    gap: '10px'
-  },
-  chartColumnTrackWrapper: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '10px'
-  },
-  dualBarGroupClusterContainer: {
-    display: 'flex',
-    alignItems: 'flex-end',
-    gap: '4px',
-    width: '100%',
-    justifyContent: 'center'
-  },
-  chartBarColumnElement: {
-    width: '14px',
-    borderRadius: '3px 3px 0 0',
-    transition: 'opacity 0.15s ease',
-    cursor: 'pointer',
-    backgroundColor: '#1E3A8A'
-  },
-  chartBarColumnElementShared: {
-    width: '14px',
-    borderRadius: '3px 3px 0 0',
-    transition: 'opacity 0.15s ease',
-    cursor: 'pointer',
-    backgroundColor: '#A3E635'
-  },
-  chartAxisDayLabel: {
-    fontSize: '10px',
-    fontWeight: 700,
-    color: '#94A3B8'
-  },
-  chartLegendsFlexContainerRow: {
-    display: 'flex',
-    gap: '24px',
-    alignItems: 'center',
-    justifyContent: 'flex-start'
-  },
-  legendIndicatorUnitItem: {
-    fontSize: '11px',
-    color: '#64748B',
-    fontWeight: 600,
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px'
-  },
-  legendDotBlue: {
-    width: '8px',
-    height: '8px',
-    borderRadius: '50%',
-    backgroundColor: '#1E3A8A'
-  },
-  legendDotGreen: {
-    width: '8px',
-    height: '8px',
-    borderRadius: '50%',
-    backgroundColor: '#A3E635'
-  },
-  rightWorkspaceSidebarPanel: {
-    backgroundColor: '#ffffff',
-    borderRadius: '16px',
-    border: '1px solid #E2E8F0',
-    padding: '24px',
-    flex: 1.2,
-    display: 'flex',
-    flexDirection: 'column',
-    minWidth: '340px',
-    boxSizing: 'border-box'
-  },
-  popularHubsContainerCard: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '20px',
-    width: '100%'
-  },
-  hubsVerticalStackListContainer: {
+  sessionsList: {
     display: 'flex',
     flexDirection: 'column',
     gap: '12px'
   },
-  hubListItemBlockStrip: {
+  sessionItem: {
     display: 'flex',
     alignItems: 'center',
     gap: '14px',
-    padding: '12px',
-    border: '1px solid #F1F5F9',
-    borderRadius: '12px',
-    backgroundColor: '#FAFCFF',
-    textAlign: 'left'
-  },
-  hubRankBadgeCircle: {
-    width: '28px',
-    height: '28px',
-    borderRadius: '50%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '12px',
-    fontWeight: 800
-  },
-  hubTextDetailsMetadataStackGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-    flex: 1
-  },
-  hubPrimaryLocationNameTitleText: {
-    fontSize: '12px',
-    fontWeight: 700,
-    color: '#1E293B'
-  },
-  hubSecondaryVolumeCounterText: {
-    fontSize: '11px',
-    fontWeight: 600,
-    color: '#64748B'
-  },
-  hubStatusIndicatorLabelTagPillMarkup: {
-    fontSize: '10px',
-    fontWeight: 800,
-    textTransform: 'uppercase',
-    letterSpacing: '0.3px'
-  },
-  bottomDoubleGridCanvasRow: {
-    display: 'grid',
-    gridTemplateColumns: '1.6fr 1fr',
-    gap: '32px',
-    width: '100%',
-    alignItems: 'stretch'
-  },
-  tableWorkspaceCardContainer: {
-    backgroundColor: '#ffffff',
-    borderRadius: '16px',
-    border: '1px solid #E2E8F0',
-    padding: '24px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '20px',
-    boxSizing: 'border-box'
-  },
-  tableScrollFrameworkWrapper: {
-    width: '100%',
-    overflowX: 'auto'
-  },
-  tableStructureMarkup: {
-    width: '100%',
-    borderCollapse: 'collapse'
-  },
-  thLeftAligned: {
-    paddingBottom: '12px',
-    fontSize: '10px',
-    fontWeight: 800,
-    color: '#94A3B8',
-    borderBottom: '1px solid #F1F5F9',
-    letterSpacing: '0.5px',
-    textAlign: 'left'
-  },
-  thCenterAligned: {
-    paddingBottom: '12px',
-    fontSize: '10px',
-    fontWeight: 800,
-    color: '#94A3B8',
-    borderBottom: '1px solid #F1F5F9',
-    letterSpacing: '0.5px',
-    textAlign: 'center'
-  },
-  thRightAligned: {
-    paddingBottom: '12px',
-    fontSize: '10px',
-    fontWeight: 800,
-    color: '#94A3B8',
-    borderBottom: '1px solid #F1F5F9',
-    letterSpacing: '0.5px',
-    textAlign: 'right'
-  },
-  tableDataRowMarkup: {
-    borderBottom: '1px solid #F8FAFC'
-  },
-  tdPrimaryDriverNameCellText: {
-    padding: '14px 0',
-    fontSize: '13px',
-    fontWeight: 700,
-    color: '#1E293B',
-    textAlign: 'left'
-  },
-  tdCenterAlignedDataCellRowText: {
-    padding: '14px 0',
-    fontSize: '12px',
-    fontWeight: 600,
-    color: '#475569',
-    textAlign: 'center'
-  },
-  ratingStarFlexBadgeLine: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '4px',
-    fontWeight: 700
-  },
-  tdBoldTripsCounterCellRowText: {
-    padding: '14px 0',
-    fontSize: '12px',
-    fontWeight: 700,
-    color: '#1E3A8A',
-    textAlign: 'center'
-  },
-  tdRightAlignedDataCellRowText: {
-    padding: '14px 0',
-    textAlign: 'right'
-  },
-  statusBadgeIndicatorPillMarkup: {
-    fontSize: '10px',
-    fontWeight: 800,
-    padding: '4px 10px',
-    borderRadius: '6px',
-    display: 'inline-block'
-  },
-  engagementOverviewCardContainer: {
-    backgroundColor: '#ffffff',
-    borderRadius: '16px',
-    border: '1px solid #E2E8F0',
-    padding: '24px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '24px',
-    boxSizing: 'border-box'
-  },
-  engagementMetricsDataSplitRowContainer: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: '16px',
-    width: '100%'
-  },
-  engagementDataColumnBlockStack: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
     padding: '14px',
     border: '1px solid #F1F5F9',
     borderRadius: '12px',
     backgroundColor: '#FAFCFF',
     textAlign: 'left'
   },
-  engagementMicroTitleFieldLabel: {
-    fontSize: '9px',
-    fontWeight: 800,
-    color: '#94A3B8',
-    letterSpacing: '0.4px'
+  sessionIcon: {
+    width: '36px',
+    height: '36px',
+    borderRadius: '10px',
+    backgroundColor: '#EFF6FF',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0
   },
-  engagementMetricPrimaryLargeValueText: {
-    fontSize: '22px',
-    fontWeight: 800,
+  sessionTextStack: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+    flex: 1
+  },
+  sessionTitleRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  sessionDeviceName: {
+    fontSize: '13px',
+    fontWeight: 700,
     color: '#1E293B'
   },
-  progressionBarsStackTrackContainer: {
+  currentPill: {
+    fontSize: '9px',
+    fontWeight: 800,
+    backgroundColor: '#DCFCE7',
+    color: '#15803D',
+    padding: '2px 8px',
+    borderRadius: '50px',
+    textTransform: 'uppercase'
+  },
+  sessionSubText: {
+    fontSize: '11px',
+    color: '#64748B',
+    fontWeight: 500
+  },
+  auditLogsList: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '16px',
-    width: '100%'
+    gap: '14px'
   },
-  progressUnitGroupTrackBlock: {
+  auditLogItem: {
+    display: 'flex',
+    gap: '12px',
+    alignItems: 'flex-start',
+    textAlign: 'left',
+    paddingBottom: '12px',
+    borderBottom: '1px solid #F8FAFC'
+  },
+  auditDot: {
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    marginTop: '5px',
+    flexShrink: 0
+  },
+  auditTextStack: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '6px'
+    gap: '2px',
+    flex: 1
   },
-  progressLabelFlexRowLine: {
+  auditTitleRow: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center'
   },
-  progressLabelTitleText: {
-    fontSize: '10px',
-    fontWeight: 800,
-    color: '#64748B',
-    letterSpacing: '0.3px'
-  },
-  progressPercentageCounterLabelValueText: {
-    fontSize: '11px',
+  auditActionTitle: {
+    fontSize: '13px',
     fontWeight: 700,
     color: '#1E293B'
   },
-  progressBarBaseTrackLine: {
-    width: '100%',
-    height: '6px',
-    backgroundColor: '#E2E8F0',
-    borderRadius: '10px',
-    overflow: 'hidden'
+  auditTime: {
+    fontSize: '10px',
+    fontWeight: 700,
+    color: '#94A3B8'
   },
-  progressBarFilledInnerActiveLine: {
-    height: '100%',
-    backgroundColor: '#1E3A8A',
-    borderRadius: '10px'
+  auditDetails: {
+    fontSize: '12px',
+    color: '#64748B',
+    margin: '2px 0 0 0',
+    lineHeight: '1.4'
   },
-  loadingFallbackFrame: {
+  loadingFrame: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    height: '80vh',
+    height: '75vh',
     width: '100%'
   },
-  loadingSpinnerPlaceholder: {
+  loadingText: {
     fontSize: '14px',
     color: '#1E3A8A',
     fontWeight: 700
-  },
-  emptyStateTextWrapper: {
-    padding: '24px',
-    textAlign: 'center',
-    color: '#94A3B8',
-    fontSize: '12px',
-    fontWeight: 600
   }
 }

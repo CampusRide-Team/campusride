@@ -8,6 +8,7 @@ import {
   Bell, 
   Settings 
 } from 'lucide-react'
+import api from '../api/axios'
 
 const NAV_ITEMS = [
   { id: 'dashboard',           label: 'Dashboard',           icon: LayoutDashboard },
@@ -25,50 +26,36 @@ export default function Sidebar({ activePage = 'dashboard', onNavigate }) {
 
   // Dynamic Admin Profile State
   const [adminUser, setAdminUser] = useState({
-    name: 'Syncing Account...',
+    name: 'Administrator',
     role: 'System Administrator',
-    initials: '..'
+    initials: 'AD'
   })
 
   // Helper function to dynamically generate initials from any Full Name string
   const getInitials = (name) => {
-    if (!name || typeof name !== 'string') return '..'
+    if (!name || typeof name !== 'string') return 'AD'
     const parts = name.trim().split(/\s+/)
     if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
   }
 
   useEffect(() => {
-    // FLIP THIS TO TRUE ONCE YOUR MONGODB ACCESS IS APPROVED!
-    const isProductionReady = false
-
-    if (isProductionReady) {
-      const fetchAdminSession = async () => {
-        try {
-          // Replace with your exact axios/api client instance
-          const res = await api.get('/admin/auth/session')
-          if (res.data?.success && res.data?.user) {
-            const user = res.data.user
-            setAdminUser({
-              name: user.fullName,
-              role: user.roleTitle || 'System Administrator',
-              initials: getInitials(user.fullName)
-            })
-          }
-        } catch (err) {
-          console.error("Session missing or token expired:", err)
+    const fetchAdminSession = async () => {
+      try {
+        const res = await api.get('/auth/profile')
+        if (res.data?.success && res.data?.data?.user) {
+          const user = res.data.data.user
+          setAdminUser({
+            name: user.fullName || 'Campus Administrator',
+            role: 'System Administrator',
+            initials: getInitials(user.fullName)
+          })
         }
+      } catch (err) {
+        console.warn("Could not fetch admin session profile:", err?.message)
       }
-      fetchAdminSession()
-    } else {
-      // Staging Mock Session Document Tally
-      const mockName = 'Dr. Julian Vance'
-      setAdminUser({
-        name: mockName,
-        role: 'System Administrator',
-        initials: getInitials(mockName)
-      })
     }
+    fetchAdminSession()
   }, [])
 
   return (

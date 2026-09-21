@@ -98,6 +98,7 @@ export default function SettingsScreen({ onLogout }) {
     if (!window.confirm("Are you sure you want to end your session and log out of the CampusRide Admin Portal?")) return
     
     // Clear tokens and credentials storage state
+    localStorage.removeItem('adminToken')
     localStorage.removeItem('token')
     onLogout?.()
   }

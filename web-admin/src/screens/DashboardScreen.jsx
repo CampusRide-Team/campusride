@@ -194,11 +194,32 @@ export default function DashboardScreen() {
 
     hydrateDashboardData();
 
-    const liveGPSPollingTimer = setInterval(fetchLiveLocationsAndDemand, 2000);
+    const liveGPSPollingTimer = setInterval(() => {
+      fetchLiveLocationsAndDemand();
+    }, 5000);
 
-    const socketUrl = api.defaults.baseURL ? api.defaults.baseURL.split('/api/v1')[0] : 'https://c5m62bwc-5000.uks1.devtunnels.ms/api/v1';
+    const baseApiUrl = api.defaults.baseURL || 'http://localhost:5000/api/v1';
+    const socketUrl = baseApiUrl.split('/api/v1')[0] || 'http://localhost:5000';
+    const adminToken = localStorage.getItem('adminToken') || localStorage.getItem('token');
+
     socketRef.current = io(socketUrl, {
-      transports: ['websocket', 'polling']
+      transports: ['websocket', 'polling'],
+      auth: { token: adminToken ? adminToken.replace(/^["']|["']$/g, '').trim().replace(/^Bearer\s+/i, '') : '' }
+    });
+
+    socketRef.current.on('driver:telemetry', (data) => {
+      if (data && data.driverId) {
+        const coords = data.coordinates || (data.lat && data.lng ? [data.lng, data.lat] : null);
+        if (coords) {
+          driverLocationsRef.current[data.driverId] = {
+            driverId: data.driverId,
+            name: data.driverName || 'Driver',
+            lat: coords[1],
+            lng: coords[0]
+          };
+          updateMapMarkers();
+        }
+      }
     });
 
     socketRef.current.on('driver_location_update', (data) => {

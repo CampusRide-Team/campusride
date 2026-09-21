@@ -220,8 +220,8 @@ export default function UserDirectoryScreen() {
                             </div>
                           </td>
                           <td style={smStyles.tdStandardDataText}>
-                            {user.userType === 'STUDENT' ? (
-                              <span style={smStyles.roleStudentBadge}><GraduationCap size={12} /> Student</span>
+                            {user.userType === 'PASSENGER' || user.userType === 'STUDENT' ? (
+                              <span style={smStyles.roleStudentBadge}><Users size={12} /> Passenger</span>
                             ) : user.userType === 'DRIVER' ? (
                               <span style={{ ...smStyles.roleStudentBadge, backgroundColor: '#DCFCE7', color: '#15803D' }}><Car size={12} /> Driver</span>
                             ) : (

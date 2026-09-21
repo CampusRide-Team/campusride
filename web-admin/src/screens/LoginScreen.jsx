@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { Shield, Mail, Lock, RefreshCw } from 'lucide-react'
+import api from '../api/axios'
 
 export default function LoginScreen({ onLoginSuccess }) {
   const [email, setEmail] = useState('')
@@ -12,32 +13,32 @@ export default function LoginScreen({ onLoginSuccess }) {
     setError('')
     setLoading(true)
 
-    // Set this to true once you hook up your actual backend database
-    const isProductionReady = false; 
-
     try {
-      if (isProductionReady) {
-         // const response = await api.post('/admin/auth/login', { email, password })
-        // if (response.data?.success) {
-        //   onLoginSuccess?.(response.data.user)
-        // }
+      const response = await api.post('/auth/login', {
+        email: email.trim(),
+        password: password.trim(),
+        role: 'admin'
+      })
+
+      const result = response.data
+
+      if (result.success) {
+        if (result.data?.token) {
+          localStorage.setItem('adminToken', result.data.token)
+        }
+        onLoginSuccess?.(result.data?.user)
       } else {
-        //  Hardcoded Development Credentials Handshake (admin1@gmail.com / 24680)
-        setTimeout(() => {
-          if (email.trim() === 'admin1@gmail.com' && password === '24680') {
-            onLoginSuccess?.()
-          } else {
-            setError('Invalid administrative credentials payload or cryptographic token mismatch.')
-            setLoading(false)
-          }
-        }, 1000)
+        setError(result.error?.message || 'Invalid administrative credentials.')
       }
     } catch (err) {
-      console.error("Secure auth handshake exception:", err)
-      setError('Network validation failure. Failed executing secure auth socket handshake.')
+      console.error("Admin login network exception:", err)
+      const errorMsg = err.response?.data?.error?.message || err.response?.data?.message || 'Network connection failed. Could not connect to authentication gateway.'
+      setError(errorMsg)
+    } finally {
       setLoading(false)
     }
   }
+
 
   return (
     <div style={lgStyles.viewportShellWrapper}>
