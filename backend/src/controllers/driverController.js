@@ -1,5 +1,7 @@
 import User from "../models/User.js";
 import Ride from "../models/Ride.js";
+import DriverTrip from "../models/DriverTrip.js";
+import DISPATCH_CONFIG from "../config/dispatchConfig.js";
 
 export const getDriverProfile = async (req, res, next) => {
   try {
@@ -7,7 +9,7 @@ export const getDriverProfile = async (req, res, next) => {
     if (!driver)
       return res
         .status(404)
-        .json({ success: false, error: { message: "Driver not found" } });
+        .json({ success: false, error: { code: "DRIVER_NOT_FOUND", message: "Driver not found" } });
     res.json({ success: true, data: driver });
   } catch (error) {
     next(error);
@@ -19,7 +21,6 @@ export const updateDriverProfile = async (req, res, next) => {
     const allowedUpdates = {};
     if (req.body.fullName) allowedUpdates.fullName = req.body.fullName;
     if (req.body.phoneNumber) allowedUpdates.phoneNumber = req.body.phoneNumber;
-    
     if (req.body.expoPushToken) allowedUpdates.expoPushToken = req.body.expoPushToken;
 
     if (req.file?.path) {
@@ -36,7 +37,7 @@ export const updateDriverProfile = async (req, res, next) => {
     if (!driver) {
       return res
         .status(404)
-        .json({ success: false, error: { message: "Driver not found" } });
+        .json({ success: false, error: { code: "DRIVER_NOT_FOUND", message: "Driver not found" } });
     }
 
     const host = req.get('host');
@@ -63,6 +64,7 @@ export const updateDriverProfile = async (req, res, next) => {
         totalTrips: driver.totalTrips || 0,
         tripsToday: driver.tripsToday || 0,
         isApproved: driver.isApproved,
+        approvalStatus: driver.approvalStatus,
         avatarUri: formattedAvatarUri,
         avatarUrl: formattedAvatarUri,
         expoPushToken: driver.expoPushToken, 
@@ -79,9 +81,9 @@ export const getDriverAnalytics = async (req, res, next) => {
     today.setHours(0, 0, 0, 0);
 
     const [totalTrips, dailyTrips] = await Promise.all([
-      Ride.countDocuments({ driver: req.user._id, status: "completed" }),
-      Ride.countDocuments({
-        driver: req.user._id,
+      DriverTrip.countDocuments({ driverId: req.user._id, status: "completed" }),
+      DriverTrip.countDocuments({
+        driverId: req.user._id,
         status: "completed",
         updatedAt: { $gte: today },
       }),
@@ -95,20 +97,17 @@ export const getDriverAnalytics = async (req, res, next) => {
 
 export const getDriverEarnings = async (req, res, next) => {
   try {
-    const completedRides = await Ride.find({
-      driver: req.user._id,
+    const completedTrips = await DriverTrip.find({
+      driverId: req.user._id,
       status: "completed",
     }).sort({ createdAt: -1 });
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    // Fetch associated bookings to compute total earnings
     let totalEarnings = 0;
     let todaysEarnings = 0;
-
-    completedRides.forEach((ride) => {
-      totalEarnings += ride.fare;
-      if (new Date(ride.updatedAt) >= today) todaysEarnings += ride.fare;
-    });
 
     res.json({
       success: true,
@@ -116,9 +115,9 @@ export const getDriverEarnings = async (req, res, next) => {
         metrics: {
           totalEarnings,
           todaysEarnings,
-          totalTrips: completedRides.length,
+          totalTrips: completedTrips.length,
         },
-        recentTrips: completedRides.slice(0, 10),
+        recentTrips: completedTrips.slice(0, 10),
       },
     });
   } catch (error) {
@@ -135,7 +134,7 @@ export const updateDriverPreferences = async (req, res, next) => {
         .status(400)
         .json({
           success: false,
-          error: { message: "Preferences payload missing" },
+          error: { code: "MISSING_PAYLOAD", message: "Preferences payload missing" },
         });
     }
 
@@ -164,7 +163,7 @@ export const getDriverNotifications = async (req, res, next) => {
     if (!user) {
       return res.status(404).json({
         success: false,
-        error: { message: "Driver user record not found" }
+        error: { code: "DRIVER_NOT_FOUND", message: "Driver user record not found" }
       });
     }
 
@@ -194,7 +193,7 @@ export const markNotificationAsRead = async (req, res, next) => {
     if (!user) {
       return res.status(404).json({
         success: false,
-        error: { message: "Notification not found" },
+        error: { code: "NOTIFICATION_NOT_FOUND", message: "Notification not found" },
       });
     }
 
@@ -224,64 +223,165 @@ export const getPendingCampusRequests = async (req, res, next) => {
   }
 };
 
+/**
+ * Updates driver availability and heartbeat location.
+ * Enforces driver approval status gate.
+ */
 export const updateDriverLocation = async (req, res, next) => {
   try {
     const driverId = req.user.id || req.user._id;
+    const user = await User.findById(driverId);
+
+    if (!user || user.role !== 'driver' || (user.approvalStatus !== 'approved' && user.isApproved !== true)) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'DRIVER_NOT_APPROVED', message: 'Driver is not approved or authorized to go online' }
+      });
+    }
+
     const { latitude, longitude, isOnline } = req.body;
 
     const updateData = {
-      lastSeen: new Date() // 🔑 Updates heartbeat timestamp on every GPS ping
+      lastSeen: new Date()
     };
 
     if (latitude !== undefined && longitude !== undefined) {
+      const lat = parseFloat(latitude);
+      const lng = parseFloat(longitude);
+
+      if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_COORDINATES', message: 'Coordinates must be valid GeoJSON [longitude, latitude]' }
+        });
+      }
+
       updateData.currentLocation = {
         type: 'Point',
-        coordinates: [parseFloat(longitude), parseFloat(latitude)]
+        coordinates: [lng, lat]
       };
     }
+
     if (isOnline !== undefined) {
-      updateData.isOnline = isOnline;
+      updateData.isOnline = Boolean(isOnline);
     }
 
     const updatedDriver = await User.findByIdAndUpdate(
       driverId,
       { $set: updateData },
-      { new: true }
+      { returnDocument: 'after' }
     ).select('-password');
 
-    const io = req.app.get('io');
-    if (io) {
-      if (updatedDriver.isOnline === false) {
-        io.emit('driverWentOffline', { driverId: updatedDriver._id });
-      } else {
-        io.emit('driverLocationUpdate', {
-          id: updatedDriver._id,
-          fullName: updatedDriver.fullName,
-          vehicleModel: updatedDriver.vehicleModel,
-          vehicleLicensePlate: updatedDriver.vehicleLicensePlate,
-          latitude,
-          longitude,
-          isOnline: updatedDriver.isOnline
-        });
-      }
-    }
-
-    res.json({ success: true, data: { isOnline: updatedDriver.isOnline } });
+    res.json({ 
+      success: true, 
+      data: { 
+        isOnline: updatedDriver.isOnline,
+        lastSeen: updatedDriver.lastSeen,
+        currentLocation: updatedDriver.currentLocation
+      } 
+    });
   } catch (error) {
     next(error);
   }
 };
 
+/**
+ * Driver Active Telemetry Endpoint (REST Fallback / Synchronization).
+ * Validates driver trip ownership, speed, and coordinate boundaries.
+ */
+export const updateDriverTelemetry = async (req, res, next) => {
+  try {
+    const driverId = req.user.id || req.user._id;
+    const { tripId, coordinates, heading, speed, timestamp } = req.body;
+
+    if (!coordinates || !Array.isArray(coordinates) || coordinates.length !== 2) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_COORDINATES', message: 'Telemetry coordinates must be an array of [longitude, latitude]' }
+      });
+    }
+
+    const [lng, lat] = coordinates;
+    if (isNaN(lng) || isNaN(lat) || lng < -180 || lng > 180 || lat < -90 || lat > 90) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_COORDINATES', message: 'Coordinates out of bounds' }
+      });
+    }
+
+    if (speed !== undefined && speed > DISPATCH_CONFIG.MAX_TELEMETRY_SPEED_KMH) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'TELEMETRY_SPEED_EXCEEDED', message: `Reported speed (${speed} km/h) exceeds maximum allowed threshold (${DISPATCH_CONFIG.MAX_TELEMETRY_SPEED_KMH} km/h)` }
+      });
+    }
+
+    if (tripId) {
+      const trip = await DriverTrip.findById(tripId);
+      if (!trip) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'TRIP_NOT_FOUND', message: 'DriverTrip not found' }
+        });
+      }
+
+      if (trip.driverId.toString() !== driverId.toString()) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'TRIP_ACCESS_DENIED', message: 'Driver does not own this trip' }
+        });
+      }
+
+      // Emit strictly to the scoped trip room (no global broadcast)
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`trip:${tripId}`).emit('driver:telemetry', {
+          tripId,
+          driverId,
+          coordinates: [lng, lat],
+          heading: heading || 0,
+          speed: speed || 0,
+          timestamp: timestamp || new Date()
+        });
+      }
+    }
+
+    // Update driver latest heartbeat
+    await User.findByIdAndUpdate(driverId, {
+      $set: {
+        'currentLocation.coordinates': [lng, lat],
+        'currentLocation.type': 'Point',
+        lastSeen: new Date()
+      }
+    });
+
+    res.json({ success: true, message: 'Telemetry received and routed' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Returns discovery-eligible active drivers for map preview.
+ */
 export const getActiveDriverLocations = async (req, res, next) => {
   try {
-    const oneMinuteAgo = new Date(Date.now() - 60000); // 🔑 60-second activity window threshold
+    const freshnessThreshold = new Date(Date.now() - DISPATCH_CONFIG.DRIVER_HEARTBEAT_FRESHNESS_MS);
+
+    // Active trips in progress
+    const activeTrips = await DriverTrip.find({
+      status: { $in: ['dispatched', 'active'] }
+    }).select('driverId');
+    const busyDriverIds = activeTrips.map(t => t.driverId);
 
     const activeDrivers = await User.find({
       role: 'driver',
+      approvalStatus: 'approved',
       isOnline: true,
-      lastSeen: { $gte: oneMinuteAgo }, // Excludes drivers whose app crashed or went offline without cleanup
+      _id: { $nin: busyDriverIds },
+      lastSeen: { $gte: freshnessThreshold },
       'currentLocation.coordinates': { $exists: true, $not: { $size: 0 } }
-    }).select('fullName phoneNumber vehicleModel vehicleLicensePlate currentLocation ratings avatarUri');
+    }).select('fullName phoneNumber vehicleModel vehicleLicensePlate currentLocation ratings avatarUri driverProfile');
 
     const formattedDrivers = activeDrivers.map(driver => {
       const coords = driver.currentLocation?.coordinates || [0, 0];
@@ -290,12 +390,11 @@ export const getActiveDriverLocations = async (req, res, next) => {
         id: driver._id,
         fullName: driver.fullName,
         phoneNumber: driver.phoneNumber,
-        vehicleModel: driver.vehicleModel || 'Campus Vehicle',
-        vehicleLicensePlate: driver.vehicleLicensePlate || 'N/A',
+        vehicleModel: driver.driverProfile?.vehicle?.model || driver.vehicleModel || 'Campus Vehicle',
+        vehicleLicensePlate: driver.driverProfile?.vehicle?.licensePlate || driver.vehicleLicensePlate || 'N/A',
         avatarUri: driver.avatarUri,
         lat: coords[1],
-        lng: coords[0],
-        eta: '2 mins away'
+        lng: coords[0]
       };
     });
 

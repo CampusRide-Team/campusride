@@ -3,11 +3,19 @@ import rateLimit from 'express-rate-limit';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { register, login, verifyLoginOtp } from '../controllers/authController.js';
+import { 
+  register, 
+  login, 
+  verifyLoginOtp, 
+  getUserProfile, 
+  updateUserProfile, 
+  googleAuth 
+} from '../controllers/authController.js';
+import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-//  Ensure uploads/ folder exists on server boot so Multer never crashes
+// Ensure uploads/ folder exists on server boot so Multer never crashes
 const uploadDir = path.join(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
@@ -36,9 +44,13 @@ const authLimiter = rateLimit({
 });
 
 router.post('/login', login);
-router.post('/login/verify-otp', verifyLoginOtp); // Added missing OTP verification route
+router.post('/login/verify-otp', verifyLoginOtp);
+router.post('/google', googleAuth);
 
- router.post(
+router.get('/profile', protect, getUserProfile);
+router.patch('/profile', protect, upload.single('avatar'), updateUserProfile);
+
+router.post(
   '/register', 
   upload.fields([
     { name: 'insuranceFile', maxCount: 1 },

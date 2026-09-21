@@ -9,21 +9,24 @@ import {
   updateDriverPreferences,
   updateDriverProfile,
   updateDriverLocation,
+  updateDriverTelemetry,
   getActiveDriverLocations
 } from "../controllers/driverController.js";
 import { acceptRide } from "../controllers/rideController.js";
-import { protect, requireRole } from "../middleware/authMiddleware.js";
+import { protect, requireApprovedDriver, requireRole } from "../middleware/authMiddleware.js";
 import { upload } from "../middleware/upload.js";
 
 const router = express.Router();
 
-// --- Public / Student Accessible Endpoints ---
+// --- Public / Passenger Accessible Endpoints ---
 router.get("/active-locations", getActiveDriverLocations);
 
 // --- Driver Specific Endpoints (Protected) ---
-router.put("/location", protect, updateDriverLocation);
+router.put("/location", protect, requireApprovedDriver, updateDriverLocation);
+router.put("/availability", protect, requireApprovedDriver, updateDriverLocation);
+router.put("/telemetry", protect, requireApprovedDriver, updateDriverTelemetry);
 
-// Accept Ride Aliases
+// Legacy Accept Ride Aliases
 router.put("/:id/accept", protect, requireRole("driver"), acceptRide);
 router.put("/accept/:id", protect, requireRole("driver"), acceptRide);
 
