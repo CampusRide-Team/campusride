@@ -28,7 +28,8 @@
     },
     "owner": "byk_moni1",
     "plugins": [
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-font"
     ]
   }
 }

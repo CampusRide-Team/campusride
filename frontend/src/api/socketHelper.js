@@ -5,40 +5,41 @@ import { getApiBaseUrl } from './axios';
 let socketInstance = null;
 
 export const getPersistentSocket = async () => {
+  const rawToken = await AsyncStorage.getItem("token") || 
+                   await AsyncStorage.getItem("user_token") || 
+                   await AsyncStorage.getItem("passenger_token") ||
+                   await AsyncStorage.getItem("driver_token") || 
+                   await AsyncStorage.getItem("auth_token");
+
+  const cleanToken = rawToken ? rawToken.replace(/^["']|["']$/g, '').trim().replace(/^Bearer\s+/i, '') : '';
+
+  // Guard: Unauthenticated sessions (onboarding, login, splash) do not establish active ride socket connections
+  if (!cleanToken) {
+    return null;
+  }
+
   if (!socketInstance) {
-    const rawToken = await AsyncStorage.getItem("token") || 
-                     await AsyncStorage.getItem("user_token") || 
-                     await AsyncStorage.getItem("passenger_token") ||
-                     await AsyncStorage.getItem("driver_token") || 
-                     await AsyncStorage.getItem("auth_token");
-    
-    const cleanToken = rawToken ? rawToken.replace(/^["']|["']$/g, '').trim().replace(/^Bearer\s+/i, '') : '';
-    
     const socketServerUrl = getApiBaseUrl().replace(/\/api\/v1\/?$/, '').replace(/\/$/, '');
-      
+
     socketInstance = io(socketServerUrl, {
       transports: ['websocket'],
       auth: { token: cleanToken },
       autoConnect: true,
       reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 1000,
+      reconnectionAttempts: 3,
+      reconnectionDelay: 2500,
+      reconnectionDelayMax: 10000,
+      timeout: 10000,
     });
 
     socketInstance.on("connect", () => {
-      console.log("🟢 Persistent Socket Connected:", socketInstance.id);
+      console.log("🟢 Authenticated Socket Connected:", socketInstance.id);
     });
 
     socketInstance.on("connect_error", (err) => {
-      console.error("❌ Socket Connection Error:", err.message);
+      console.warn("⚠️ Socket connection notice:", err.message);
     });
   } else if (socketInstance && !socketInstance.connected) {
-    const rawToken = await AsyncStorage.getItem("token") || 
-                     await AsyncStorage.getItem("user_token") || 
-                     await AsyncStorage.getItem("passenger_token") ||
-                     await AsyncStorage.getItem("driver_token") || 
-                     await AsyncStorage.getItem("auth_token");
-    const cleanToken = rawToken ? rawToken.replace(/^["']|["']$/g, '').trim().replace(/^Bearer\s+/i, '') : '';
     socketInstance.auth = { token: cleanToken };
     socketInstance.connect();
   }
@@ -51,4 +52,4 @@ export const disconnectSocket = () => {
     socketInstance.disconnect();
     socketInstance = null;
   }
-};
+};
