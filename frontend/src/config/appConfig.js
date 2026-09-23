@@ -18,8 +18,23 @@ export const SUPPORT_CONFIG = {
   ]
 };
 
+// TODO(CAMPUSRIDE-AUTH): TEMPORARY DEV-ONLY OTP BYPASS
+// This exists only to unblock frontend development while real
+// phone/SMS verification is not yet configured.
+// It MUST NOT be treated as genuine phone verification or authentication.
+// Remove/disable this path when production OTP integration is completed.
+export const isAuthDevBypassEnabled = () => {
+  return (
+    typeof __DEV__ !== 'undefined' &&
+    __DEV__ === true &&
+    process.env.EXPO_PUBLIC_AUTH_DEV_BYPASS === 'true'
+  );
+};
+
 const appConfig = {
   SUPPORT_CONFIG,
+  // TODO(CAMPUSRIDE-AUTH): TEMPORARY DEV-ONLY OTP BYPASS
+  authDevBypassEnabled: isAuthDevBypassEnabled(),
 };
 
 export default appConfig;
