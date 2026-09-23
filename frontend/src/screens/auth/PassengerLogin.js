@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -9,394 +9,222 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  StatusBar,
-} from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import api from "../../api/axios";
-
-// Modern Electric Vehicle Visual Graphic
-const EVIllustration = () => (
-  <View style={styles.evContainer}>
-    <View style={styles.evBody}>
-      <View style={styles.evRoof} />
-      <View style={styles.evHood} />
-      <View style={styles.evTrunk} />
-      <View style={styles.evWindowFront} />
-      <View style={styles.evWindowRear} />
-      <View style={styles.evDoorLine} />
-      <View style={styles.evHandle} />
-      <View style={styles.evHeadlight} />
-      <View style={styles.evTaillight} />
-      <View style={styles.evChargingPort}>
-        <Ionicons name="flash" size={7} color="#22C55E" />
-      </View>
-      <View style={styles.wheelArchFront}>
-        <View style={styles.wheel}>
-          <View style={styles.wheelRim} />
-          <View style={styles.wheelSpokeH} />
-          <View style={styles.wheelSpokeV} />
-          <View style={styles.wheelCenter} />
-        </View>
-      </View>
-      <View style={styles.wheelArchRear}>
-        <View style={styles.wheel}>
-          <View style={styles.wheelRim} />
-          <View style={styles.wheelSpokeH} />
-          <View style={styles.wheelSpokeV} />
-          <View style={styles.wheelCenter} />
-        </View>
-      </View>
-      <View style={styles.evShadow} />
-    </View>
-    <View style={styles.roadLine} />
-  </View>
-);
+  useWindowDimensions,
+} from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { colors, fonts } from '../../theme';
+import api from '../../api/axios';
 
 const PassengerLogin = ({
   onPassengerLogin,
-  onStudentLogin,
   onCreateAccount,
   onGoogleLogin,
   onBack,
 }) => {
-  const [identifier, setIdentifier] = useState("");
-  const [password, setPassword] = useState("");
-  const [otpCode, setOtpCode] = useState("");
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [isOtpSent, setIsOtpSent] = useState(false);  
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
 
-  const validateCredentials = () => {
-    const newErrors = {};
+  const validate = () => {
+    const errs = {};
     if (!identifier.trim()) {
-      newErrors.identifier = "Email or phone number is required";
+      errs.identifier = 'Phone number or campus email is required';
     }
-    if (!password.trim()) newErrors.password = "Password is required";
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    if (!password.trim()) {
+      errs.password = 'Password is required';
+    }
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
   };
 
-  const validateOtp = () => {
-    const newErrors = {};
-    if (!otpCode.trim()) {
-      newErrors.otpCode = "Verification OTP code is required";
-    } else if (otpCode.trim().length < 4) {
-      newErrors.otpCode = "Enter complete verification code";
-    }
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
+  const handleLogin = async () => {
+    if (!validate()) return;
+    setLoading(true);
+    setErrors({});
 
-  const handleActionClick = async () => {
-    const trimmedInput = identifier.trim();
+    try {
+      const payload = {
+        identifier: identifier.trim(),
+        password: password.trim(),
+        role: 'passenger',
+      };
 
-    if (!isOtpSent) {
-      if (!validateCredentials()) return;
-      setLoading(true);
-      setErrors({});
+      const response = await api.post('/auth/login', payload);
 
-      try {
-        const payload = { 
-          email: trimmedInput, 
-          password, 
-          role: 'passenger' 
-        };
-
-        const response = await api.post('/auth/login', payload);
-        const result = response.data;
-
-        if (!result.success) {
-          throw new Error(result.error?.message || "Invalid credentials");
+      if (response.data?.success) {
+        if (onPassengerLogin) {
+          await onPassengerLogin(response.data);
         }
-
-        // MVP Direct Login: If the backend returns a token, complete login immediately
-        // without requiring OTP verification. OTP flow is preserved for future re-enablement.
-        if (result.data && result.data.token) {
-          await AsyncStorage.setItem('user_token', result.data.token);
-          await AsyncStorage.setItem('token', result.data.token);
-
-          setLoading(false);
-          const loginHandler = onPassengerLogin || onStudentLogin;
-          if (loginHandler) loginHandler(result);
-          return;
-        }
-
-        // Future OTP flow: If backend does NOT return a token (OTP required),
-        // transition to OTP verification state
-        setLoading(false);
-        setIsOtpSent(true);
-
-      } catch (err) {
-        setLoading(false);
-        const errorMsg = err.response?.data?.error?.message || err.response?.data?.message || err.message || "Login failed. Please try again.";
-        setErrors({ general: errorMsg });
+      } else {
+        setErrors({ general: response.data?.message || 'Login failed. Please check your credentials.' });
       }
-    } else {
-      // OTP verification step (preserved for future re-enablement)
-      if (!validateOtp()) return;
-      setLoading(true);
-      setErrors({});
-
-      try {
-        const payload = { email: trimmedInput, otpCode: otpCode.trim() };
-
-        const response = await api.post('/auth/login/verify-otp', payload);
-        const result = response.data;
-
-        if (!result.success) {
-          throw new Error(result.error?.message || "Incorrect or expired OTP verification code.");
-        }
-
-        if (result.data && result.data.token) {
-          await AsyncStorage.setItem('user_token', result.data.token);
-          await AsyncStorage.setItem('token', result.data.token);
-        }
-
-        setLoading(false);
-        const loginHandler = onPassengerLogin || onStudentLogin;
-        if (loginHandler) loginHandler(result);
-
-      } catch (err) {
-        setLoading(false);
-        const errorMsg = err.response?.data?.error?.message || err.response?.data?.message || err.message || "OTP verification failed.";
-        setErrors({ general: errorMsg });
-      }
+    } catch (err) {
+      console.warn('[PassengerLogin] Auth failure:', err.message);
+      const serverMsg = err.response?.data?.message || err.response?.data?.error?.message;
+      setErrors({
+        general: serverMsg || 'Unable to sign in. Please verify your phone number and password.',
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Back Button */}
-        {onBack && (
-          <TouchableOpacity
-            style={styles.backBtn}
-            onPress={onBack}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons name="arrow-back" size={24} color="#1E3A8A" />
-          </TouchableOpacity>
-        )}
+      <View style={[styles.inner, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+        <StatusBar style="dark" />
 
-        {/* Brand Header */}
-        <View style={styles.brandHeader}>
-          <Text style={styles.appName}>CampusRide</Text>
-          <Text style={styles.appTagline}>Safe rides for everyone on campus</Text>
+        {/* Navigation Bar */}
+        <View style={styles.navBar}>
+          {onBack ? (
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={onBack}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
+              accessibilityHint="Returns to authentication options"
+              hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+            >
+              <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.backButtonPlaceholder} />
+          )}
         </View>
 
-        {/* EV Illustration */}
-        <EVIllustration />
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Header Typography */}
+          <View style={styles.headerBlock}>
+            <Text style={styles.title}>Welcome Back</Text>
+            <Text style={styles.subtitle}>Sign in to your CampusRide account</Text>
+          </View>
 
-        {/* Main Card */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>
-            {isOtpSent ? "Enter Verification Code" : "Passenger Login"}
-          </Text>
-          <Text style={styles.cardSubtitle}>
-            {isOtpSent
-              ? `We sent a 6-digit code to ${identifier}`
-              : "Welcome back! Please enter your details"}
-          </Text>
-
-          {/* General Error Message */}
-          {errors.general ? (
-            <View style={styles.generalErrorBanner}>
-              <Ionicons name="alert-circle" size={18} color="#EF4444" />
-              <Text style={styles.generalErrorText}>{errors.general}</Text>
-            </View>
-          ) : null}
-
-          {/* Form Fields */}
-          {!isOtpSent ? (
-            <>
-              {/* Email / Phone Field */}
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Email or Phone Number</Text>
-                <View
-                  style={[
-                    styles.inputContainer,
-                    errors.identifier && styles.inputError,
-                  ]}
-                >
-                  <Ionicons
-                    name="mail-outline"
-                    size={20}
-                    color="#94A3B8"
-                    style={styles.inputIcon}
-                  />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="student@university.edu"
-                    placeholderTextColor="#94A3B8"
-                    value={identifier}
-                    onChangeText={(text) => {
-                      setIdentifier(text);
-                      if (errors.identifier) {
-                        setErrors((prev) => ({ ...prev, identifier: null }));
-                      }
-                    }}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    keyboardType="email-address"
-                    editable={!loading}
-                  />
-                </View>
-                {errors.identifier ? (
-                  <Text style={styles.errorText}>{errors.identifier}</Text>
-                ) : null}
+          {/* Form Surface Card */}
+          <View style={styles.formCard}>
+            {errors.general ? (
+              <View style={styles.generalErrorBox}>
+                <Ionicons name="alert-circle" size={18} color={colors.semantic.danger} />
+                <Text style={styles.generalErrorText}>{errors.general}</Text>
               </View>
+            ) : null}
 
-              {/* Password Field */}
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Password</Text>
-                <View
-                  style={[
-                    styles.inputContainer,
-                    errors.password && styles.inputError,
-                  ]}
-                >
-                  <Ionicons
-                    name="lock-closed-outline"
-                    size={20}
-                    color="#94A3B8"
-                    style={styles.inputIcon}
-                  />
-                  <TextInput
-                    style={[styles.input, { flex: 1 }]}
-                    placeholder="Enter your password"
-                    placeholderTextColor="#94A3B8"
-                    value={password}
-                    onChangeText={(text) => {
-                      setPassword(text);
-                      if (errors.password) {
-                        setErrors((prev) => ({ ...prev, password: null }));
-                      }
-                    }}
-                    secureTextEntry={!showPassword}
-                    editable={!loading}
-                  />
-                  <TouchableOpacity
-                    onPress={() => setShowPassword((p) => !p)}
-                    style={styles.eyeBtn}
-                  >
-                    <Ionicons
-                      name={showPassword ? "eye-off-outline" : "eye-outline"}
-                      size={20}
-                      color="#94A3B8"
-                    />
-                  </TouchableOpacity>
-                </View>
-                {errors.password ? (
-                  <Text style={styles.errorText}>{errors.password}</Text>
-                ) : null}
-              </View>
-            </>
-          ) : (
-            /* OTP Field */
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>6-Digit Verification Code</Text>
-              <View
-                style={[
-                  styles.inputContainer,
-                  errors.otpCode && styles.inputError,
-                ]}
-              >
+            {/* Phone or Email Input Field */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Phone Number or Campus Email</Text>
+              <View style={[styles.inputContainer, errors.identifier && styles.inputError]}>
                 <Ionicons
-                  name="key-outline"
+                  name="person-outline"
                   size={20}
-                  color="#94A3B8"
-                  style={styles.inputIcon}
+                  color={colors.text.secondary}
+                  style={styles.leadingIcon}
                 />
                 <TextInput
-                  style={styles.input}
-                  placeholder="Enter 6-digit OTP code"
-                  placeholderTextColor="#94A3B8"
-                  value={otpCode}
-                  onChangeText={(text) => {
-                    setOtpCode(text);
-                    if (errors.otpCode) {
-                      setErrors((prev) => ({ ...prev, otpCode: null }));
-                    }
+                  style={styles.textInput}
+                  placeholder="024 123 4567 or student@st.ug.edu.gh"
+                  placeholderTextColor={colors.text.muted}
+                  value={identifier}
+                  onChangeText={(val) => {
+                    setIdentifier(val);
+                    if (errors.identifier) setErrors((prev) => ({ ...prev, identifier: null }));
                   }}
-                  keyboardType="number-pad"
-                  maxLength={6}
-                  editable={!loading}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="email-address"
                 />
               </View>
-              {errors.otpCode ? (
-                <Text style={styles.errorText}>{errors.otpCode}</Text>
+              {errors.identifier ? (
+                <Text style={styles.errorText}>{errors.identifier}</Text>
               ) : null}
-
-              <TouchableOpacity
-                onPress={() => {
-                  setIsOtpSent(false);
-                  setOtpCode("");
-                  setErrors({});
-                }}
-                style={styles.resendBtn}
-              >
-                <Text style={styles.resendText}>← Back to password login</Text>
-              </TouchableOpacity>
             </View>
-          )}
 
-          {/* Primary Action Button */}
-          <TouchableOpacity
-            style={[styles.primaryBtn, loading && styles.btnDisabled]}
-            onPress={handleActionClick}
-            activeOpacity={0.85}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <Text style={styles.primaryBtnText}>
-                {isOtpSent ? "Verify & Log In" : "Log In"}
-              </Text>
-            )}
-          </TouchableOpacity>
-
-          {/* Divider */}
-          {!isOtpSent && (
-            <>
-              <View style={styles.dividerRow}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>or continue with</Text>
-                <View style={styles.dividerLine} />
+            {/* Password Input Field */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Password</Text>
+              <View style={[styles.inputContainer, errors.password && styles.inputError]}>
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={20}
+                  color={colors.text.secondary}
+                  style={styles.leadingIcon}
+                />
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="Enter your password"
+                  placeholderTextColor={colors.text.muted}
+                  value={password}
+                  onChangeText={(val) => {
+                    setPassword(val);
+                    if (errors.password) setErrors((prev) => ({ ...prev, password: null }));
+                  }}
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                />
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
+                  activeOpacity={0.7}
+                  style={styles.trailingIcon}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons
+                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                    size={20}
+                    color={colors.text.secondary}
+                  />
+                </TouchableOpacity>
               </View>
+              {errors.password ? (
+                <Text style={styles.errorText}>{errors.password}</Text>
+              ) : null}
+            </View>
 
-              {/* Google Button */}
-              <TouchableOpacity
-                style={styles.googleBtn}
-                onPress={onGoogleLogin}
-                activeOpacity={0.85}
-              >
-                <Ionicons name="logo-google" size={18} color="#EA4335" />
-                <Text style={styles.googleBtnText}>Continue with Google</Text>
-              </TouchableOpacity>
-            </>
-          )}
-
-          {/* Create Account Link */}
-          <View style={styles.signupRow}>
-            <Text style={styles.signupPrompt}>Don't have an account? </Text>
-            <TouchableOpacity onPress={onCreateAccount}>
-              <Text style={styles.signupLink}>Sign Up</Text>
+            {/* Sign In Primary CTA */}
+            <TouchableOpacity
+              style={styles.signInBtn}
+              onPress={handleLogin}
+              disabled={loading}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Sign in"
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color={colors.brand.onGoldText} />
+              ) : (
+                <Text style={styles.signInBtnText}>Sign In</Text>
+              )}
             </TouchableOpacity>
           </View>
-        </View>
-      </ScrollView>
+
+          {/* Create Account Link Row */}
+          <View style={styles.signupRow}>
+            <Text style={styles.signupPrompt}>Don't have an account? </Text>
+            <TouchableOpacity
+              onPress={onCreateAccount}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Create account"
+              hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+            >
+              <Text style={styles.signupLink}>Create account</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </View>
     </KeyboardAvoidingView>
   );
 };
@@ -404,383 +232,154 @@ const PassengerLogin = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: colors.brand.baseBackground, // Canonical #ECE5D2
   },
-  scroll: {
+  inner: {
+    flex: 1,
+  },
+  navBar: {
+    height: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  backButton: {
+    width: 48,
+    height: 48,
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+  },
+  backButtonPlaceholder: {
+    width: 48,
+    height: 48,
+  },
+  scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 24,
-    paddingTop: 48,
-    paddingBottom: 40,
-    alignItems: "center",
+    paddingTop: 8,
+    paddingBottom: 32,
+    justifyContent: 'center',
   },
-  backBtn: {
-    alignSelf: "flex-start",
-    marginBottom: 8,
-    padding: 4,
+  headerBlock: {
+    alignItems: 'center',
+    marginBottom: 24,
   },
-  brandHeader: {
-    alignItems: "center",
-    marginBottom: 16,
+  title: {
+    fontFamily: fonts.bold,
+    fontSize: 26,
+    color: colors.text.primary, // #1A1815
+    textAlign: 'center',
+    letterSpacing: -0.4,
   },
-  appName: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: "#1E3A8A",
-    letterSpacing: -0.5,
+  subtitle: {
+    fontFamily: fonts.medium,
+    fontSize: 15,
+    color: colors.text.secondary, // #6B665C
+    textAlign: 'center',
+    marginTop: 6,
   },
-  appTagline: {
-    fontSize: 13,
-    color: "#64748B",
-    marginTop: 2,
-    fontWeight: "500",
-  },
-  evContainer: {
-    width: "100%",
-    height: 90,
-    alignItems: "center",
-    justifyContent: "flex-end",
-    marginBottom: 20,
-  },
-  evBody: {
-    width: 140,
-    height: 50,
-    position: "relative",
-  },
-  evRoof: {
-    position: "absolute",
-    top: 0,
-    left: 28,
-    width: 75,
-    height: 24,
-    backgroundColor: "#1E3A8A",
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 10,
-  },
-  evHood: {
-    position: "absolute",
-    top: 20,
-    right: 0,
-    width: 40,
-    height: 22,
-    backgroundColor: "#2563EB",
-    borderTopRightRadius: 8,
-    borderBottomRightRadius: 4,
-  },
-  evTrunk: {
-    position: "absolute",
-    top: 20,
-    left: 0,
-    width: 35,
-    height: 22,
-    backgroundColor: "#1D4ED8",
-    borderTopLeftRadius: 6,
-    borderBottomLeftRadius: 4,
-  },
-  evWindowFront: {
-    position: "absolute",
-    top: 3,
-    left: 68,
-    width: 30,
-    height: 18,
-    backgroundColor: "#BAE6FD",
-    borderTopRightRadius: 6,
-  },
-  evWindowRear: {
-    position: "absolute",
-    top: 3,
-    left: 33,
-    width: 30,
-    height: 18,
-    backgroundColor: "#BAE6FD",
-    borderTopLeftRadius: 8,
-  },
-  evDoorLine: {
-    position: "absolute",
-    top: 22,
-    left: 65,
-    width: 1.5,
-    height: 20,
-    backgroundColor: "#1E40AF",
-  },
-  evHandle: {
-    position: "absolute",
-    top: 25,
-    left: 52,
-    width: 8,
-    height: 2.5,
-    backgroundColor: "#93C5FD",
-    borderRadius: 1,
-  },
-  evHeadlight: {
-    position: "absolute",
-    top: 24,
-    right: 0,
-    width: 5,
-    height: 7,
-    backgroundColor: "#FDE047",
-    borderTopLeftRadius: 2,
-    borderBottomLeftRadius: 2,
-  },
-  evTaillight: {
-    position: "absolute",
-    top: 23,
-    left: 0,
-    width: 4,
-    height: 7,
-    backgroundColor: "#EF4444",
-    borderTopRightRadius: 2,
-    borderBottomRightRadius: 2,
-  },
-  evChargingPort: {
-    position: "absolute",
-    top: 24,
-    left: 8,
-    width: 11,
-    height: 11,
-    borderRadius: 5.5,
-    backgroundColor: "#DCFCE7",
-    borderWidth: 1,
-    borderColor: "#86EFAC",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  wheelArchFront: {
-    position: "absolute",
-    bottom: -10,
-    right: 18,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: "#F8FAFC",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  wheelArchRear: {
-    position: "absolute",
-    bottom: -10,
-    left: 14,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: "#F8FAFC",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  wheel: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: "#1E293B",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: "#475569",
-  },
-  wheelRim: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 1.5,
-    borderColor: "#94A3B8",
-    position: "absolute",
-  },
-  wheelSpokeH: {
-    position: "absolute",
-    width: 12,
-    height: 1.5,
-    backgroundColor: "#94A3B8",
-  },
-  wheelSpokeV: {
-    position: "absolute",
-    width: 1.5,
-    height: 12,
-    backgroundColor: "#94A3B8",
-  },
-  wheelCenter: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#2563EB",
-    position: "absolute",
-  },
-  evShadow: {
-    position: "absolute",
-    bottom: -12,
-    left: 5,
-    width: 130,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "rgba(30, 58, 138, 0.08)",
-  },
-  roadLine: {
-    width: 200,
-    height: 2,
-    backgroundColor: "#E2E8F0",
-    borderRadius: 1,
-    marginTop: 10,
-  },
-  card: {
-    width: "100%",
-    backgroundColor: "#FFFFFF",
+  formCard: {
+    backgroundColor: colors.surface.base, // #FFFFFF
     borderRadius: 20,
-    padding: 24,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
-    shadowColor: "#1E3A8A",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 16,
-    elevation: 3,
+    borderColor: colors.border.subtle, // #D8D2C3
+    padding: 22,
+    gap: 18,
+    shadowColor: '#1A1815',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
   },
-  cardTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#0F172A",
-    textAlign: "center",
-  },
-  cardSubtitle: {
-    fontSize: 13,
-    color: "#64748B",
-    textAlign: "center",
-    marginTop: 4,
-    marginBottom: 20,
-  },
-  generalErrorBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FEF2F2",
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "#FECACA",
+  generalErrorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.semantic.dangerTint,
+    borderRadius: 10,
+    padding: 12,
     gap: 8,
   },
   generalErrorText: {
-    fontSize: 12,
-    color: "#DC2626",
-    flex: 1,
-    fontWeight: "500",
-  },
-  fieldGroup: {
-    marginBottom: 16,
-  },
-  label: {
+    fontFamily: fonts.medium,
     fontSize: 13,
-    fontWeight: "600",
-    color: "#334155",
-    marginBottom: 6,
+    color: colors.semantic.danger,
+    flex: 1,
+  },
+  inputGroup: {
+    gap: 6,
+  },
+  inputLabel: {
+    fontFamily: fonts.semiBold,
+    fontSize: 14,
+    color: colors.text.primary,
   },
   inputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1.5,
-    borderColor: "#E2E8F0",
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 52,
+    backgroundColor: '#FBFAF7',
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
     borderRadius: 12,
-    backgroundColor: "#F8FAFC",
-    paddingHorizontal: 12,
-    height: 48,
+    paddingHorizontal: 14,
   },
   inputError: {
-    borderColor: "#EF4444",
-    backgroundColor: "#FEF2F2",
+    borderColor: colors.semantic.danger,
   },
-  inputIcon: {
-    marginRight: 8,
+  leadingIcon: {
+    marginRight: 10,
   },
-  input: {
-    flex: 1,
-    fontSize: 14,
-    color: "#0F172A",
-    paddingVertical: 0,
-  },
-  eyeBtn: {
+  trailingIcon: {
     padding: 4,
   },
-  errorText: {
-    fontSize: 11,
-    color: "#EF4444",
-    marginTop: 4,
-    marginLeft: 2,
-    fontWeight: "500",
-  },
-  resendBtn: {
-    marginTop: 10,
-    alignSelf: "center",
-  },
-  resendText: {
-    fontSize: 13,
-    color: "#2563EB",
-    fontWeight: "600",
-  },
-  primaryBtn: {
-    backgroundColor: "#1E3A8A",
-    borderRadius: 12,
-    height: 48,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 8,
-    shadowColor: "#1E3A8A",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  btnDisabled: {
-    opacity: 0.65,
-  },
-  primaryBtnText: {
+  textInput: {
+    flex: 1,
+    fontFamily: fonts.regular,
     fontSize: 15,
-    fontWeight: "700",
-    color: "#FFFFFF",
+    color: colors.text.primary,
+  },
+  errorText: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: colors.semantic.danger,
+    marginTop: 2,
+  },
+  signInBtn: {
+    width: '100%',
+    height: 54,
+    backgroundColor: colors.brand.primary, // #C89F3E
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 6,
+    shadowColor: '#1A1815',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  signInBtnText: {
+    fontFamily: fonts.bold,
+    fontSize: 16,
+    color: colors.brand.onGoldText, // #1A1815
     letterSpacing: 0.2,
   },
-  dividerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: 18,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: "#E2E8F0",
-  },
-  dividerText: {
-    fontSize: 12,
-    color: "#94A3B8",
-    paddingHorizontal: 10,
-    fontWeight: "500",
-  },
-  googleBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1.5,
-    borderColor: "#E2E8F0",
-    borderRadius: 12,
-    height: 48,
-    backgroundColor: "#FFFFFF",
-    gap: 10,
-  },
-  googleBtnText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#334155",
-  },
   signupRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    marginTop: 18,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 24,
   },
   signupPrompt: {
-    fontSize: 13,
-    color: "#64748B",
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.text.secondary,
   },
   signupLink: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#1E3A8A",
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: colors.text.primary,
+    textDecorationLine: 'underline',
   },
 });
 

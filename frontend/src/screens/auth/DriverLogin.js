@@ -1,69 +1,22 @@
-import React, { useState } from "react";
+import React, { useState } from 'react';
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
-  Alert,
-} from "react-native";
-import { StatusBar } from "expo-status-bar";
-import { Ionicons } from "@expo/vector-icons";
-import api from "../../api/axios";  
-import AccountSuspendedModal from "../../context/AccountSuspendedModal";
-const InputField = ({
-  label,
-  placeholder,
-  value,
-  onChangeText,
-  keyboardType = "default",
-  secureTextEntry = false,
-  icon,
-  rightAction,
-  rightLabel,
-}) => (
-  <View style={styles.fieldWrap}>
-    <View style={styles.fieldLabelRow}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      {rightLabel && (
-        <TouchableOpacity onPress={rightLabel.onPress} activeOpacity={0.7}>
-          <Text style={styles.fieldLabelRight}>{rightLabel.text}</Text>
-        </TouchableOpacity>
-      )}
-    </View>
-    <View style={styles.inputRow}>
-      <Ionicons
-        name={icon}
-        size={18}
-        color="#64748B"
-        style={styles.inputIcon}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder={placeholder}
-        placeholderTextColor="#94A3B8"
-        value={value}
-        onChangeText={onChangeText}
-        keyboardType={keyboardType}
-        secureTextEntry={secureTextEntry}
-        autoCapitalize="none"
-      />
-      {rightAction && (
-        <TouchableOpacity
-          style={styles.inputRightAction}
-          onPress={rightAction.onPress}
-          activeOpacity={0.7}
-        >
-          <Ionicons name={rightAction.icon} size={18} color="#64748B" />
-        </TouchableOpacity>
-      )}
-    </View>
-  </View>
-);
+  ScrollView,
+  useWindowDimensions,
+} from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { colors, fonts } from '../../theme';
+import api from '../../api/axios';
+import AccountSuspendedModal from '../../context/AccountSuspendedModal';
 
 const DriverLogin = ({
   onDriverLogin,
@@ -71,32 +24,28 @@ const DriverLogin = ({
   onSupport,
   onBack,
 }) => {
-  const [email, setEmail] = useState("");  
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
 
-  //  Suspension Modal State Hooks
   const [isSuspendedModalVisible, setIsSuspendedModalVisible] = useState(false);
-  const [attemptedEmail, setAttemptedEmail] = useState("");
+  const [attemptedEmail, setAttemptedEmail] = useState('');
 
   const validate = () => {
-    const newErrors = {};
-
-    const gmailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
-    if (!email.trim()) {
-      newErrors.email = "Email address is required";
-    } else if (!gmailRegex.test(email.trim().toLowerCase())) {
-      newErrors.email = "Please enter a valid @gmail.com address";
+    const errs = {};
+    if (!identifier.trim()) {
+      errs.identifier = 'Phone number or email is required';
     }
-
     if (!password.trim()) {
-      newErrors.password = "Password is required";
+      errs.password = 'Password is required';
     }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
   };
 
   const handleLogin = async () => {
@@ -105,185 +54,198 @@ const DriverLogin = ({
     setErrors({});
 
     try {
-      // TRANSMIT SECURE CREDENTIAL SIGNATURES DIRECT TO THE BACKEND
-      const response = await api.post("/auth/login", {
-        email: email.trim().toLowerCase(),
-        password: password,
-      });
+      const payload = {
+        identifier: identifier.trim(),
+        password: password.trim(),
+        role: 'driver',
+      };
 
-      setLoading(false);
+      const response = await api.post('/auth/login', payload);
 
       if (response.data?.success) {
-        if (onDriverLogin) onDriverLogin(response.data);
+        if (onDriverLogin) {
+          await onDriverLogin(response.data);
+        }
+      } else {
+        setErrors({ general: response.data?.message || 'Login failed. Please check your driver credentials.' });
       }
     } catch (err) {
-      setLoading(false);
-      console.error("Authentication runtime issue:", err);
-
+      console.warn('[DriverLogin] Auth failure:', err.message);
       const errorCode = err.response?.data?.error?.code;
-      const serverErrorMessage =
-        err.response?.data?.error?.message ||
-        err.response?.data?.message ||
-        "Connection to authentication service timed out.";
-
-      // 🚀 INTERCEPT SUSPENDED ACCOUNTS AND TRIGGER APPEAL MODAL
       if (errorCode === 'ACCOUNT_SUSPENDED') {
-        setAttemptedEmail(email.trim().toLowerCase());
+        setAttemptedEmail(identifier.trim());
         setIsSuspendedModalVisible(true);
-      } else {
-        setErrors({ general: serverErrorMessage });
+        return;
       }
+      const serverMsg = err.response?.data?.message || err.response?.data?.error?.message;
+      setErrors({
+        general: serverMsg || 'Unable to sign in. Please verify your credentials or contact driver support.',
+      });
+    } finally {
+      setLoading(false);
     }
-  };
-
-  const handleForgotPassword = () => {
-    if (!email.trim()) {
-      Alert.alert(
-        "Verification Required",
-        "Please enter your registered email first to request a password reset loop.",
-      );
-      return;
-    }
-    console.log("Resetting credentials channel tracking:", email);
   };
 
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <StatusBar style="dark" />
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.logoSection}>
-          <View style={styles.iconWrap}>
-            <View style={styles.iconCard}>
-              <View style={styles.navArrow} />
-            </View>
-            <View style={styles.driverBadge}>
-              <Text style={styles.driverBadgeText}>DRIVER</Text>
-            </View>
-          </View>
-          <Text style={styles.appName}>CampusRide</Text>
-          <Text style={styles.appTagline}>
-            Driver Management Access Gateway
-          </Text>
-        </View>
+      <View style={[styles.inner, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+        <StatusBar style="dark" />
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Driver Login</Text>
-          <Text style={styles.cardSubtitle}>
-            Access your real-time transportation cockpit
-          </Text>
-
-          {errors.general && (
-            <View style={styles.errorBanner}>
-              <Text style={styles.errorBannerText}>{errors.general}</Text>
-            </View>
+        {/* Navigation Bar */}
+        <View style={styles.navBar}>
+          {onBack ? (
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={onBack}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
+              hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+            >
+              <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.backButtonPlaceholder} />
           )}
 
-          <InputField
-            label="Email Address"
-            placeholder="example@gmail.com"
-            value={email}
-            onChangeText={(v) => {
-              setEmail(v);
-              setErrors((e) => ({ ...e, email: null }));
-            }}
-            keyboardType="email-address"
-            icon="mail-outline"
-          />
-          {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
-
-          <InputField
-            label="Password"
-            placeholder="Enter your security credentials"
-            value={password}
-            onChangeText={(v) => {
-              setPassword(v);
-              setErrors((e) => ({ ...e, password: null }));
-            }}
-            secureTextEntry={!showPassword}
-            icon="lock-closed-outline"
-            rightAction={{
-              icon: showPassword ? "eye-off-outline" : "eye-outline",
-              onPress: () => setShowPassword((s) => !s),
-            }}
-            rightLabel={{
-              text: "Forgot Password?",
-              onPress: handleForgotPassword,
-            }}
-          />
-          {errors.password && (
-            <Text style={styles.errorText}>{errors.password}</Text>
-          )}
-
-          <TouchableOpacity
-            style={[styles.loginBtn, loading && styles.loginBtnDisabled]}
-            onPress={handleLogin}
-            activeOpacity={0.85}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <Text style={styles.loginBtnText}>Login </Text>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={onDriverRegister}
-            activeOpacity={0.7}
-            style={styles.createAccountBtn}
-          >
-            <Text style={styles.createAccountText}>
-              Don't have an account?{" "}
-              <Text style={styles.createAccountLink}>Register →</Text>
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={onBack}
-            style={[styles.supportRow, { marginTop: 4 }]}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.supportLink}>← Change Core Access Role</Text>
-          </TouchableOpacity>
+          {onSupport ? (
+            <TouchableOpacity
+              onPress={onSupport}
+              style={styles.supportButton}
+              activeOpacity={0.7}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="help-circle-outline" size={20} color={colors.text.secondary} />
+              <Text style={styles.supportText}>Support</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
 
-        <View style={styles.infoBanner}>
-          <Ionicons
-            name="information-circle-outline"
-            size={18}
-            color="#1E3A8A"
-          />
-          <Text style={styles.infoBannerText}>
-            Only registered, verified drivers can access this dashboard
-            framework.
-          </Text>
-        </View>
-
-        <TouchableOpacity
-          style={styles.supportRow}
-          onPress={onSupport}
-          activeOpacity={0.7}
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+          keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.supportText}>
-            Need help?{" "}
-            <Text style={styles.supportLink}>Contact Operations Support</Text>
-          </Text>
-        </TouchableOpacity>
-      </ScrollView>
+          {/* Header Typography */}
+          <View style={styles.headerBlock}>
+            <Text style={styles.title}>Driver Terminal</Text>
+            <Text style={styles.subtitle}>Sign in to accept campus ride requests</Text>
+          </View>
 
-      {/* Account Suspended Modal Component Integration */}
-      <AccountSuspendedModal 
-        visible={isSuspendedModalVisible} 
-        userEmail={attemptedEmail}
-        onClose={() => setIsSuspendedModalVisible(false)} 
-      />
+          {/* Form Surface Card */}
+          <View style={styles.formCard}>
+            {errors.general ? (
+              <View style={styles.generalErrorBox}>
+                <Ionicons name="alert-circle" size={18} color={colors.semantic.danger} />
+                <Text style={styles.generalErrorText}>{errors.general}</Text>
+              </View>
+            ) : null}
+
+            {/* Identifier */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Phone Number or Email</Text>
+              <View style={[styles.inputContainer, errors.identifier && styles.inputError]}>
+                <Ionicons
+                  name="car-outline"
+                  size={20}
+                  color={colors.text.secondary}
+                  style={styles.leadingIcon}
+                />
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="024 123 4567 or driver@gmail.com"
+                  placeholderTextColor={colors.text.muted}
+                  value={identifier}
+                  onChangeText={(val) => {
+                    setIdentifier(val);
+                    if (errors.identifier) setErrors((prev) => ({ ...prev, identifier: null }));
+                  }}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </View>
+              {errors.identifier ? <Text style={styles.errorText}>{errors.identifier}</Text> : null}
+            </View>
+
+            {/* Password */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Password</Text>
+              <View style={[styles.inputContainer, errors.password && styles.inputError]}>
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={20}
+                  color={colors.text.secondary}
+                  style={styles.leadingIcon}
+                />
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="Enter driver password"
+                  placeholderTextColor={colors.text.muted}
+                  value={password}
+                  onChangeText={(val) => {
+                    setPassword(val);
+                    if (errors.password) setErrors((prev) => ({ ...prev, password: null }));
+                  }}
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                />
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
+                  activeOpacity={0.7}
+                  style={styles.trailingIcon}
+                >
+                  <Ionicons
+                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                    size={20}
+                    color={colors.text.secondary}
+                  />
+                </TouchableOpacity>
+              </View>
+              {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
+            </View>
+
+            {/* Sign In CTA */}
+            <TouchableOpacity
+              style={styles.signInBtn}
+              onPress={handleLogin}
+              disabled={loading}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Driver sign in"
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color={colors.brand.onGoldText} />
+              ) : (
+                <Text style={styles.signInBtnText}>Open Driver Portal</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {/* Register as Driver link */}
+          <View style={styles.registerRow}>
+            <Text style={styles.registerPrompt}>New Campus Driver? </Text>
+            <TouchableOpacity
+              onPress={onDriverRegister}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Apply as driver"
+              hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+            >
+              <Text style={styles.registerLink}>Register Vehicle</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+
+        <AccountSuspendedModal
+          visible={isSuspendedModalVisible}
+          userEmail={attemptedEmail}
+          onClose={() => setIsSuspendedModalVisible(false)}
+        />
+      </View>
     </KeyboardAvoidingView>
   );
 };
@@ -291,233 +253,165 @@ const DriverLogin = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: colors.brand.baseBackground, // Canonical #ECE5D2
   },
-  scroll: {
-    flexGrow: 1,
-    alignItems: "center",
-    paddingTop: 60,
-    paddingBottom: 40,
-    paddingHorizontal: 24,
+  inner: {
+    flex: 1,
   },
-  logoSection: {
-    alignItems: "center",
-    marginBottom: 24,
+  navBar: {
+    height: 48,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  backButton: {
+    width: 48,
+    height: 48,
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+  },
+  backButtonPlaceholder: {
+    width: 48,
+    height: 48,
+  },
+  supportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 4,
   },
-  iconWrap: {
-    position: "relative",
-    marginBottom: 8,
+  supportText: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.text.secondary,
   },
-  iconCard: {
-    width: 76,
-    height: 76,
-    borderRadius: 16,
-    backgroundColor: "#1E3A8A",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#1E3A8A",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 6,
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    paddingBottom: 32,
+    justifyContent: 'center',
   },
-  appName: {
+  headerBlock: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  title: {
+    fontFamily: fonts.bold,
     fontSize: 26,
-    fontWeight: "800",
-    color: "#1E3A8A",
-    letterSpacing: -0.5,
+    color: colors.text.primary, // #1A1815
+    textAlign: 'center',
+    letterSpacing: -0.4,
   },
-  appTagline: {
-    fontSize: 14,
-    color: "#64748B",
-    fontWeight: "500",
+  subtitle: {
+    fontFamily: fonts.medium,
+    fontSize: 15,
+    color: colors.text.secondary, // #6B665C
+    textAlign: 'center',
+    marginTop: 6,
   },
-  navArrow: {
-    width: 0,
-    height: 0,
-    borderLeftWidth: 12,
-    borderRightWidth: 12,
-    borderBottomWidth: 20,
-    borderLeftColor: "transparent",
-    borderRightColor: "transparent",
-    borderBottomColor: "#FFFFFF",
-  },
-  driverBadge: {
-    position: "absolute",
-    bottom: -4,
-    right: -8,
-    backgroundColor: "#A3E635",
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  driverBadgeText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: "#1E3A8A",
-    letterSpacing: 0.5,
-  },
-  card: {
-    width: "100%",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.02,
-    shadowRadius: 12,
-    elevation: 3,
-    marginBottom: 16,
+  formCard: {
+    backgroundColor: colors.surface.base, // #FFFFFF
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: colors.border.subtle, // #D8D2C3
+    padding: 22,
+    gap: 18,
+    shadowColor: '#1A1815',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
   },
-  cardTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#1F2937",
-    textAlign: "center",
-    marginBottom: 4,
-  },
-  cardSubtitle: {
-    fontSize: 14,
-    color: "#64748B",
-    textAlign: "center",
-    marginBottom: 20,
-    fontWeight: "500",
-  },
-  errorBanner: {
-    backgroundColor: "#FEF2F2",
-    borderRadius: 12,
+  generalErrorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.semantic.dangerTint,
+    borderRadius: 10,
     padding: 12,
-    marginBottom: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: "#EF4444",
+    gap: 8,
   },
-  errorBannerText: {
+  generalErrorText: {
+    fontFamily: fonts.medium,
     fontSize: 13,
-    fontWeight: "600",
-    color: "#DC2626",
+    color: colors.semantic.danger,
+    flex: 1,
   },
-  errorText: {
-    fontSize: 12,
-    color: "#EF4444",
-    marginTop: -10,
-    marginBottom: 12,
-    marginLeft: 4,
-    fontWeight: "500",
+  inputGroup: {
+    gap: 6,
   },
-  fieldWrap: {
-    marginBottom: 16,
-  },
-  fieldLabelRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  fieldLabel: {
+  inputLabel: {
+    fontFamily: fonts.semiBold,
     fontSize: 14,
-    fontWeight: "600",
-    color: "#1E2937",
+    color: colors.text.primary,
   },
-  fieldLabelRight: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#1E3A8A",
-  },
-  inputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    height: 56,
-    paddingHorizontal: 16,
-    backgroundColor: "#FFFFFF",
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 52,
+    backgroundColor: '#FBFAF7',
     borderWidth: 1,
-    borderColor: "#E2E8F0",
-    borderRadius: 16,
+    borderColor: colors.border.subtle,
+    borderRadius: 12,
+    paddingHorizontal: 14,
   },
-  inputIcon: {
+  inputError: {
+    borderColor: colors.semantic.danger,
+  },
+  leadingIcon: {
     marginRight: 10,
   },
-  input: {
+  trailingIcon: {
+    padding: 4,
+  },
+  textInput: {
     flex: 1,
+    fontFamily: fonts.regular,
     fontSize: 15,
-    color: "#1F2937",
-    fontWeight: "500",
-    height: "100%",
+    color: colors.text.primary,
   },
-  inputRightAction: {
-    paddingLeft: 8,
+  errorText: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: colors.semantic.danger,
+    marginTop: 2,
   },
-  loginBtn: {
-    width: "100%",
-    height: 56,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 8,
-    backgroundColor: "#1E3A8A",
-    shadowColor: "#1E3A8A",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 3,
+  signInBtn: {
+    width: '100%',
+    height: 54,
+    backgroundColor: colors.brand.primary, // #C89F3E
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 6,
+    shadowColor: '#1A1815',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  loginBtnDisabled: {
-    opacity: 0.65,
-  },
-  loginBtnText: {
+  signInBtnText: {
+    fontFamily: fonts.bold,
     fontSize: 16,
-    fontWeight: "700",
-    color: "#FFFFFF",
+    color: colors.brand.onGoldText, // #1A1815
     letterSpacing: 0.2,
   },
-  infoBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    width: "100%",
-    backgroundColor: "#EFF6FF",
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: "#DBEAFE",
+  registerRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 24,
   },
-  infoBannerText: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#1E3A8A",
-    lineHeight: 18,
-  },
-  createAccountBtn: {
-    alignItems: "center",
-    paddingVertical: 14,
-  },
-  createAccountText: {
+  registerPrompt: {
+    fontFamily: fonts.medium,
     fontSize: 14,
-    color: "#64748B",
-    fontWeight: "500",
-    textAlign: "center",
+    color: colors.text.secondary,
   },
-  createAccountLink: {
-    color: "#1E3A8A",
-    fontWeight: "700",
-  },
-  supportRow: {
-    alignItems: "center",
-    paddingVertical: 4,
-  },
-  supportText: {
+  registerLink: {
+    fontFamily: fonts.bold,
     fontSize: 14,
-    color: "#64748B",
-    fontWeight: "500",
-    textAlign: "center",
-  },
-  supportLink: {
-    color: "#1E3A8A",
-    fontWeight: "700",
+    color: colors.text.primary,
+    textDecorationLine: 'underline',
   },
 });
 
