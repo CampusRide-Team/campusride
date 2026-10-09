@@ -13,8 +13,19 @@ export const getApiBaseUrl = () => {
   return Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://localhost:5000';
 };
 
+export const API_BASE_URL = getApiBaseUrl();
+
+if (__DEV__) {
+  console.info('[CampusRide Network] REST origin', {
+    origin: API_BASE_URL,
+    platform: Platform.OS,
+    platformVersion: Platform.Version,
+    configuredByEnvironment: Boolean(process.env.EXPO_PUBLIC_API_URL),
+  });
+}
+
 const api = axios.create({
-  baseURL: getApiBaseUrl(),
+  baseURL: API_BASE_URL,
   timeout: 15000,
   headers: {
     "Content-Type": "application/json",
@@ -34,6 +45,14 @@ api.interceptors.request.use(
       }
 
       config.url = `/api/v1/${cleanUrl}`;
+
+      if (__DEV__) {
+        console.info('[CampusRide Network] REST request', {
+          method: String(config.method || 'get').toUpperCase(),
+          origin: config.baseURL || API_BASE_URL,
+          path: config.url,
+        });
+      }
 
       // When sending FormData (multipart), let React Native / Axios set boundary automatically
       if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
@@ -60,6 +79,33 @@ api.interceptors.request.use(
     return config;
   },
   (error) => Promise.reject(error)
+);
+
+api.interceptors.response.use(
+  (response) => {
+    if (__DEV__) {
+      console.info('[CampusRide Network] REST response', {
+        status: response.status,
+        method: String(response.config?.method || 'get').toUpperCase(),
+        path: response.config?.url,
+      });
+    }
+    return response;
+  },
+  (error) => {
+    if (__DEV__) {
+      console.warn('[CampusRide Network] REST failure', {
+        category: error.response ? 'http' : 'transport',
+        status: error.response?.status || null,
+        code: error.code || null,
+        method: String(error.config?.method || 'get').toUpperCase(),
+        origin: error.config?.baseURL || API_BASE_URL,
+        path: error.config?.url || null,
+        message: error.message,
+      });
+    }
+    return Promise.reject(error);
+  }
 );
 
 /**

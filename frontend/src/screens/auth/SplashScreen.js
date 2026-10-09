@@ -259,7 +259,7 @@ const SplashScreen = ({ onFinish }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.brand.baseBackground, // Canonical #ECE5D2
+    backgroundColor: colors.brand.introductoryCanvas || '#ECE5D2', // Canonical #ECE5D2
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -280,15 +280,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   heroIcon: {
-    width: 96,
-    height: 96,
+    width: 104,
+    height: 104,
   },
   brandBlock: {
     alignItems: 'center',
     gap: 10,
   },
   wordmark: {
-    height: 46,
+    height: 48,
   },
   goldDivider: {
     width: 40,

@@ -3,9 +3,56 @@ import crypto from 'crypto';
 import User from '../models/User.js';
 import RideBooking from '../models/RideBooking.js';
 import DriverTrip from '../models/DriverTrip.js';
+import DispatchOffer from '../models/DispatchOffer.js';
 import DISPATCH_CONFIG from '../config/dispatchConfig.js';
 import routingService, { calculateGeodesicDistanceMeters } from './routingService.js';
 import { createSoloTrip, createSharedTrip, insertBookingIntoSharedTrip } from './tripService.js';
+import { serializeTripStop } from './tripDtoService.js';
+import { dispatchRideStartToContacts } from './notificationDeliveryService.js';
+
+const persistOffers = async ({ booking, candidates, offerType, tripId = null, detourMetrics = null }) => {
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + DISPATCH_CONFIG.DISPATCH_OFFER_TTL_MS);
+  const dispatchRoundId = crypto.randomUUID();
+  await DispatchOffer.updateMany(
+    { bookingId: booking._id, status: 'pending' },
+    { $set: { status: 'superseded', respondedAt: now } }
+  );
+  const pickupCoords = booking.pickup.coordinates?.coordinates || booking.pickup.coordinates;
+  const dropoffCoords = booking.dropoff.coordinates?.coordinates || booking.dropoff.coordinates;
+  if (!candidates.length) return [];
+  const docs = await DispatchOffer.insertMany(candidates.map((driver) => ({
+    bookingId: booking._id,
+    driverId: driver._id,
+    tripId,
+    dispatchRoundId,
+    rideMode: booking.rideMode,
+    offerType,
+    pickup: { name: booking.pickup.name, coordinates: pickupCoords },
+    dropoff: { name: booking.dropoff.name, coordinates: dropoffCoords },
+    routeMetrics: booking.route ? {
+      distanceMeters: booking.route.distanceMeters,
+      durationSeconds: booking.route.durationSeconds
+    } : undefined,
+    detourMetrics,
+    expiresAt
+  })));
+  return docs;
+};
+
+const offerPayload = (offer, passenger = null) => ({
+  offerId: offer._id,
+  bookingId: offer.bookingId,
+  tripId: offer.tripId || null,
+  rideMode: offer.rideMode,
+  offerType: offer.offerType,
+  pickup: offer.pickup,
+  dropoff: offer.dropoff,
+  routeMetrics: offer.routeMetrics || null,
+  detourMetrics: offer.detourMetrics || null,
+  expiresAt: offer.expiresAt
+  ,passenger: passenger ? { id: passenger._id, fullName: passenger.fullName, avatarUri: passenger.avatarUri || null } : null
+});
 
 /**
  * Finds eligible approved drivers for Solo Ride dispatch.
@@ -78,6 +125,7 @@ export const dispatchSoloBooking = async (bookingId, io = null) => {
   if (booking.status !== 'pending') {
     throw new Error(`BOOKING_NOT_PENDING: Cannot dispatch booking in status [${booking.status}]`);
   }
+  const passenger = await User.findById(booking.passengerId).select('fullName avatarUri');
 
   const pickupCoords = booking.pickup.coordinates.coordinates || booking.pickup.coordinates;
   const eligibleDrivers = await findEligibleDrivers({
@@ -85,26 +133,11 @@ export const dispatchSoloBooking = async (bookingId, io = null) => {
     maxDistance: DISPATCH_CONFIG.CANDIDATE_SEARCH_RADIUS_METERS
   });
 
-  const offerPayload = {
-    bookingId: booking._id,
-    rideMode: 'solo',
-    offerType: 'solo_trip',
-    pickup: {
-      name: booking.pickup.name,
-      coordinates: pickupCoords
-    },
-    dropoff: {
-      name: booking.dropoff.name,
-      coordinates: booking.dropoff.coordinates.coordinates || booking.dropoff.coordinates
-    },
-    estimatedFare: booking.fare?.totalFare || 0,
-    currency: booking.fare?.currency || 'GHS',
-    expiresAt: new Date(Date.now() + DISPATCH_CONFIG.DISPATCH_OFFER_TTL_MS)
-  };
+  const offers = await persistOffers({ booking, candidates: eligibleDrivers, offerType: 'solo_trip' });
 
-  if (io && eligibleDrivers.length > 0) {
-    for (const driver of eligibleDrivers) {
-      io.to(`user:${driver._id.toString()}`).emit('dispatch:offer', offerPayload);
+  if (io && offers.length > 0) {
+    for (const offer of offers) {
+      io.to(`user:${offer.driverId.toString()}`).emit('dispatch:offer', offerPayload(offer, passenger));
     }
   }
 
@@ -266,6 +299,7 @@ export const dispatchSharedBooking = async (bookingId, io = null) => {
   if (booking.status !== 'pending') {
     throw new Error(`BOOKING_NOT_PENDING: Cannot dispatch booking in status [${booking.status}]`);
   }
+  const passenger = await User.findById(booking.passengerId).select('fullName avatarUri');
 
   const pickupCoords = booking.pickup.coordinates.coordinates || booking.pickup.coordinates;
   const dropoffCoords = booking.dropoff.coordinates.coordinates || booking.dropoff.coordinates;
@@ -275,21 +309,16 @@ export const dispatchSharedBooking = async (bookingId, io = null) => {
 
   if (poolCandidates.length > 0) {
     const bestCandidate = poolCandidates[0];
-    const offerPayload = {
-      bookingId: booking._id,
-      rideMode: 'shared',
+    const offers = await persistOffers({
+      booking,
+      candidates: [bestCandidate.driver],
       offerType: 'pool_join',
       tripId: bestCandidate.trip._id,
-      pickup: { name: booking.pickup.name, coordinates: pickupCoords },
-      dropoff: { name: booking.dropoff.name, coordinates: dropoffCoords },
-      detourMetrics: bestCandidate.detourMetrics,
-      estimatedFare: booking.fare?.totalFare || 0,
-      currency: booking.fare?.currency || 'GHS',
-      expiresAt: new Date(Date.now() + DISPATCH_CONFIG.DISPATCH_OFFER_TTL_MS)
-    };
+      detourMetrics: bestCandidate.detourMetrics
+    });
 
-    if (io) {
-      io.to(`user:${bestCandidate.driver._id.toString()}`).emit('dispatch:offer', offerPayload);
+    if (io && offers[0]) {
+      io.to(`user:${bestCandidate.driver._id.toString()}`).emit('dispatch:offer', offerPayload(offers[0], passenger));
     }
 
     return {
@@ -302,20 +331,11 @@ export const dispatchSharedBooking = async (bookingId, io = null) => {
 
   // 2. If no active pool candidates, offer as new shared trip to idle drivers
   const idleDrivers = await findEligibleDriversForNewSharedTrip(booking);
-  const offerPayload = {
-    bookingId: booking._id,
-    rideMode: 'shared',
-    offerType: 'new_shared_trip',
-    pickup: { name: booking.pickup.name, coordinates: pickupCoords },
-    dropoff: { name: booking.dropoff.name, coordinates: dropoffCoords },
-    estimatedFare: booking.fare?.totalFare || 0,
-    currency: booking.fare?.currency || 'GHS',
-    expiresAt: new Date(Date.now() + DISPATCH_CONFIG.DISPATCH_OFFER_TTL_MS)
-  };
+  const offers = await persistOffers({ booking, candidates: idleDrivers, offerType: 'new_shared_trip' });
 
-  if (io && idleDrivers.length > 0) {
-    for (const driver of idleDrivers) {
-      io.to(`user:${driver._id.toString()}`).emit('dispatch:offer', offerPayload);
+  if (io && offers.length > 0) {
+    for (const offer of offers) {
+      io.to(`user:${offer.driverId.toString()}`).emit('dispatch:offer', offerPayload(offer, passenger));
     }
   }
 
@@ -371,6 +391,10 @@ export const acceptSoloOffer = async (driverId, bookingId, io = null) => {
     });
   }
 
+  dispatchRideStartToContacts(booking).catch((error) => {
+    console.warn(`[Trusted Contacts] Ride sharing failed for booking [${booking._id}]:`, error.message);
+  });
+
   return { trip, booking };
 };
 
@@ -425,9 +449,9 @@ export const acceptSharedOffer = async (driverId, bookingId, { tripId = null, io
     });
 
     // 2. Complete authorized route manifest to driver trip room
-    io.to(`trip:${trip._id.toString()}`).emit('trip:route-updated', {
+    io.to(`user:${driver._id.toString()}`).emit('trip:route-updated', {
       tripId: trip._id,
-      stops: trip.tripStops,
+      stops: trip.tripStops.map((stop) => serializeTripStop(stop, { includePassengerContact: false })),
       activePassengerCount: trip.activePassengerCount,
       reservedPassengerCount: trip.reservedPassengerCount
     });
@@ -456,6 +480,9 @@ export const acceptSharedOffer = async (driverId, bookingId, { tripId = null, io
     }
   }
 
+  dispatchRideStartToContacts(booking).catch((error) => {
+    console.warn(`[Trusted Contacts] Ride sharing failed for booking [${booking._id}]:`, error.message);
+  });
+
   return tripResult;
 };
-

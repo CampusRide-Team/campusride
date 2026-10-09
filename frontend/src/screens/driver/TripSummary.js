@@ -18,10 +18,10 @@ const TripSummary = ({ onDismiss, onChangeTab, tripData }) => {
 
   const activeSummary = tripData || {
     driverName: "Driver",
-    pickupLocation: "Engineering Block C",
-    destinationLocation: "Student Union North",
-    durationText: "12 minutes",
-    distanceText: "4.2 km",
+    pickupLocation: "Campus Pickup",
+    destinationLocation: "Campus Destination",
+    durationText: "Not recorded",
+    distanceText: "Not recorded",
   };
 
   return (

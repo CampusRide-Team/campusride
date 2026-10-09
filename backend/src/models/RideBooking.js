@@ -1,5 +1,13 @@
 import mongoose from 'mongoose';
 
+const gpsMetadataSchema = new mongoose.Schema(
+  {
+    accuracyMeters: { type: Number, required: true, min: 0 },
+    capturedAt: { type: Date, required: true }
+  },
+  { _id: false }
+);
+
 const rideLocationSchema = new mongoose.Schema(
   {
     name: { 
@@ -34,9 +42,26 @@ const rideLocationSchema = new mongoose.Schema(
     },
     source: {
       type: String,
-      enum: ['poi', 'gps_pin', 'reverse_geocoded'],
-      default: 'gps_pin'
+      enum: ['poi', 'device_gps', 'map_pin', 'reverse_geocoded', 'gps_pin', 'gps_current'],
+      default: 'map_pin'
+    },
+    gps: {
+      type: gpsMetadataSchema,
+      required: false,
+      default: undefined
     }
+  },
+  { _id: false }
+);
+
+const routeSummarySchema = new mongoose.Schema(
+  {
+    distanceMeters: { type: Number, required: true, min: 0 },
+    durationSeconds: { type: Number, required: true, min: 0 },
+    source: { type: String, required: true },
+    estimateOnly: { type: Boolean, default: false },
+    calculatedAt: { type: Date, required: true }
+    ,endpointFingerprint: { type: String, required: false }
   },
   { _id: false }
 );
@@ -114,6 +139,7 @@ const rideBookingSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: [
+        'scheduled',
         'pending',
         'driver_assigned',
         'arrived_at_pickup',
@@ -140,10 +166,20 @@ const rideBookingSchema = new mongoose.Schema(
     },
     fare: {
       type: fareBreakdownSchema,
-      required: true,
-      default: () => ({ totalFare: 0, currency: 'GHS' })
+      required: false,
+      default: undefined,
+      select: false
+    },
+    route: {
+      type: routeSummarySchema,
+      required: false,
+      default: undefined
     },
     scheduledTime: {
+      type: Date,
+      default: null
+    },
+    activatedAt: {
       type: Date,
       default: null
     },

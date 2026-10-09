@@ -15,7 +15,8 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fonts } from '../../theme';
-import api from '../../api/axios';
+import { formatApiError } from '../../api/axios';
+import { authService } from '../../api/services/authService';
 import AccountSuspendedModal from '../../context/AccountSuspendedModal';
 
 const DriverLogin = ({
@@ -60,14 +61,16 @@ const DriverLogin = ({
         role: 'driver',
       };
 
-      const response = await api.post('/auth/login', payload);
+      // Use the canonical auth service so the UI's `identifier` field is
+      // serialized as the backend's required `email` contract field.
+      const response = await authService.login(payload);
 
-      if (response.data?.success) {
+      if (response?.success) {
         if (onDriverLogin) {
-          await onDriverLogin(response.data);
+          await onDriverLogin(response);
         }
       } else {
-        setErrors({ general: response.data?.message || 'Login failed. Please check your driver credentials.' });
+        setErrors({ general: response?.message || 'Login failed. Please check your driver credentials.' });
       }
     } catch (err) {
       console.warn('[DriverLogin] Auth failure:', err.message);
@@ -79,7 +82,7 @@ const DriverLogin = ({
       }
       const serverMsg = err.response?.data?.message || err.response?.data?.error?.message;
       setErrors({
-        general: serverMsg || 'Unable to sign in. Please verify your credentials or contact driver support.',
+        general: serverMsg || formatApiError(err, 'Unable to sign in. Please verify your credentials or contact driver support.'),
       });
     } finally {
       setLoading(false);

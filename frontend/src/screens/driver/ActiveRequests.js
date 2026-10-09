@@ -13,13 +13,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTheme } from "../../context/ThemeContext"; 
-import api from "../../api/axios";
 import { getPersistentSocket } from "../../api/socketHelper";
+import driverService from "../../api/services/driverService";
 
 const { width } = Dimensions.get("window");
 
-const ActiveRequests = ({ onBack, onChangeTab, onAcceptRide }) => {
-  const { theme, darkModeEnabled } = useTheme(); 
+const ActiveRequests = ({ onBack, onAcceptRide }) => {
+  const { theme } = useTheme(); 
   const [allRequests, setAllRequests] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -28,17 +28,17 @@ const ActiveRequests = ({ onBack, onChangeTab, onAcceptRide }) => {
   // 1. FETCH LIVE CAMPUS DISPATCHES & STRICTLY FILTER FOR PENDING STATUS ONLY
   const fetchActiveDispatches = async () => {
     try {
-      const response = await api.get("/rides/pending");
-      if (response.data?.success && response.data?.data) {
-        const requests = response.data.data
+      const response = await driverService.getPendingRequests();
+      if (response?.success && response?.data) {
+        const requests = response.data
           .filter(r => r.status === 'pending')
           .map(r => ({
             ...r,
-            id: r._id || r.id,
-            bookingId: r._id || r.id,
-            pickupLocation: r.pickupLocation || r.pickup,
-            dropoffLocation: r.dropoffLocation || r.destination,
-            fare: r.fare || 0,
+            id: r.offerId || r.id,
+            offerId: r.offerId || r.id,
+            bookingId: r.bookingId,
+            pickupLocation: r.pickup?.name || r.pickupLocation || "Location unavailable",
+            dropoffLocation: r.dropoff?.name || r.dropoffLocation || "Location unavailable",
             expiresAt: r.expiresAt ? new Date(r.expiresAt).getTime() : Date.now() + 15000,
           }));
 
@@ -81,7 +81,7 @@ const ActiveRequests = ({ onBack, onChangeTab, onAcceptRide }) => {
     const handleIncomingDispatch = (newRequest) => {
       if (newRequest.status && newRequest.status !== 'pending') return;
       
-      const reqId = newRequest.bookingId || newRequest.id || newRequest._id;
+      const reqId = newRequest.offerId || newRequest.id || newRequest._id;
       const ttlMs = newRequest.ttlMs || 15000;
       const expiresAt = newRequest.expiresAt 
         ? new Date(newRequest.expiresAt).getTime() 
@@ -91,14 +91,14 @@ const ActiveRequests = ({ onBack, onChangeTab, onAcceptRide }) => {
         ...newRequest,
         id: reqId,
         _id: reqId,
-        bookingId: reqId,
+        offerId: reqId,
+        bookingId: newRequest.bookingId,
         tripId: newRequest.tripId,
         detourMetrics: newRequest.detourMetrics,
-        pickupLocation: newRequest.pickup?.name || newRequest.pickupLocation || newRequest.pickup || "Campus Pickup Point",
-        dropoffLocation: newRequest.dropoff?.name || newRequest.dropoffLocation || newRequest.destination || "Campus Destination",
+        pickupLocation: newRequest.pickup?.name || newRequest.pickupLocation || "Location unavailable",
+        dropoffLocation: newRequest.dropoff?.name || newRequest.dropoffLocation || "Location unavailable",
         pickupCoordinates: newRequest.pickup?.coordinates || newRequest.pickupCoordinates,
         dropoffCoordinates: newRequest.dropoff?.coordinates || newRequest.dropoffCoordinates,
-        fare: newRequest.estimatedFare || newRequest.fare?.estimatedAmount || newRequest.fare || 0,
         rideMode: newRequest.offerType === 'pool_join' || newRequest.rideMode === 'shared' ? 'shared' : 'solo',
         offerType: newRequest.offerType || (newRequest.rideMode === 'shared' ? 'new_shared_trip' : 'solo'),
         expiresAt,
@@ -165,60 +165,12 @@ const ActiveRequests = ({ onBack, onChangeTab, onAcceptRide }) => {
 
   // 🚀 2. EXECUTE PRODUCTION RIDE ACCEPTANCE TRANSACTION
   const handleAcceptRide = async (request) => {
-    const requestId = request.bookingId || request.id || request._id;
-    const isShared = request.offerType === "pool_join" || request.offerType === "new_shared_trip" || request.rideMode === "shared";
+    const requestId = request.offerId || request.id || request._id;
     
     try {
       setIsSubmitting(true);
-      const socket = await getPersistentSocket();
-
-      // Try Socket dispatch:response first
-      let acceptedData = null;
-      let socketSucceeded = false;
-
-      if (socket && socket.connected) {
-        try {
-          const socketPromise = new Promise((resolve) => {
-            socket.emit(
-              "dispatch:response",
-              {
-                bookingId: requestId,
-                response: "accept",
-                offerType: request.offerType || (isShared ? "new_shared_trip" : "solo"),
-                tripId: request.tripId,
-              },
-              (ack) => resolve(ack)
-            );
-            setTimeout(() => resolve({ success: false, timeout: true }), 3000);
-          });
-
-          const ack = await socketPromise;
-          if (ack?.success && ack?.data) {
-            socketSucceeded = true;
-            acceptedData = ack.data?.trip || ack.data?.booking || ack.data;
-          }
-        } catch (socketErr) {
-          console.warn("Socket accept error, attempting REST fallback:", socketErr);
-        }
-      }
-
-      // Authoritative REST fallback if socket didn't finish
-      if (!socketSucceeded) {
-        if (isShared) {
-          const tripRes = await api.post("/trips/shared", {
-            bookingId: requestId,
-            tripId: request.tripId,
-          });
-          if (tripRes.data?.success) {
-            acceptedData = tripRes.data.data?.trip || tripRes.data.data;
-          }
-        } else {
-          const tripRes = await api.post("/trips/solo", { bookingId: requestId });
-          if (tripRes.data?.success) {
-            acceptedData = tripRes.data.data?.trip || tripRes.data.data;
-          }
-        }
-      }
+      const result = await driverService.respondToOffer(requestId, "accept");
+      const acceptedData = result?.data?.trip || result?.data?.booking || result?.data;
 
       if (acceptedData) {
         onAcceptRide(acceptedData);
@@ -237,17 +189,10 @@ const ActiveRequests = ({ onBack, onChangeTab, onAcceptRide }) => {
 
   // 🚀 3. EXECUTE CLEAN DECLINE
   const handleDeclineRide = async (request) => {
-    const requestId = request.bookingId || request.id || request._id;
+    const requestId = request.offerId || request.id || request._id;
     try {
       setIsSubmitting(true);
-      const socket = await getPersistentSocket();
-      if (socket && socket.connected) {
-        socket.emit("dispatch:response", {
-          bookingId: requestId,
-          response: "decline",
-          offerType: request.offerType || "solo",
-        });
-      }
+      await driverService.respondToOffer(requestId, "decline");
 
       // Clean local state immediately
       setAllRequests((prev) => {
@@ -382,13 +327,13 @@ const ActiveRequests = ({ onBack, onChangeTab, onAcceptRide }) => {
                   <View style={styles.addressBlock}>
                     <Text style={[styles.addressLabelText, { color: theme.subText }]}>PICKUP</Text>
                     <Text style={[styles.addressMainText, { color: theme.mainText }]}>
-                      {currentSpotlightRequest.pickupLocation || currentSpotlightRequest.pickup || "Campus Pickup Point"}
+                      {currentSpotlightRequest.pickupLocation || "Location unavailable"}
                     </Text>
                   </View>
                   <View style={styles.addressBlock}>
                     <Text style={[styles.addressLabelText, { color: theme.subText }]}>DESTINATION</Text>
                     <Text style={[styles.addressMainText, { color: theme.mainText }]}>
-                      {currentSpotlightRequest.dropoffLocation || currentSpotlightRequest.destination || "Campus Destination"}
+                      {currentSpotlightRequest.dropoffLocation || "Location unavailable"}
                     </Text>
                   </View>
                 </View>
@@ -398,13 +343,13 @@ const ActiveRequests = ({ onBack, onChangeTab, onAcceptRide }) => {
                 <View style={[styles.metricCard, { backgroundColor: theme.background, borderColor: theme.borderColor }]}>
                   <Text style={[styles.metricLabel, { color: theme.subText }]}>Distance</Text>
                   <Text style={[styles.metricValue, { color: theme.mainText }]}>
-                    {currentSpotlightRequest.distance || "1.5 km"}
+                    {currentSpotlightRequest.routeMetrics?.distanceMeters ? `${(currentSpotlightRequest.routeMetrics.distanceMeters / 1000).toFixed(1)} km` : "Route ready"}
                   </Text>
                 </View>
                 <View style={[styles.metricCard, { backgroundColor: theme.background, borderColor: theme.borderColor }]}>
                   <Text style={[styles.metricLabel, { color: theme.subText }]}>Arrival</Text>
                   <Text style={[styles.metricValue, { color: theme.mainText }]}>
-                    {currentSpotlightRequest.arrival || "5 mins"}
+                    {currentSpotlightRequest.routeMetrics?.durationSeconds ? `${Math.ceil(currentSpotlightRequest.routeMetrics.durationSeconds / 60)} mins` : "See route"}
                   </Text>
                 </View>
               </View>
@@ -514,7 +459,7 @@ const ActiveRequests = ({ onBack, onChangeTab, onAcceptRide }) => {
 
                       <View style={styles.miniCardFooterRow}>
                         <Text style={[styles.miniCardDistanceText, { color: theme.subText }]}>
-                          {item.distance || "2.0 km"}
+                          {item.routeMetrics?.distanceMeters ? `${(item.routeMetrics.distanceMeters / 1000).toFixed(1)} km` : "Route ready"}
                         </Text>
                         <TouchableOpacity
                           style={[styles.miniCardViewButton, { backgroundColor: theme.background, borderColor: theme.borderColor }]}
@@ -535,61 +480,6 @@ const ActiveRequests = ({ onBack, onChangeTab, onAcceptRide }) => {
         </ScrollView>
       )}
 
-      {/* App Base System Tab Nav Bar */}
-      <View style={[styles.tabBarContainer, { backgroundColor: theme.background, borderTopColor: theme.tabBarBorder }]}>
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => onChangeTab && onChangeTab("home")}
-          activeOpacity={0.7}
-        >
-          <View style={styles.tabIconBackground}>
-            <MaterialCommunityIcons
-              name="home-outline"
-              size={24}
-              color="#94A3B8"
-            />
-          </View>
-          <Text style={styles.tabItemLabel}>Home</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => onChangeTab && onChangeTab("trips")}
-          activeOpacity={0.7}
-        >
-          <View
-            style={[
-              styles.tabIconBackground,
-              !darkModeEnabled && styles.activeTabIconBackground,
-              darkModeEnabled && { backgroundColor: "#334155" },
-            ]}
-          >
-            <MaterialCommunityIcons
-              name="car-multiple"
-              size={24}
-              color={theme.iconColor}
-            />
-          </View>
-          <Text style={[styles.tabItemLabel, { color: theme.iconColor, fontWeight: "700" }]}>
-            Trips
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => onChangeTab && onChangeTab("profile")}
-          activeOpacity={0.7}
-        >
-          <View style={styles.tabIconBackground}>
-            <MaterialCommunityIcons
-              name="account-circle-outline"
-              size={24}
-              color="#94A3B8"
-            />
-          </View>
-          <Text style={styles.tabItemLabel}>Profile</Text>
-        </TouchableOpacity>
-      </View>
     </SafeAreaView>
   );
 };
@@ -606,9 +496,6 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "700",
-  },
-  activeTabIconBackground: {
-    backgroundColor: "#F1F5F9",
   },
   addressBlock: {
     justifyContent: "center",
@@ -860,29 +747,6 @@ const styles = StyleSheet.create({
   sharedTagBackground: {
     backgroundColor: "#F7FEE7",
     borderColor: "#4D7C0F",
-  },
-  tabBarContainer: {
-    borderTopWidth: 1,
-    flexDirection: "row",
-    height: 74,
-  },
-  tabIconBackground: {
-    alignItems: "center",
-    borderRadius: 16,
-    justifyContent: "center",
-    marginBottom: 2,
-    paddingHorizontal: 20,
-    paddingVertical: 4,
-  },
-  tabItem: {
-    alignItems: "center",
-    flex: 1,
-    justifyContent: "center",
-  },
-  tabItemLabel: {
-    color: "#94A3B8",
-    fontSize: 11,
-    fontWeight: "600",
   },
   timelineIndicatorsColumn: {
     alignItems: "center",

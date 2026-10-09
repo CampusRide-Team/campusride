@@ -115,12 +115,16 @@ describe('CampusRide Phase 2.1 - Automated Invariant & Security Verification Sui
   });
 
   after(async () => {
-    if (mongoAvailable) {
-      await User.deleteMany({ email: /@test-phase2-1\.ug\.edu\.gh$/ });
-      await RideBooking.deleteMany({ 'pickup.name': /Test Location/ });
-      await DriverTrip.deleteMany({});
-      await Rating.deleteMany({});
+    try {
+      if (mongoAvailable) {
+        await User.deleteMany({ email: /@test-phase2-1\.ug\.edu\.gh$/ });
+        await RideBooking.deleteMany({ 'pickup.name': /Test Location/ });
+        await DriverTrip.deleteMany({});
+        await Rating.deleteMany({});
+      }
       await mongoose.disconnect();
+    } catch (err) {
+      // Ignore cleanup error
     }
   });
 
@@ -676,7 +680,7 @@ describe('CampusRide Phase 2.1 - Automated Invariant & Security Verification Sui
     let passengerA, passengerB, driverA, driverB;
 
     before(async function() {
-      if (!mongoAvailable) return this.skip();
+      if (!mongoAvailable) return;
 
       passengerA = await User.create({
         fullName: 'Passenger A',

@@ -1,276 +1,488 @@
-// RideHistoryScreen.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
+  StyleSheet,
   View,
   Text,
-  StyleSheet,
   ScrollView,
-  TouchableOpacity,
+  RefreshControl,
   StatusBar,
-  Platform,
-  Alert,
-  ActivityIndicator,
+  TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons, Feather, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
-import api from '../../api/axios';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { fonts, spacing } from '../../theme';
+import { useTheme } from '../../context/ThemeContext';
+import { CRIcon } from '../../components/common';
+import { bookingService } from '../../api/services/bookingService';
+import {
+  ActivityDateHeader,
+  ActivityRideCard,
+  ActivitySkeletonLoader,
+  ActivityEmptyState,
+  TripDetailsSheet,
+  RateLaterSheet,
+} from '../../components/passenger';
 
-const NAVY = '#10206B';
-const BLUE = '#2F6BFF';
-const MUTED = '#6B7280';
-const TEXT = '#0F1733';
-const CARD_BG = '#FFFFFF';
-const SCREEN_BG = '#F8FAFC';
-const TAB_ACTIVE_BG = '#EEF2FF';
-const BORDER = '#E2E8F0';
+const TERMINAL_STATUSES = [
+  'completed',
+  'cancelled',
+  'cancelled_timeout',
+  'failed_no_drivers',
+  'emergency_cancelled',
+];
 
-export default function RideHistoryScreen({ onNavigate }) {
+export default function RideHistoryScreen() {
+  const navigation = useNavigation();
+  const { theme, isDark } = useTheme();
+  const { colors } = theme;
+
   const [rides, setRides] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [initialError, setInitialError] = useState(null);
+  const [refreshError, setRefreshError] = useState(null);
 
-  useEffect(() => {
-    fetchHistory();
-  }, []);
+  const [selectedBooking, setSelectedBooking] = useState(null);
+  const [ratingBooking, setRatingBooking] = useState(null);
 
-  const fetchHistory = async () => {
+  // 1. Fetch History from Service
+  const fetchHistory = useCallback(async (isRefresh = false) => {
     try {
-      setLoading(true);
-      const response = await api.get('/bookings/history');
-      if (response.data?.success && Array.isArray(response.data.data)) {
-        setRides(response.data.data);
+      if (isRefresh) {
+        setIsRefreshing(true);
+        setRefreshError(null);
+      } else {
+        setIsLoading(true);
+        setInitialError(null);
       }
+
+      const response = await bookingService.getBookingHistory();
+      const rawList = Array.isArray(response?.data) ? response.data : [];
+
+      const terminalOnly = rawList.filter(
+        (b) => b && TERMINAL_STATUSES.includes(b.status)
+      );
+
+      setRides(terminalOnly);
+      setInitialError(null);
     } catch (err) {
-      // Safe fallback
+      console.error('[RideHistoryScreen] Error fetching history:', err);
+      if (isRefresh || rides.length > 0) {
+        setRefreshError("Couldn't refresh activity");
+        setTimeout(() => setRefreshError(null), 3000);
+      } else {
+        setInitialError("Couldn't load activity");
+      }
     } finally {
-      setLoading(false);
+      setIsLoading(false);
+      setIsRefreshing(false);
     }
+  }, [rides.length]);
+
+  // 2. Refresh on Screen Focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchHistory(rides.length > 0);
+    }, [fetchHistory, rides.length])
+  );
+
+  // 3. Date Grouping
+  const { todayRides, yesterdayRides, earlierRides } = useMemo(() => {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const yesterdayStart = todayStart - 24 * 60 * 60 * 1000;
+
+    const today = [];
+    const yesterday = [];
+    const earlier = [];
+
+    rides.forEach((item) => {
+      const timestamp = item.createdAt ? new Date(item.createdAt).getTime() : 0;
+      if (timestamp >= todayStart) {
+        today.push(item);
+      } else if (timestamp >= yesterdayStart) {
+        yesterday.push(item);
+      } else {
+        earlier.push(item);
+      }
+    });
+
+    return {
+      todayRides: today,
+      yesterdayRides: yesterday,
+      earlierRides: earlier,
+    };
+  }, [rides]);
+
+  const handleCardPress = (item) => {
+    setSelectedBooking(item);
   };
 
-  const completedRidesCount = rides.filter(r => r.status === 'completed').length;
+  const handleBookRide = () => {
+    navigation.navigate('HomeTab');
+  };
+
+  const handleOpenRate = (booking) => {
+    setRatingBooking(booking);
+  };
+
+  const completedTripCount = rides.filter((ride) => ride.status === 'completed').length;
+
+  const quickActions = [
+    { label: 'Book', icon: 'car-outline', onPress: handleBookRide },
+    { label: 'Safety', icon: 'shield-checkmark-outline', onPress: () => navigation.navigate('SafetyTab') },
+    { label: 'Support', icon: 'headset-outline', onPress: () => navigation.navigate('HelpSupport') },
+    { label: 'Settings', icon: 'settings-outline', onPress: () => navigation.navigate('Settings') },
+  ];
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: colors.surface.base }]}
+      edges={['top', 'left', 'right']}
+    >
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={colors.surface.base}
+      />
 
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => onNavigate('home')} activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={22} color={NAVY} />
-        </TouchableOpacity>
-        <Text style={styles.brandTitle}>Ride History</Text>
-        <TouchableOpacity style={styles.filterButton} onPress={fetchHistory} activeOpacity={0.7}>
-          <Feather name="refresh-cw" size={18} color={NAVY} />
-        </TouchableOpacity>
+      {/* Top Header */}
+      <View style={styles.topBar}>
+        <Text style={[styles.headerTitle, { color: colors.text.primary }]}>Activity</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false} bounces={false}>
-        
-        {/* Total Rides Summary Card */}
-        <View style={styles.summaryCard}>
-          <View style={styles.summaryIconWrap}>
-            <MaterialCommunityIcons name="car-multiple" size={22} color={BLUE} />
-          </View>
-          <View style={{ marginLeft: 14 }}>
-            <Text style={styles.summaryLabel}>Completed Rides</Text>
-            <Text style={styles.summaryCount}>{completedRidesCount}</Text>
-          </View>
+      {/* Refresh Error Banner */}
+      {refreshError && (
+        <View style={[styles.refreshErrorBanner, { backgroundColor: colors.semantic.warningTint }]}>
+          <Text style={[styles.refreshErrorText, { color: colors.semantic.warning }]}>{refreshError}</Text>
         </View>
+      )}
 
-        {loading ? (
-          <ActivityIndicator size="small" color={NAVY} style={{ marginTop: 24 }} />
-        ) : rides.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Ionicons name="car-outline" size={44} color={MUTED} />
-            <Text style={styles.emptyTitle}>No Past Rides</Text>
-            <Text style={styles.emptySub}>Your ride bookings and completed trips will appear here.</Text>
+      {/* Main Content Feed */}
+      {isLoading && rides.length === 0 ? (
+        <View style={styles.contentPadding}>
+          <ActivitySkeletonLoader count={4} />
+        </View>
+      ) : initialError && rides.length === 0 ? (
+        <View style={styles.errorContainer}>
+          <View style={[styles.errorIconWrap, { backgroundColor: colors.semantic.dangerTint }]}>
+            <CRIcon name="alert-circle-outline" size={32} color={colors.semantic.danger} />
           </View>
-        ) : (
-          rides.map((item) => {
-            const dateStr = item.createdAt 
-              ? new Date(item.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) 
-              : 'Recent';
-            const pickupName = item.pickup?.name || item.pickupLocation || 'Campus Pickup';
-            const destName = item.dropoff?.name || item.dropoffLocation || item.destination || 'Campus Dropoff';
-            const statusFormatted = item.status ? item.status.replace(/_/g, ' ') : 'Completed';
-            const isCompleted = item.status === 'completed';
-
-            return (
-              <View key={item._id || item.id} style={styles.rideCard}>
-                
-                {/* Top Row: Date, Status, Type */}
-                <View style={styles.cardTopRow}>
-                  <Text style={styles.cardDate}>{dateStr}</Text>
-                  <View style={styles.cardTopRight}>
-                    <Text style={[styles.completedText, !isCompleted && { color: BLUE }]}>
-                      {statusFormatted}
-                    </Text>
-                    <Text style={[styles.rideTypeText, item.rideMode === 'solo' ? { color: '#9333EA' } : { color: BLUE }]}>
-                      {item.rideMode?.toUpperCase() || 'SHARED'}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Route Timeline */}
-                <View style={styles.routeContainer}>
-                  <View style={styles.routeRow}>
-                    <View style={[styles.dotIndicator, { backgroundColor: BLUE }]} />
-                    <Text style={styles.routeText}>{pickupName}</Text>
-                  </View>
-
-                  <View style={styles.routeLine} />
-
-                  <View style={styles.routeRow}>
-                    <View style={[styles.dotIndicator, { backgroundColor: '#EF4444' }]} />
-                    <Text style={styles.routeText}>{destName}</Text>
-                  </View>
-                </View>
-
-                {/* Bottom Row: Ride ID */}
-                <View style={styles.cardBottomRow}>
-                  <Text style={styles.rideIdText}>Booking: #{String(item._id || item.id).substring(0, 8)}</Text>
-                  {item.driverId && (
-                    <Text style={styles.driverNameText}>
-                      Driver: {item.driverId.fullName || 'Assigned'}
-                    </Text>
-                  )}
-                </View>
-
+          <Text style={[styles.errorTitle, { color: colors.text.primary }]}>Couldn't load activity</Text>
+          <Text style={[styles.errorSub, { color: colors.text.secondary }]}>
+            Please check your internet connection and try again.
+          </Text>
+          <TouchableOpacity
+            style={[
+              styles.retryButton,
+              {
+                backgroundColor: colors.brand.primary,
+                borderColor: colors.brand.primaryPressed,
+              },
+            ]}
+            onPress={() => fetchHistory(false)}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.retryButtonText, { color: colors.brand.onGoldText }]}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={() => fetchHistory(true)}
+              tintColor={colors.brand.primary}
+              colors={[colors.brand.primary]}
+            />
+          }
+        >
+          {/* 1. Large Summary Header (Reference B Style) */}
+          <View style={styles.summaryHeader}>
+            <View style={[styles.summaryAvatarWrap, { backgroundColor: colors.surface.tile, borderColor: colors.border.subtle }]}>
+              <CRIcon name="car" size={36} color={colors.text.primary} />
+              <View style={[styles.summaryBadge, { backgroundColor: colors.brand.primary }]}>
+                <CRIcon name="time" size={12} color="#FFFFFF" />
               </View>
-            );
-          })
-        )}
+            </View>
 
-        <View style={{ height: 110 }} />
-      </ScrollView>
+            <View style={styles.nameRow}>
+              <Text style={[styles.summaryTitle, { color: colors.text.primary }]}>
+                {rides.length > 0 ? `${completedTripCount} Completed Trips` : 'Your Campus Trips'}
+              </Text>
+              <CRIcon name="chevron-forward" size={18} color={colors.text.secondary} />
+            </View>
+            <Text style={[styles.summarySub, { color: colors.text.secondary }]}>
+              Past campus routes, trip status & driver feedback
+            </Text>
+          </View>
 
-      {/* Unified Bottom Tab Navigation */}
-      <View style={styles.tabBar}>
-        <TabItem icon={<Ionicons name="home-outline" size={22} color={MUTED} />} label="Home" onPress={() => onNavigate('home')} />
-        <TabItem icon={<FontAwesome5 name="car" size={18} color={BLUE} />} label="Rides" active={true} onPress={() => {}} />
-        <TabItem icon={<Ionicons name="notifications-outline" size={22} color={MUTED} />} label="Alerts" onPress={() => onNavigate('alerts')} />
-        <TabItem icon={<Feather name="user" size={22} color={MUTED} />} label="Profile" onPress={() => onNavigate('profile')} />
-      </View>
+          {/* 2. Circular Quick Actions Row (Reference B Style) */}
+          <View style={styles.quickRow}>
+            {quickActions.map((action) => (
+              <TouchableOpacity
+                key={action.label}
+                style={styles.quickAction}
+                onPress={action.onPress}
+                activeOpacity={0.75}
+                accessibilityRole="button"
+                accessibilityLabel={action.label}
+              >
+                <View style={[styles.quickIconCircle, { backgroundColor: colors.surface.tile, borderColor: colors.border.subtle }]}>
+                  <CRIcon name={action.icon} size={22} color={colors.text.primary} />
+                </View>
+                <Text style={[styles.quickLabel, { color: colors.text.primary }]}>{action.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* 3. Empty State or Grouped Trip Sections (Reference B Style) */}
+          {rides.length === 0 ? (
+            <ActivityEmptyState onBookRide={handleBookRide} />
+          ) : (
+            <>
+              {/* GROUP 1: TODAY */}
+              {todayRides.length > 0 && (
+                <View style={styles.groupSection}>
+                  <Text style={[styles.groupTitle, { color: colors.text.secondary }]}>TODAY</Text>
+                  <View style={[styles.groupedCard, { backgroundColor: colors.surface.tile, borderColor: colors.border.subtle }]}>
+                    {todayRides.map((item, index) => (
+                      <ActivityRideCard
+                        key={item._id || item.id}
+                        item={item}
+                        onPress={handleCardPress}
+                        showDateInMetadata={false}
+                        showDivider={index < todayRides.length - 1}
+                      />
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {/* GROUP 2: YESTERDAY */}
+              {yesterdayRides.length > 0 && (
+                <View style={styles.groupSection}>
+                  <Text style={[styles.groupTitle, { color: colors.text.secondary }]}>YESTERDAY</Text>
+                  <View style={[styles.groupedCard, { backgroundColor: colors.surface.tile, borderColor: colors.border.subtle }]}>
+                    {yesterdayRides.map((item, index) => (
+                      <ActivityRideCard
+                        key={item._id || item.id}
+                        item={item}
+                        onPress={handleCardPress}
+                        showDateInMetadata={false}
+                        showDivider={index < yesterdayRides.length - 1}
+                      />
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {/* GROUP 3: EARLIER */}
+              {earlierRides.length > 0 && (
+                <View style={styles.groupSection}>
+                  <Text style={[styles.groupTitle, { color: colors.text.secondary }]}>EARLIER</Text>
+                  <View style={[styles.groupedCard, { backgroundColor: colors.surface.tile, borderColor: colors.border.subtle }]}>
+                    {earlierRides.map((item, index) => (
+                      <ActivityRideCard
+                        key={item._id || item.id}
+                        item={item}
+                        onPress={handleCardPress}
+                        showDateInMetadata={true}
+                        showDivider={index < earlierRides.length - 1}
+                      />
+                    ))}
+                  </View>
+                </View>
+              )}
+            </>
+          )}
+
+          <View style={{ height: spacing.xxl }} />
+        </ScrollView>
+      )}
+
+      {/* 4. Trip Details Modal Bottom Sheet */}
+      <TripDetailsSheet
+        visible={!!selectedBooking && !ratingBooking}
+        booking={selectedBooking}
+        onClose={() => setSelectedBooking(null)}
+        onPressRate={handleOpenRate}
+      />
+
+      {/* 5. Rate Later Modal Sheet */}
+      <RateLaterSheet
+        visible={!!ratingBooking}
+        booking={ratingBooking}
+        onClose={() => setRatingBooking(null)}
+        onRatingSuccess={() => {
+          setRatingBooking(null);
+          setSelectedBooking(null);
+          fetchHistory(true);
+        }}
+      />
     </SafeAreaView>
   );
 }
 
-function TabItem({ icon, label, active, onPress }) {
-  return (
-    <TouchableOpacity style={styles.tabItem} onPress={onPress} activeOpacity={0.8}>
-      <View style={[styles.tabIconWrap, active && styles.tabIconWrapActive]}>
-        {icon}
-      </View>
-      <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{label}</Text>
-    </TouchableOpacity>
-  );
-}
-
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: SCREEN_BG },
-  header: {
+  safe: {
+    flex: 1,
+  },
+  topBar: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  headerTitle: {
+    fontSize: 26,
+    fontFamily: fonts.extraBold,
+    letterSpacing: -0.5,
+  },
+  summaryHeader: {
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+  },
+  summaryAvatarWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.sm,
+    position: 'relative',
+  },
+  summaryBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  summaryTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 20,
+    letterSpacing: -0.3,
+  },
+  summarySub: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  quickRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginVertical: spacing.lg,
+    paddingHorizontal: 4,
+  },
+  quickAction: {
+    alignItems: 'center',
+    width: 68,
+    gap: 6,
+  },
+  quickIconCircle: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickLabel: {
+    fontFamily: fonts.semiBold,
+    fontSize: 12,
+  },
+  groupSection: {
+    marginBottom: spacing.sm,
+  },
+  groupTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    letterSpacing: 0.8,
+    marginBottom: 6,
+    marginLeft: 4,
+  },
+  groupedCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 2,
+    marginBottom: 14,
+    overflow: 'hidden',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: spacing.lg,
+  },
+  contentPadding: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.xs,
+  },
+  refreshErrorBanner: {
+    paddingVertical: 6,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  refreshErrorText: {
+    fontSize: 11.5,
+    fontFamily: fonts.bold,
+  },
+  errorContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.xxl,
+  },
+  errorIconWrap: {
+    width: 60,
     height: 60,
-    backgroundColor: '#FFFFFF',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
-    elevation: 2,
-    zIndex: 20,
-  },
-  backButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  brandTitle: { fontSize: 18, fontWeight: '800', color: NAVY },
-  filterButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-
-  scrollContainer: { padding: 16, paddingTop: 16, paddingBottom: 110 },
-
-  summaryCard: {
-    backgroundColor: CARD_BG,
-    borderRadius: 20,
-    padding: 18,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: BORDER,
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  summaryIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: TAB_ACTIVE_BG,
+    borderRadius: 30,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: spacing.md,
   },
-  summaryLabel: { fontSize: 12, fontWeight: '700', color: MUTED },
-  summaryCount: { fontSize: 22, fontWeight: '800', color: NAVY, marginTop: 1 },
-
-  emptyContainer: {
+  errorTitle: {
+    fontSize: 18,
+    fontFamily: fonts.extraBold,
+    marginBottom: 6,
+    textAlign: 'center',
+    letterSpacing: -0.3,
+  },
+  errorSub: {
+    fontSize: 13,
+    fontFamily: fonts.medium,
+    textAlign: 'center',
+    lineHeight: 18,
+    maxWidth: 240,
+    marginBottom: spacing.lg,
+  },
+  retryButton: {
+    borderWidth: 1.5,
+    paddingVertical: 12,
+    paddingHorizontal: spacing.xl,
+    borderRadius: 14,
+    minWidth: 160,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
-    paddingHorizontal: 20,
   },
-  emptyTitle: { fontSize: 16, fontWeight: '700', color: TEXT, marginTop: 12 },
-  emptySub: { fontSize: 13, color: MUTED, textAlign: 'center', marginTop: 6 },
-
-  rideCard: {
-    backgroundColor: CARD_BG,
-    borderRadius: 20,
-    padding: 18,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: BORDER,
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowRadius: 6,
-    elevation: 2,
+  retryButtonText: {
+    fontSize: 14,
+    fontFamily: fonts.bold,
   },
-  cardTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  cardDate: { fontSize: 13, fontWeight: '700', color: MUTED },
-  cardTopRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  completedText: { fontSize: 12, fontWeight: '700', color: '#166534', textTransform: 'capitalize' },
-  rideTypeText: { fontSize: 12, fontWeight: '800' },
-
-  routeContainer: { marginBottom: 14, paddingLeft: 4 },
-  routeRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  dotIndicator: { width: 10, height: 10, borderRadius: 5 },
-  routeLine: { width: 2, height: 14, backgroundColor: BORDER, marginLeft: 4, marginVertical: 2 },
-  routeText: { fontSize: 15, fontWeight: '700', color: TEXT },
-
-  cardBottomRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: BORDER,
-    paddingTop: 12,
-  },
-  rideIdText: { fontSize: 12, fontWeight: '600', color: MUTED },
-  driverNameText: { fontSize: 12, fontWeight: '700', color: NAVY },
-
-  tabBar: { 
-    position: 'absolute', left: 0, right: 0, bottom: 0, 
-    backgroundColor: '#fff', 
-    flexDirection: 'row', 
-    paddingTop: 8, 
-    paddingBottom: Platform.OS === 'ios' ? 24 : 12, 
-    borderTopLeftRadius: 24, borderTopRightRadius: 24, 
-    shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 10, elevation: 10 
-  },
-  tabItem: { flex: 1, alignItems: 'center' },
-  tabIconWrap: { paddingHorizontal: 20, paddingVertical: 6, borderRadius: 16 },
-  tabIconWrapActive: { backgroundColor: TAB_ACTIVE_BG },
-  tabLabel: { fontSize: 12, color: MUTED, marginTop: 2 },
-  tabLabelActive: { color: NAVY, fontWeight: '700' },
 });

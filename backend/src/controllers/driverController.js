@@ -95,36 +95,6 @@ export const getDriverAnalytics = async (req, res, next) => {
   }
 };
 
-export const getDriverEarnings = async (req, res, next) => {
-  try {
-    const completedTrips = await DriverTrip.find({
-      driverId: req.user._id,
-      status: "completed",
-    }).sort({ createdAt: -1 });
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // Fetch associated bookings to compute total earnings
-    let totalEarnings = 0;
-    let todaysEarnings = 0;
-
-    res.json({
-      success: true,
-      data: {
-        metrics: {
-          totalEarnings,
-          todaysEarnings,
-          totalTrips: completedTrips.length,
-        },
-        recentTrips: completedTrips.slice(0, 10),
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
 export const updateDriverPreferences = async (req, res, next) => {
   try {
     const { preferences } = req.body;
@@ -224,8 +194,9 @@ export const getPendingCampusRequests = async (req, res, next) => {
 };
 
 /**
- * Updates driver availability and heartbeat location.
- * Enforces driver approval status gate.
+ * Updates the driver's latest location heartbeat only. Availability is managed
+ * exclusively by updateDriverAvailability so a screen mount/GPS callback can
+ * never implicitly take a driver online or offline.
  */
 export const updateDriverLocation = async (req, res, next) => {
   try {
@@ -239,7 +210,7 @@ export const updateDriverLocation = async (req, res, next) => {
       });
     }
 
-    const { latitude, longitude, isOnline } = req.body;
+    const { latitude, longitude } = req.body;
 
     const updateData = {
       lastSeen: new Date()
@@ -262,10 +233,6 @@ export const updateDriverLocation = async (req, res, next) => {
       };
     }
 
-    if (isOnline !== undefined) {
-      updateData.isOnline = Boolean(isOnline);
-    }
-
     const updatedDriver = await User.findByIdAndUpdate(
       driverId,
       { $set: updateData },
@@ -280,6 +247,47 @@ export const updateDriverLocation = async (req, res, next) => {
         currentLocation: updatedDriver.currentLocation
       } 
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Explicit authoritative availability transition.
+ */
+export const updateDriverAvailability = async (req, res, next) => {
+  try {
+    const driverId = req.user.id || req.user._id;
+    if (typeof req.body?.isOnline !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_AVAILABILITY', message: 'isOnline must be a boolean' }
+      });
+    }
+
+    const updatedDriver = await User.findOneAndUpdate(
+      {
+        _id: driverId,
+        role: 'driver',
+        approvalStatus: 'approved'
+      },
+      {
+        $set: {
+          isOnline: req.body.isOnline,
+          lastSeen: new Date()
+        }
+      },
+      { returnDocument: 'after' }
+    ).select('isOnline lastSeen currentLocation');
+
+    if (!updatedDriver) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'DRIVER_NOT_APPROVED', message: 'Driver is not approved or authorized to change availability' }
+      });
+    }
+
+    res.json({ success: true, data: updatedDriver });
   } catch (error) {
     next(error);
   }
@@ -351,6 +359,7 @@ export const updateDriverTelemetry = async (req, res, next) => {
       $set: {
         'currentLocation.coordinates': [lng, lat],
         'currentLocation.type': 'Point',
+        heading: Number.isFinite(Number(heading)) ? Number(heading) : 0,
         lastSeen: new Date()
       }
     });
@@ -380,21 +389,19 @@ export const getActiveDriverLocations = async (req, res, next) => {
       isOnline: true,
       _id: { $nin: busyDriverIds },
       lastSeen: { $gte: freshnessThreshold },
-      'currentLocation.coordinates': { $exists: true, $not: { $size: 0 } }
-    }).select('fullName phoneNumber vehicleModel vehicleLicensePlate currentLocation ratings avatarUri driverProfile');
+      'currentLocation.coordinates': { $exists: true, $not: { $size: 0 }, $ne: [0, 0] }
+    }).select('currentLocation heading lastSeen');
 
     const formattedDrivers = activeDrivers.map(driver => {
       const coords = driver.currentLocation?.coordinates || [0, 0];
       return {
-        _id: driver._id,
         id: driver._id,
-        fullName: driver.fullName,
-        phoneNumber: driver.phoneNumber,
-        vehicleModel: driver.driverProfile?.vehicle?.model || driver.vehicleModel || 'Campus Vehicle',
-        vehicleLicensePlate: driver.driverProfile?.vehicle?.licensePlate || driver.vehicleLicensePlate || 'N/A',
-        avatarUri: driver.avatarUri,
-        lat: coords[1],
-        lng: coords[0]
+        // Discovery uses a privacy-conscious preview precision. Assigned-trip
+        // telemetry remains exact and is delivered only to authorized trip rooms.
+        lat: Number(Number(coords[1]).toFixed(4)),
+        lng: Number(Number(coords[0]).toFixed(4)),
+        heading: Number.isFinite(driver.heading) ? driver.heading : 0,
+        updatedAt: driver.lastSeen
       };
     });
 

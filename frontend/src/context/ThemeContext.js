@@ -1,56 +1,112 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
+import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { colors, typography, spacing, radii, elevation, iconSizes, motion } from '../theme';
+import { lightColors, darkColors, getThemeColors } from '../theme/colors';
+import { typography, fonts } from '../theme/typography';
+import spacing from '../theme/spacing';
+import radii from '../theme/radii';
+import elevation from '../theme/elevation';
+import iconSizes from '../theme/icons';
+import motion from '../theme/motion';
 
-const ThemeContext = createContext();
+const THEME_STORAGE_KEY = '@campusride_theme_preference';
 
-export const ThemeProvider = ({ children }) => {
-  const [darkModeEnabled, setDarkModeEnabled] = useState(false);
-
-  useEffect(() => {
-    const loadGlobalTheme = async () => {
-      try {
-        const localDark = await AsyncStorage.getItem('@campusride_dark_enabled');
-        if (localDark !== null) setDarkModeEnabled(JSON.parse(localDark));
-      } catch (err) {
-        console.error('Failed to load theme preference from storage:', err);
-      }
-    };
-    loadGlobalTheme();
-  }, []);
-
-  const toggleGlobalTheme = async (value) => {
-    setDarkModeEnabled(value);
-    try {
-      await AsyncStorage.setItem('@campusride_dark_enabled', JSON.stringify(value));
-    } catch (err) {
-      console.error('Storage update failed:', err);
-    }
-  };
-
-  // Canonical CampusRide theme tokens
-  const currentTheme = {
-    colors,
+const ThemeContext = createContext({
+  themeMode: 'system',
+  isDark: false,
+  setThemeMode: () => {},
+  theme: {
+    colors: lightColors,
     typography,
+    fonts,
     spacing,
     radii,
     elevation,
     iconSizes,
     motion,
+    isDark: false,
+    themeMode: 'system',
+  },
+});
+
+export const ThemeProvider = ({ children }) => {
+  const systemColorScheme = useColorScheme(); // 'light' | 'dark' | null | undefined
+  const [themeMode, setThemeModeState] = useState('system'); // 'system' | 'light' | 'dark'
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    const loadStoredTheme = async () => {
+      try {
+        const storedMode = await AsyncStorage.getItem(THEME_STORAGE_KEY);
+        if (storedMode && ['system', 'light', 'dark'].includes(storedMode)) {
+          setThemeModeState(storedMode);
+        } else {
+          // Backward compatibility check for legacy boolean key
+          const legacyDark = await AsyncStorage.getItem('@campusride_dark_enabled');
+          if (legacyDark !== null) {
+            setThemeModeState(JSON.parse(legacyDark) ? 'dark' : 'light');
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to load theme preference from storage:', err.message);
+      } finally {
+        setIsHydrated(true);
+      }
+    };
+
+    loadStoredTheme();
+  }, []);
+
+  const setThemeMode = async (mode) => {
+    if (!['system', 'light', 'dark'].includes(mode)) return;
+    setThemeModeState(mode);
+    try {
+      await AsyncStorage.setItem(THEME_STORAGE_KEY, mode);
+    } catch (err) {
+      console.warn('Failed to persist theme preference:', err.message);
+    }
+  };
+
+  const isDark = themeMode === 'system'
+    ? systemColorScheme === 'dark'
+    : themeMode === 'dark';
+
+  const activeColors = getThemeColors(isDark);
+
+  const theme = {
+    colors: activeColors,
+    typography,
+    fonts,
+    spacing,
+    radii,
+    elevation,
+    iconSizes,
+    motion,
+    isDark,
+    themeMode,
     // Backward compatibility aliases
-    background: colors.brand.baseBackground,
-    cardBackground: colors.surface.base,
-    mainText: colors.text.primary,
-    subText: colors.text.secondary,
-    borderColor: colors.border.subtle,
-    iconWrap: colors.brand.primaryTint,
-    iconColor: colors.brand.primary,
-    statusBar: 'dark',
-    tabBarBorder: colors.border.subtle,
+    background: activeColors.brand.baseBackground,
+    cardBackground: activeColors.surface.base,
+    mainText: activeColors.text.primary,
+    subText: activeColors.text.secondary,
+    borderColor: activeColors.border.subtle,
+    iconWrap: activeColors.brand.primaryTint,
+    iconColor: activeColors.brand.primary,
+    statusBar: isDark ? 'light' : 'dark',
+    tabBarBorder: activeColors.border.subtle,
   };
 
   return (
-    <ThemeContext.Provider value={{ darkModeEnabled, toggleGlobalTheme, theme: currentTheme }}>
+    <ThemeContext.Provider
+      value={{
+        themeMode,
+        isDark,
+        setThemeMode,
+        theme,
+        darkModeEnabled: isDark, // legacy compatibility
+        toggleGlobalTheme: (val) => setThemeMode(val ? 'dark' : 'light'), // legacy compatibility
+      }}
+    >
       {children}
     </ThemeContext.Provider>
   );

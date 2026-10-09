@@ -1,0 +1,21 @@
+node_modules/
+.expo/
+dist/
+web-build/
+temp_web_build/
+docs/
+.claude/
+*.log
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+.env
+.env.*
+!.env.example
+ios/
+android/
+
+# Large legacy onboarding images are not referenced by the application.
+assets/images/onboarding1.png
+assets/images/onboarding2.png
+assets/images/onboarding3.png

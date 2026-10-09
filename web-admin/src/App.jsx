@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import Sidebar from './components/Sidebar'
 import DashboardScreen from './screens/DashboardScreen'
+import SafetyScreen from './screens/SafetyScreen'
 import DriverVerificationScreen from './screens/VerificationScreen'
 import TripsMonitoringScreen from './screens/TripsMonitoringScreen'
 import StudentsManagementScreen from './screens/UserDirectoryScreen'
@@ -88,6 +89,8 @@ export default function App() {
             <h2 style={appStyles.headerTitle}>
               {activePage === 'dashboard' 
                 ? 'Dashboard' 
+                : activePage === 'safety'
+                ? 'Safety & SOS Emergency Receiver'
                 : activePage === 'driver-verification'
                 ? 'Driver Verification'
                 : activePage === 'trips' 
@@ -124,6 +127,7 @@ export default function App() {
         {/* INNER SCREEN CANVAS FRAME LAYER */}
         <div style={appStyles.contentCanvas}>
           {activePage === 'dashboard' && <DashboardScreen />}
+          {activePage === 'safety' && <SafetyScreen />}
           {activePage === 'driver-verification' && <DriverVerificationScreen />}
           {activePage === 'trips' && <TripsMonitoringScreen />}
           {activePage === 'user-directory' && <StudentsManagementScreen />}
@@ -133,7 +137,7 @@ export default function App() {
           {activePage === 'admin-profile' && <AdminProfileScreen />}
 
           {/* FALLBACK SAFEGUARD BLOCK */}
-          {!['dashboard', 'driver-verification', 'trips', 'user-directory', 'analytics', 'notifications', 'settings', 'admin-profile'].includes(activePage) && (
+          {!['dashboard', 'safety', 'driver-verification', 'trips', 'user-directory', 'analytics', 'notifications', 'settings', 'admin-profile'].includes(activePage) && (
             <div style={appStyles.fallbackBox}>
               <h3 style={appStyles.fallbackTitle}>{activePage.replace('-', ' ')} Shell</h3>
               <p style={appStyles.fallbackDesc}>Global inline framework operating successfully.</p>

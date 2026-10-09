@@ -54,10 +54,10 @@ const TermsPrivacyScreen = ({ onAgree, onBack, route }) => {
       text: 'Members agree to respectful campus interactions, verified identity standards, and safe transit practices.',
     },
     {
-      id: 'terms-fares',
+      id: 'terms-service',
       icon: 'cash-outline',
       title: 'TRANSPARENT PRICING',
-      text: 'Ride fares are calculated and displayed clearly prior to booking based on campus transit zones.',
+      text: 'Ride route and availability information is displayed before a campus ride request is submitted.',
     },
     {
       id: 'terms-privacy',

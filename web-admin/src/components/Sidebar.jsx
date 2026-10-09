@@ -3,6 +3,7 @@ import {
   LayoutDashboard, 
   Car, 
   ShieldCheck, 
+  ShieldAlert,
   Users, 
   BarChart3, 
   Bell, 
@@ -12,6 +13,7 @@ import api from '../api/axios'
 
 const NAV_ITEMS = [
   { id: 'dashboard',           label: 'Dashboard',           icon: LayoutDashboard },
+  { id: 'safety',              label: 'Safety & SOS',        icon: ShieldAlert },
   { id: 'trips',               label: 'Trips',               icon: Car },
   { id: 'driver-verification', label: 'Driver Verification', icon: ShieldCheck },
   { id: 'user-directory',      label: 'User Directory',      icon: Users }, 

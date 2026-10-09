@@ -1,6 +1,7 @@
 import User from '../models/User.js';
 import jwt from 'jsonwebtoken';
 import { getJwtSecret } from '../config/jwtConfig.js';
+import { normalizePhoneNumber } from '../utils/phoneNormalizer.js';
 
 const generateToken = (id) => {
   return jwt.sign({ id }, getJwtSecret(), { expiresIn: '7d' });
@@ -15,6 +16,12 @@ const extractFilePath = (fileArray) => {
     return fileObj.path.replace(/\\/g, '/');
   }
   return null;
+};
+
+const publicAssetUrl = (req, value) => {
+  if (!value || typeof value !== 'string') return null;
+  if (/^https?:\/\//i.test(value)) return value;
+  return `${req.protocol}://${req.get('host')}/${value.replace(/^\/+/, '')}`;
 };
 
 export const register = async (req, res, next) => {
@@ -130,10 +137,27 @@ export const login = async (req, res, next) => {
       });
     }
 
-    const isEmailInput = email.includes('@');
-    const query = isEmailInput 
-      ? { email: email.trim().toLowerCase() } 
-      : { phoneNumber: email.trim().replace(/\s+/g, "") };
+    const rawInput = email.trim();
+    const isEmailInput = rawInput.includes('@');
+    
+    let query;
+    if (isEmailInput) {
+      query = { email: rawInput.toLowerCase() };
+    } else {
+      const cleanPhone = rawInput.replace(/\s+/g, "");
+      let normalizedPhone = cleanPhone;
+      try {
+        normalizedPhone = normalizePhoneNumber(cleanPhone);
+      } catch (err) {
+        // Fallback
+      }
+      query = {
+        $or: [
+          { phoneNumber: cleanPhone },
+          { phoneNumber: normalizedPhone }
+        ]
+      };
+    }
 
     const user = await User.findOne(query);
 
@@ -305,8 +329,8 @@ export const getUserProfile = async (req, res, next) => {
           role: user.role,
           approvalStatus: user.approvalStatus,
           isApproved: user.isApproved,
-          avatarUri: user.avatarUri || user.avatarUrl,
-          avatarUrl: user.avatarUrl || user.avatarUri,
+          avatarUri: publicAssetUrl(req, user.avatarUri || user.avatarUrl),
+          avatarUrl: publicAssetUrl(req, user.avatarUrl || user.avatarUri),
           rating: user.ratingAverage || 5.0,
           totalTrips: user.totalTrips || 0,
           driverProfile: user.driverProfile
@@ -340,10 +364,14 @@ export const updateUserProfile = async (req, res, next) => {
       { new: true, runValidators: true }
     ).select('-password');
 
+    const responseUser = updatedUser.toObject();
+    responseUser.avatarUri = publicAssetUrl(req, updatedUser.avatarUri || updatedUser.avatarUrl);
+    responseUser.avatarUrl = publicAssetUrl(req, updatedUser.avatarUrl || updatedUser.avatarUri);
+
     res.json({
       success: true,
       data: {
-        user: updatedUser
+        user: responseUser
       }
     });
   } catch (error) {

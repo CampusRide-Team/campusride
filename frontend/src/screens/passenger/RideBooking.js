@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, Feather, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
-import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_DEFAULT } from '../../components/maps/MapLibreCompat';
 import * as Location from 'expo-location';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import api from '../../api/axios';

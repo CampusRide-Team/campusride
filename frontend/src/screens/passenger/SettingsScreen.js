@@ -1,315 +1,201 @@
-// SettingsScreen.js
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Switch,
-  StatusBar,
-  Platform,
-  Alert,
-} from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, Linking, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons, Feather, FontAwesome5 } from '@expo/vector-icons';
+import * as Notifications from 'expo-notifications';
+import * as Location from 'expo-location';
+import { useTheme } from '../../context/ThemeContext';
+import { appConfig } from '../../config/appConfig';
+import { fonts, spacing } from '../../theme';
+import { CRIcon } from '../../components/common';
 
-const NAVY = '#10206B';
-const BLUE = '#2F6BFF';
-const MUTED = '#6B7280';
-const TEXT = '#0F1733';
-const CARD_BG = '#FFFFFF';
-const SCREEN_BG = '#F8FAFC';
-const TAB_ACTIVE_BG = '#EEF2FF';
-const BORDER = '#E2E8F0';
+export default function SettingsScreen({ navigation }) {
+  const { theme, isDark, themeMode, setThemeMode } = useTheme();
+  const { colors } = theme;
+  const [notificationStatus, setNotificationStatus] = useState('Checking…');
+  const [locationStatus, setLocationStatus] = useState('Checking…');
 
-export default function SettingsScreen({ onNavigate, onBack }) {
-  const [pushNotifications, setPushNotifications] = useState(true);
-  const [darkMode, setDarkMode] = useState(false);
-  const [biometricLock, setBiometricLock] = useState(true);
+  useEffect(() => {
+    const checkPermissions = async () => {
+      try {
+        const notificationPermission = await Notifications.getPermissionsAsync();
+        setNotificationStatus(notificationPermission.granted ? 'Allowed' : 'Not allowed');
+      } catch {
+        setNotificationStatus('System managed');
+      }
 
-  const handleBack = () => {
-    if (onBack) onBack();
-    else if (onNavigate) onNavigate('profile');
+      try {
+        const locationPermission = await Location.getForegroundPermissionsAsync();
+        setLocationStatus(locationPermission.granted ? 'Allowed' : 'Not allowed');
+      } catch {
+        setLocationStatus('System managed');
+      }
+    };
+    checkPermissions();
+  }, []);
+
+  const handleOpenDeviceSettings = async () => {
+    try {
+      await Linking.openSettings();
+    } catch {
+      Alert.alert('Settings Unavailable', 'Please open your phone Settings app manually.');
+    }
   };
 
+  const handleChooseTheme = () => {
+    Alert.alert('Theme', 'Choose how CampusRide should appear.', [
+      { text: 'System', onPress: () => setThemeMode('system') },
+      { text: 'Light', onPress: () => setThemeMode('light') },
+      { text: 'Dark', onPress: () => setThemeMode('dark') },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  const themeLabel = themeMode === 'system'
+    ? 'System'
+    : themeMode === 'light'
+      ? 'Light'
+      : 'Dark';
+
+  const notificationRows = [
+    { icon: 'notifications-outline', title: 'Push notifications', value: notificationStatus, onPress: handleOpenDeviceSettings },
+  ];
+
+  const privacyRows = [
+    { icon: 'location-outline', title: 'Location services', value: locationStatus, onPress: handleOpenDeviceSettings },
+    { icon: 'shield-outline', title: 'Safety settings', onPress: () => navigation.navigate('SafetyTab') },
+    { icon: 'people-outline', title: 'Trusted contacts', onPress: () => navigation.navigate('TrustedContacts') },
+    { icon: 'map-outline', title: 'Add a campus place', onPress: () => navigation.navigate('AddLocation') },
+  ];
+
+  const appRows = [
+    { icon: 'calendar-outline', title: 'Scheduled rides', onPress: () => navigation.navigate('ScheduledRides') },
+    { icon: 'information-circle-outline', title: 'App version', value: appConfig.version },
+  ];
+
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-
-      {/* Header */}
+    <SafeAreaView
+      style={[styles.safeArea, { backgroundColor: colors.brand.baseBackground }]}
+      edges={['top', 'left', 'right']}
+    >
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.brand.baseBackground} />
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={handleBack} activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={22} color={NAVY} />
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+          <CRIcon name="arrow-back" size={21} color={colors.text.primary} />
         </TouchableOpacity>
-        <Text style={styles.brandTitle}>Settings</Text>
-        <TouchableOpacity style={styles.helpButton} onPress={() => Alert.alert("Help", "Opening settings support...")} activeOpacity={0.7}>
-          <Ionicons name="help-circle-outline" size={22} color={NAVY} />
-        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: colors.text.primary }]}>Settings</Text>
+        <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false} bounces={false}>
-        
-        {/* PREFERENCES SECTION */}
-        <Text style={styles.sectionHeader}>PREFERENCES</Text>
-        <View style={styles.cardGroup}>
-          
-          <View style={styles.settingRow}>
-            <View style={styles.iconWrap}>
-              <Ionicons name="notifications-outline" size={18} color={BLUE} />
-            </View>
-            <Text style={styles.settingLabel}>Push Notifications</Text>
-            <Switch
-              value={pushNotifications}
-              onValueChange={setPushNotifications}
-              trackColor={{ false: '#CBD5E1', true: BLUE }}
-              thumbColor="#FFFFFF"
-            />
-          </View>
-
-          <View style={styles.separatorLine} />
-
-          <TouchableOpacity 
-            style={styles.settingRow} 
-            activeOpacity={0.7}
-            onPress={() => Alert.alert("Reminder Alerts", "Configuring pre-commute countdown alert intervals...")}
-          >
-            <View style={styles.iconWrap}>
-              <Ionicons name="time-outline" size={18} color={BLUE} />
-            </View>
-            <View style={{ flex: 1, marginLeft: 14 }}>
-              <Text style={styles.settingLabel}>Reminder Alerts</Text>
-              <Text style={styles.settingSubLabel}>20-min pre-commute countdown</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
-          </TouchableOpacity>
-
-          <View style={styles.separatorLine} />
-
-          <View style={styles.settingRow}>
-            <View style={styles.iconWrap}>
-              <Ionicons name="moon-outline" size={18} color={BLUE} />
-            </View>
-            <Text style={styles.settingLabel}>Dark Mode</Text>
-            <Switch
-              value={darkMode}
-              onValueChange={setDarkMode}
-              trackColor={{ false: '#CBD5E1', true: BLUE }}
-              thumbColor="#FFFFFF"
-            />
-          </View>
-
-          <View style={styles.separatorLine} />
-
-          <TouchableOpacity 
-            style={styles.settingRow} 
-            activeOpacity={0.7}
-            onPress={() => Alert.alert("Location Services", "Managing GPS permission settings...")}
-          >
-            <View style={styles.iconWrap}>
-              <Ionicons name="location-outline" size={18} color={BLUE} />
-            </View>
-            <Text style={styles.settingLabel}>Location Services</Text>
-            <View style={styles.rowRight}>
-              <Text style={styles.statusText}>Always</Text>
-              <Ionicons name="chevron-forward" size={16} color="#9CA3AF" style={{ marginLeft: 6 }} />
-            </View>
-          </TouchableOpacity>
-
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <Text style={[styles.sectionLabel, { color: colors.text.secondary }]}>Appearance</Text>
+        <View style={styles.rows}>
+          <SettingsRow
+            icon="contrast-outline"
+            title="Theme"
+            value={themeLabel}
+            onPress={handleChooseTheme}
+            colors={colors}
+          />
         </View>
 
-        {/* SECURITY & PRIVACY SECTION */}
-        <Text style={styles.sectionHeader}>SECURITY & PRIVACY</Text>
-        <View style={styles.cardGroup}>
-          
-          <TouchableOpacity 
-            style={styles.settingRow} 
-            activeOpacity={0.7}
-            onPress={() => Alert.alert("Privacy Settings", "Opening account privacy options...")}
-          >
-            <View style={styles.iconWrap}>
-              <Ionicons name="lock-closed-outline" size={18} color={BLUE} />
-            </View>
-            <Text style={styles.settingLabel}>Account Privacy Settings</Text>
-            <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
-          </TouchableOpacity>
-
-          <View style={styles.separatorLine} />
-
-          <View style={styles.settingRow}>
-            <View style={styles.iconWrap}>
-              <Ionicons name="finger-print-outline" size={18} color={BLUE} />
-            </View>
-            <Text style={styles.settingLabel}>Biometric Lock</Text>
-            <Switch
-              value={biometricLock}
-              onValueChange={setBiometricLock}
-              trackColor={{ false: '#CBD5E1', true: BLUE }}
-              thumbColor="#FFFFFF"
-            />
-          </View>
-
+        <Text style={[styles.sectionLabel, { color: colors.text.secondary }]}>Notifications</Text>
+        <View style={styles.rows}>
+          {notificationRows.map((row, index) => (
+            <SettingsRow key={row.title} {...row} colors={colors} showDivider={index < notificationRows.length - 1} />
+          ))}
         </View>
 
-        {/* ABOUT & LEGAL SECTION */}
-        <Text style={styles.sectionHeader}>ABOUT & LEGAL</Text>
-        <View style={styles.cardGroup}>
-          
-          <TouchableOpacity 
-            style={styles.settingRow} 
-            activeOpacity={0.7}
-            onPress={() => Alert.alert("Terms of Service", "Opening terms of service...")}
-          >
-            <View style={styles.iconWrap}>
-              <Ionicons name="document-text-outline" size={18} color={BLUE} />
-            </View>
-            <Text style={styles.settingLabel}>Terms of Service</Text>
-            <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
-          </TouchableOpacity>
-
-          <View style={styles.separatorLine} />
-
-          <TouchableOpacity 
-            style={styles.settingRow} 
-            activeOpacity={0.7}
-            onPress={() => Alert.alert("Privacy Policy", "Opening privacy policy...")}
-          >
-            <View style={styles.iconWrap}>
-              <Ionicons name="shield-outline" size={18} color={BLUE} />
-            </View>
-            <Text style={styles.settingLabel}>Privacy Policy</Text>
-            <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
-          </TouchableOpacity>
-
-          <View style={styles.separatorLine} />
-
-          <View style={styles.settingRow}>
-            <View style={styles.iconWrap}>
-              <Ionicons name="information-circle-outline" size={18} color={BLUE} />
-            </View>
-            <Text style={styles.settingLabel}>App Version</Text>
-            <Text style={styles.versionText}>v2.4.0</Text>
-          </View>
-
+        <Text style={[styles.sectionLabel, { color: colors.text.secondary }]}>Privacy & safety</Text>
+        <View style={styles.rows}>
+          {privacyRows.map((row, index) => (
+            <SettingsRow key={row.title} {...row} colors={colors} showDivider={index < privacyRows.length - 1} />
+          ))}
         </View>
 
-        <View style={{ height: 110 }} />
+        <Text style={[styles.sectionLabel, { color: colors.text.secondary }]}>App</Text>
+        <View style={styles.rows}>
+          {appRows.map((row, index) => (
+            <SettingsRow key={row.title} {...row} colors={colors} showDivider={index < appRows.length - 1} />
+          ))}
+        </View>
+
+        <TouchableOpacity style={styles.systemSettingsLink} onPress={handleOpenDeviceSettings} activeOpacity={0.75}>
+          <CRIcon name="open-outline" size={16} color={colors.brand.primary} />
+          <Text style={[styles.systemSettingsText, { color: colors.brand.primary }]}>Open device settings</Text>
+        </TouchableOpacity>
       </ScrollView>
-
-      {/* Unified Bottom Tab Navigation */}
-      <View style={styles.tabBar}>
-        <TabItem icon={<Ionicons name="home-outline" size={22} color={MUTED} />} label="Home" onPress={() => onNavigate ? onNavigate('home') : null} />
-        <TabItem icon={<FontAwesome5 name="car" size={18} color={MUTED} />} label="Rides" onPress={() => onNavigate ? onNavigate('rides') : null} />
-        <TabItem icon={<Ionicons name="notifications-outline" size={22} color={MUTED} />} label="Alerts" onPress={() => onNavigate ? onNavigate('alerts') : null} />
-        <TabItem icon={<Feather name="user" size={22} color={BLUE} />} label="Profile" active={true} onPress={() => {}} />
-      </View>
     </SafeAreaView>
   );
 }
 
-function TabItem({ icon, label, active, onPress }) {
-  return (
-    <TouchableOpacity style={styles.tabItem} onPress={onPress} activeOpacity={0.8}>
-      <View style={[styles.tabIconWrap, active && styles.tabIconWrapActive]}>
-        {icon}
+function SettingsRow({ icon, title, value, onPress, colors, showDivider }) {
+  const content = (
+    <>
+      <View style={[styles.iconWrap, { backgroundColor: colors.surface.elevated }]}>
+        <CRIcon name={icon} size={18} color={colors.text.primary} />
       </View>
-      <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{label}</Text>
-    </TouchableOpacity>
+      <Text style={[styles.rowTitle, { color: colors.text.primary }]}>{title}</Text>
+      {value ? <Text style={[styles.rowValue, { color: colors.text.secondary }]}>{value}</Text> : null}
+      {onPress ? <CRIcon name="chevron-forward" size={16} color={colors.text.muted} /> : null}
+    </>
+  );
+  const rowStyle = [
+    styles.settingRow,
+    showDivider && { borderBottomWidth: 1, borderBottomColor: colors.border.divider },
+  ];
+  return onPress ? (
+    <TouchableOpacity style={rowStyle} onPress={onPress} activeOpacity={0.7}>{content}</TouchableOpacity>
+  ) : (
+    <View style={rowStyle}>{content}</View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: SCREEN_BG },
+  safeArea: { flex: 1 },
   header: {
-    height: 60,
-    backgroundColor: '#FFFFFF',
+    height: 58,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
-    elevation: 2,
-    zIndex: 20,
+    paddingHorizontal: spacing.md,
   },
-  backButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  brandTitle: { fontSize: 18, fontWeight: '800', color: NAVY },
-  helpButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-
-  scrollContainer: { padding: 16, paddingTop: 16, paddingBottom: 110 },
-
-  sectionHeader: { fontSize: 11, fontWeight: '800', color: MUTED, letterSpacing: 0.8, marginBottom: 8, marginTop: 10, marginLeft: 4 },
-  cardGroup: {
-    backgroundColor: CARD_BG,
+  backButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
+  headerSpacer: { width: 42 },
+  headerTitle: { flex: 1, textAlign: 'center', fontFamily: fonts.extraBold, fontSize: 17 },
+  content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
+  sectionLabel: {
+    fontFamily: fonts.semiBold,
+    fontSize: 12,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  rows: {
+    backgroundColor: '#F3F3F1',
     borderRadius: 20,
-    paddingVertical: 4,
-    marginBottom: 16,
     borderWidth: 1,
-    borderColor: BORDER,
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  settingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
+    borderColor: '#E8E6E1',
     paddingHorizontal: 16,
+    paddingVertical: 2,
+    marginBottom: 14,
+    overflow: 'hidden',
   },
+  settingRow: { minHeight: 58, flexDirection: 'row', alignItems: 'center' },
   iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: TAB_ACTIVE_BG,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: spacing.sm,
   },
-  settingLabel: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '700',
-    color: TEXT,
-    marginLeft: 14,
-  },
-  settingSubLabel: {
-    fontSize: 12,
-    color: MUTED,
-    marginTop: 2,
-    fontWeight: '500',
-  },
-  rowRight: {
+  rowTitle: { flex: 1, fontFamily: fonts.semiBold, fontSize: 13.5 },
+  rowValue: { fontFamily: fonts.medium, fontSize: 11.5, marginRight: spacing.xs },
+  systemSettingsLink: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.md,
+    marginTop: spacing.lg,
   },
-  statusText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: BLUE,
-  },
-  versionText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: MUTED,
-  },
-  separatorLine: {
-    height: 1,
-    backgroundColor: BORDER,
-    marginHorizontal: 16,
-  },
-
-  tabBar: { 
-    position: 'absolute', left: 0, right: 0, bottom: 0, 
-    backgroundColor: '#fff', 
-    flexDirection: 'row', 
-    paddingTop: 8, 
-    paddingBottom: Platform.OS === 'ios' ? 24 : 12, 
-    borderTopLeftRadius: 24, borderTopRightRadius: 24, 
-    shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 10, elevation: 10 
-  },
-  tabItem: { flex: 1, alignItems: 'center' },
-  tabIconWrap: { paddingHorizontal: 20, paddingVertical: 6, borderRadius: 16 },
-  tabIconWrapActive: { backgroundColor: TAB_ACTIVE_BG },
-  tabLabel: { fontSize: 12, color: MUTED, marginTop: 2 },
-  tabLabelActive: { color: NAVY, fontWeight: '700' },
+  systemSettingsText: { fontFamily: fonts.bold, fontSize: 12.5 },
 });

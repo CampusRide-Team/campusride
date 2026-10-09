@@ -109,7 +109,7 @@ const userSchema = new mongoose.Schema(
       coordinates: { type: [Number], default: [0, 0] }, // [longitude, latitude]
     },
     
-    walletBalance: { type: Number, default: 0 },
+    walletBalance: { type: Number, default: 0, select: false },
     
     // Authoritative Driver Approval Model
     approvalStatus: {
@@ -141,6 +141,17 @@ const userSchema = new mongoose.Schema(
 
     // Google OAuth Identifier
     googleId: { type: String, default: null, sparse: true },
+
+    // Safety Preferences & Disclosure (Wave 1 Backend Foundation)
+    safetyPreferences: {
+      autoShareAllRides: { type: Boolean, default: false },
+      selectedTrustedContactIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'TrustedContact' }]
+    },
+    safetyDisclosure: {
+      version: { type: String, default: null },
+      acceptedAt: { type: Date, default: null },
+      ipAddress: { type: String, default: null }
+    },
 
     notifications: [notificationSchema],
   },

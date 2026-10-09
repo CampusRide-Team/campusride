@@ -97,6 +97,7 @@ export const createSoloTrip = async (driverId, bookingId, { enforceSingleActiveT
           activePassengerCount: 1,
           reservedPassengerCount: 1,
           tripStops: initialStops,
+          currentRoute: booking.route ? { distanceMeters: booking.route.distanceMeters, durationSeconds: booking.route.durationSeconds, calculatedAt: booking.route.calculatedAt, routeVersion: 1 } : undefined,
           startedAt: new Date()
         }],
         { session }
@@ -182,6 +183,7 @@ export const createSoloTrip = async (driverId, bookingId, { enforceSingleActiveT
         activePassengerCount: 1,
         reservedPassengerCount: 1,
         tripStops: initialStops,
+        currentRoute: booking.route ? { distanceMeters: booking.route.distanceMeters, durationSeconds: booking.route.durationSeconds, calculatedAt: booking.route.calculatedAt, routeVersion: 1 } : undefined,
         startedAt: new Date()
       });
       booking.driverTripId = trip._id;
@@ -286,6 +288,7 @@ export const createSharedTrip = async (driverId, bookingId, { enforceSingleActiv
           activePassengerCount: 0,
           reservedPassengerCount: 1,
           tripStops: initialStops,
+          currentRoute: booking.route ? { distanceMeters: booking.route.distanceMeters, durationSeconds: booking.route.durationSeconds, calculatedAt: booking.route.calculatedAt, routeVersion: 1 } : undefined,
           startedAt: new Date()
         }],
         { session }
@@ -358,6 +361,7 @@ export const createSharedTrip = async (driverId, bookingId, { enforceSingleActiv
         activePassengerCount: 0,
         reservedPassengerCount: 1,
         tripStops: initialStops,
+        currentRoute: booking.route ? { distanceMeters: booking.route.distanceMeters, durationSeconds: booking.route.durationSeconds, calculatedAt: booking.route.calculatedAt, routeVersion: 1 } : undefined,
         startedAt: new Date()
       });
 
@@ -711,7 +715,6 @@ export const executeTripStop = async ({
         validateBookingTransition(booking.status, 'completed');
         booking.status = 'completed';
         booking.completedAt = now;
-        booking.fare.paymentStatus = 'paid';
 
         // Decrement active passenger count on trip
         trip.activePassengerCount = Math.max(0, trip.activePassengerCount - 1);
@@ -740,4 +743,3 @@ export const executeTripStop = async ({
 
   return { trip, stop, booking };
 };
-

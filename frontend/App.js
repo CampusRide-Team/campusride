@@ -18,6 +18,10 @@ import {
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ThemeProvider } from './src/context/ThemeContext';
 import { RideProvider } from './src/context/RideContext';
+import { SafetyProvider } from './src/context/SafetyContext';
+
+// Global Safety Components
+import { GlobalEmergencyOverlay } from './src/components/safety/GlobalEmergencyOverlay';
 
 // Navigation Router
 import RootNavigator from './src/navigation/RootNavigator';
@@ -101,7 +105,10 @@ export default function App() {
       <AuthProvider>
         <ThemeProvider>
           <RideProvider>
-            <AppContent />
+            <SafetyProvider>
+              <AppContent />
+              <GlobalEmergencyOverlay />
+            </SafetyProvider>
           </RideProvider>
         </ThemeProvider>
       </AuthProvider>

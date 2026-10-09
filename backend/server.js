@@ -22,6 +22,8 @@ import bookingRoutes from './src/routes/bookingRoutes.js';
 import tripRoutes from './src/routes/tripRoutes.js';
 import ratingRoutes from './src/routes/ratingRoutes.js';
 import routingRoutes from './src/routes/routingRoutes.js';
+import safetyRoutes from './src/routes/safetyRoutes.js';
+import dispatchOfferRoutes from './src/routes/dispatchOfferRoutes.js';
 
 // 3. Import System Services & Core Middlewares
 import { initCronJobs } from './src/services/cronService.js';
@@ -69,6 +71,8 @@ app.use('/api/v1/bookings', bookingRoutes);
 app.use('/api/v1/trips', tripRoutes);
 app.use('/api/v1/ratings', ratingRoutes);
 app.use('/api/v1/routing', routingRoutes);
+app.use('/api/v1/safety', safetyRoutes);
+app.use('/api/v1/dispatch-offers', dispatchOfferRoutes);
 
 app.get('/api/health', (req, res) => res.json({ success: true, data: { message: 'CampusRide V2 Backend Engine is Live' } }));
 

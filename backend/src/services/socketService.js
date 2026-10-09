@@ -4,6 +4,7 @@ import User from '../models/User.js';
 import DriverTrip from '../models/DriverTrip.js';
 import DISPATCH_CONFIG from '../config/dispatchConfig.js';
 import { acceptSoloOffer } from './dispatchService.js';
+import { respondToDispatchOffer } from './dispatchOfferService.js';
 import { getJwtSecret } from '../config/jwtConfig.js';
 
 export const initializeSockets = (server) => {
@@ -11,7 +12,7 @@ export const initializeSockets = (server) => {
     cors: { origin: '*', methods: ['GET', 'POST', 'PUT'] }
   });
 
-  // JWT Authentication Middleware for WebSockets
+  // JWT Authentication & DB-State Hardening Middleware for WebSockets
   io.use(async (socket, next) => {
     try {
       let token = socket.handshake.auth?.token || socket.handshake.headers?.authorization;
@@ -24,7 +25,32 @@ export const initializeSockets = (server) => {
       }
 
       const decoded = jwt.verify(token, getJwtSecret());
-      socket.user = decoded;
+      const userId = decoded.id || decoded.userId || decoded._id;
+
+      // Authoritative DB Lookup: Prevent suspended, blocked, or non-existent accounts from socket access
+      const user = await User.findById(userId).select('-password');
+      if (!user) {
+        return next(new Error('AUTH_USER_NOT_FOUND: User account no longer exists'));
+      }
+
+      if (user.isSuspended || user.isBlocked) {
+        return next(new Error('AUTH_ACCOUNT_SUSPENDED: Suspended accounts cannot connect to realtime services'));
+      }
+
+      let role = user.role;
+      if (role === 'student') {
+        role = 'passenger';
+      }
+
+      socket.user = {
+        id: user._id.toString(),
+        _id: user._id.toString(),
+        role,
+        approvalStatus: user.approvalStatus,
+        fullName: user.fullName,
+        phoneNumber: user.phoneNumber
+      };
+
       next();
     } catch (err) {
       next(new Error('AUTH_INVALID_TOKEN: Invalid or expired token'));
@@ -32,16 +58,23 @@ export const initializeSockets = (server) => {
   });
 
   io.on('connection', (socket) => {
-    const userId = (socket.user?.id || socket.user?._id || socket.user?.userId)?.toString();
+    const userId = socket.user?.id;
 
     if (userId) {
       // Canonical user private room
       socket.join(`user:${userId}`);
       // Backward compatibility room
       socket.join(userId);
+
+      // Auto-join authorized Admins to admin:safety room
+      if (socket.user.role === 'admin') {
+        socket.join('admin:safety');
+      }
     }
 
-    // 1. Join Scoped Trip Room
+    // ========================================================================
+    // 1. TRIP ROOM MANAGEMENT
+    // ========================================================================
     socket.on('trip:join', async (data, callback) => {
       try {
         const tripId = data?.tripId;
@@ -73,7 +106,6 @@ export const initializeSockets = (server) => {
       }
     });
 
-    // 2. Leave Scoped Trip Room
     socket.on('trip:leave', (data) => {
       const tripId = data?.tripId;
       if (tripId) {
@@ -81,12 +113,77 @@ export const initializeSockets = (server) => {
       }
     });
 
-    // 3. Driver Dispatch Response (Accept / Decline)
+    // ========================================================================
+    // 2. ADMIN SAFETY ROOM MANAGEMENT
+    // ========================================================================
+    socket.on('admin:safety_join', (callback) => {
+      if (socket.user?.role !== 'admin') {
+        if (callback) callback({ success: false, error: 'UNAUTHORIZED_ADMIN' });
+        return;
+      }
+      socket.join('admin:safety');
+      if (callback) callback({ success: true, room: 'admin:safety' });
+    });
+
+    socket.on('admin:safety_leave', () => {
+      socket.leave('admin:safety');
+    });
+
+    // ========================================================================
+    // 3. EMERGENCY EVENT ROOM MANAGEMENT
+    // ========================================================================
+    socket.on('safety:join_event', async (data, callback) => {
+      try {
+        const eventId = data?.eventId;
+        if (!eventId) {
+          if (callback) callback({ success: false, error: 'MISSING_EVENT_ID' });
+          return;
+        }
+
+        const SafetyEvent = (await import('../models/SafetyEvent.js')).default;
+        const event = await SafetyEvent.findById(eventId);
+        if (!event) {
+          if (callback) callback({ success: false, error: 'EVENT_NOT_FOUND' });
+          return;
+        }
+
+        const isOwner = event.passengerId?.toString() === userId;
+        const isDriver = event.source !== 'passenger_sos' && event.driverId?.toString() === userId;
+        const isAdmin = socket.user?.role === 'admin';
+
+        if (!isOwner && !isDriver && !isAdmin) {
+          if (callback) callback({ success: false, error: 'UNAUTHORIZED_ACCESS' });
+          return;
+        }
+
+        socket.join(`safety:event_${eventId}`);
+        if (callback) callback({ success: true, eventId });
+      } catch (err) {
+        if (callback) callback({ success: false, error: err.message });
+      }
+    });
+
+    socket.on('safety:leave_event', (data) => {
+      const eventId = data?.eventId;
+      if (eventId) {
+        socket.leave(`safety:event_${eventId}`);
+      }
+    });
+
+    // ========================================================================
+    // 4. DISPATCH RESPONSE & TELEMETRY
+    // ========================================================================
     socket.on('dispatch:response', async (data, callback) => {
       try {
-        const { bookingId, response, offerType, tripId } = data || {};
-        if (!bookingId || !response) {
+        const { offerId, bookingId, response, offerType, tripId } = data || {};
+        if (socket.user?.role !== 'driver' || (!offerId && !bookingId) || !response) {
           if (callback) callback({ success: false, error: 'INVALID_PAYLOAD' });
+          return;
+        }
+
+        if (offerId) {
+          const result = await respondToDispatchOffer({ offerId, driverId: userId, response, io });
+          if (callback) callback({ success: true, data: result });
           return;
         }
 
@@ -116,7 +213,6 @@ export const initializeSockets = (server) => {
       }
     });
 
-    // 4. Driver Live Telemetry Stream
     socket.on('driver:telemetry', async (data) => {
       try {
         const { tripId, coordinates, heading, speed, timestamp } = data || {};

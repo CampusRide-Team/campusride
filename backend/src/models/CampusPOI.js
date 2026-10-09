@@ -66,13 +66,36 @@ const campusPOISchema = new mongoose.Schema(
     coordinateProvenance: {
       type: {
         type: String,
-        enum: ['verified', 'imported', 'development_estimate'],
+        enum: ['verified', 'imported', 'user_submitted', 'development_estimate'],
         default: 'development_estimate'
       },
       source: {
         type: String,
         default: 'University of Ghana Legon campus landmark development approximation'
       }
+    },
+    externalRef: {
+      provider: { type: String, enum: ['openstreetmap'], required: false },
+      osmType: { type: String, enum: ['node', 'way', 'relation'], required: false },
+      osmId: { type: String, required: false },
+      osmKey: { type: String, required: false }
+    },
+    submittedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
+    },
+    moderationStatus: {
+      type: String,
+      enum: ['approved', 'pending', 'rejected'],
+      default: 'approved',
+      index: true
+    },
+    moderationNote: {
+      type: String,
+      trim: true,
+      maxlength: 300,
+      default: ''
     },
     isActive: {
       type: Boolean,
@@ -88,5 +111,7 @@ const campusPOISchema = new mongoose.Schema(
 campusPOISchema.index({ coordinates: '2dsphere' });
 campusPOISchema.index({ name: 'text', aliases: 'text' });
 campusPOISchema.index({ campusZone: 1, category: 1 });
+campusPOISchema.index({ submittedBy: 1, moderationStatus: 1 });
+campusPOISchema.index({ 'externalRef.osmKey': 1 }, { unique: true, sparse: true });
 
 export default mongoose.model('CampusPOI', campusPOISchema);

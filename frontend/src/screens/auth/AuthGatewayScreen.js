@@ -193,12 +193,13 @@ const AuthGatewayScreen = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.brand.baseBackground, // Canonical #ECE5D2
+    backgroundColor: colors.brand.introductoryCanvas || '#ECE5D2', // Canonical #ECE5D2
   },
   navBar: {
-    height: 48,
+    height: 52,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
   },
   backButton: {
@@ -212,8 +213,8 @@ const styles = StyleSheet.create({
     height: 48,
   },
   brandWordmark: {
-    height: 26,
-    width: 140,
+    height: 32,
+    width: 156,
   },
   scrollContent: {
     flexGrow: 1,

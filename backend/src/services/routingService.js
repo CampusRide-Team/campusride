@@ -23,37 +23,187 @@ export const calculateGeodesicDistanceMeters = (coord1, coord2) => {
  * Pluggable Routing Engine Abstraction.
  * Supports self-hosted OSRM, Google Routes API, Mapbox, or local geodesic approximation.
  */
-class RoutingService {
-  constructor(provider = 'geodesic_fallback') {
-    this.provider = provider;
+export class RoutingService {
+  constructor(options = {}) {
+    this.orsApiKey = options.orsApiKey ?? process.env.ORS_API_KEY ?? '';
+    this.orsBaseUrl = options.orsBaseUrl ?? process.env.ORS_BASE_URL ?? 'https://api.openrouteservice.org';
+    this.osrmBaseUrl = options.osrmBaseUrl ?? process.env.OSRM_BASE_URL ?? 'https://router.project-osrm.org';
+    this.requestTimeoutMs = Number(options.requestTimeoutMs ?? process.env.ROUTING_TIMEOUT_MS ?? 7000);
+    this.cacheTtlMs = Number(options.cacheTtlMs ?? process.env.ROUTING_CACHE_TTL_MS ?? 300000);
+    this.maxCacheEntries = Number(options.maxCacheEntries ?? process.env.ROUTING_CACHE_MAX_ENTRIES ?? 100);
+    this.fetchImpl = options.fetchImpl ?? globalThis.fetch;
+    this.cache = new Map();
     this.averageCampusSpeedMps = 6.94; // ~25 km/h campus driving speed
     this.roadTortuosityFactor = 1.3;  // Road network curve factor vs straight line
   }
 
-  /**
-   * Generates a driving route with structured distance, duration, and polyline across ordered waypoints.
-   * @param {Array<[number, number]>} waypoints - Ordered array of [longitude, latitude] coordinates
-   * @returns {Promise<{ polyline: string|null, distanceMeters: number, durationSeconds: number, calculatedAt: Date }>}
-   */
-  async getRoute(waypoints) {
+  validateWaypoints(waypoints) {
     if (!Array.isArray(waypoints) || waypoints.length < 2) {
       throw new Error('At least 2 coordinate waypoints are required to compute a route');
     }
 
+    const valid = waypoints.every((point) => (
+      Array.isArray(point) &&
+      point.length === 2 &&
+      Number.isFinite(point[0]) &&
+      Number.isFinite(point[1]) &&
+      point[0] >= -180 && point[0] <= 180 &&
+      point[1] >= -90 && point[1] <= 90
+    ));
+
+    if (!valid) {
+      throw new Error('Route waypoints must be valid [longitude, latitude] coordinates');
+    }
+  }
+
+  getCacheKey(waypoints) {
+    return waypoints.map(([lng, lat]) => `${lng.toFixed(6)},${lat.toFixed(6)}`).join(';');
+  }
+
+  getCachedRoute(cacheKey) {
+    const cached = this.cache.get(cacheKey);
+    if (!cached) return null;
+    if (Date.now() - cached.cachedAt > this.cacheTtlMs) {
+      this.cache.delete(cacheKey);
+      return null;
+    }
+    return { ...cached.route, cacheHit: true };
+  }
+
+  cacheRoute(cacheKey, route) {
+    if (this.cache.size >= this.maxCacheEntries) {
+      this.cache.delete(this.cache.keys().next().value);
+    }
+    this.cache.set(cacheKey, { cachedAt: Date.now(), route });
+  }
+
+  async fetchJson(url, init = {}) {
+    if (typeof this.fetchImpl !== 'function') {
+      throw new Error('The configured Node.js runtime does not provide fetch');
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+    try {
+      const response = await this.fetchImpl(url, { ...init, signal: controller.signal });
+      if (!response.ok) {
+        throw new Error(`Routing provider returned HTTP ${response.status}`);
+      }
+      return await response.json();
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  async getOpenRouteServiceRoute(waypoints) {
+    const payload = await this.fetchJson(`${this.orsBaseUrl}/v2/directions/driving-car/geojson`, {
+      method: 'POST',
+      headers: {
+        Authorization: this.orsApiKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ coordinates: waypoints })
+    });
+    const feature = payload?.features?.[0];
+    const summary = feature?.properties?.summary;
+    if (feature?.geometry?.type !== 'LineString' || !Number.isFinite(summary?.distance) || !Number.isFinite(summary?.duration)) {
+      throw new Error('OpenRouteService returned an incomplete route');
+    }
+    return {
+      geometry: feature.geometry,
+      polyline: null,
+      distanceMeters: Math.round(summary.distance),
+      durationSeconds: Math.round(summary.duration),
+      source: 'openrouteservice',
+      fallbackUsed: false,
+      estimateOnly: false,
+      fallbackReason: null,
+      cacheHit: false,
+      calculatedAt: new Date()
+    };
+  }
+
+  async getOsrmRoute(waypoints, fallbackReason) {
+    const coordinates = waypoints.map(([lng, lat]) => `${lng},${lat}`).join(';');
+    const url = `${this.osrmBaseUrl}/route/v1/driving/${coordinates}?overview=full&geometries=geojson&steps=false`;
+    const payload = await this.fetchJson(url);
+    const route = payload?.routes?.[0];
+    if (payload?.code !== 'Ok' || route?.geometry?.type !== 'LineString' || !Number.isFinite(route?.distance) || !Number.isFinite(route?.duration)) {
+      throw new Error('OSRM returned an incomplete route');
+    }
+    return {
+      geometry: route.geometry,
+      polyline: null,
+      distanceMeters: Math.round(route.distance),
+      durationSeconds: Math.round(route.duration),
+      source: 'osrm_demo',
+      fallbackUsed: true,
+      estimateOnly: false,
+      fallbackReason,
+      cacheHit: false,
+      calculatedAt: new Date()
+    };
+  }
+
+  getGeodesicEstimate(waypoints, fallbackReason) {
     let totalDistanceMeters = 0;
     for (let i = 0; i < waypoints.length - 1; i++) {
       const legDist = calculateGeodesicDistanceMeters(waypoints[i], waypoints[i + 1]);
       totalDistanceMeters += Math.round(legDist * this.roadTortuosityFactor);
     }
-
-    const durationSeconds = Math.max(60, Math.round(totalDistanceMeters / this.averageCampusSpeedMps));
-
     return {
+      geometry: null,
       polyline: null,
       distanceMeters: totalDistanceMeters,
-      durationSeconds,
+      durationSeconds: Math.max(60, Math.round(totalDistanceMeters / this.averageCampusSpeedMps)),
+      source: 'geodesic_estimate',
+      fallbackUsed: true,
+      estimateOnly: true,
+      fallbackReason,
+      cacheHit: false,
       calculatedAt: new Date()
     };
+  }
+
+  /**
+   * Generates a driving route with structured distance, duration, and polyline across ordered waypoints.
+   * @param {Array<[number, number]>} waypoints - Ordered array of [longitude, latitude] coordinates
+   * OpenRouteService is preferred when ORS_API_KEY is configured. The public OSRM demo
+   * service is a best-effort road-routing fallback; the final geodesic result is explicitly
+   * labeled as an estimate and never includes fabricated road geometry.
+   */
+  async getRoute(waypoints) {
+    this.validateWaypoints(waypoints);
+    const cacheKey = this.getCacheKey(waypoints);
+    const cachedRoute = this.getCachedRoute(cacheKey);
+    if (cachedRoute) return cachedRoute;
+
+    let primaryFailure = this.orsApiKey
+      ? null
+      : 'OpenRouteService is not configured because ORS_API_KEY is missing';
+
+    if (this.orsApiKey) {
+      try {
+        const route = await this.getOpenRouteServiceRoute(waypoints);
+        this.cacheRoute(cacheKey, route);
+        return route;
+      } catch (error) {
+        primaryFailure = `OpenRouteService unavailable: ${error.message}`;
+        console.warn(`[routing] ${primaryFailure}`);
+      }
+    }
+
+    try {
+      const route = await this.getOsrmRoute(waypoints, primaryFailure);
+      this.cacheRoute(cacheKey, route);
+      return route;
+    } catch (error) {
+      const reason = `${primaryFailure}; OSRM unavailable: ${error.message}`;
+      console.warn(`[routing] ${reason}`);
+      const route = this.getGeodesicEstimate(waypoints, reason);
+      this.cacheRoute(cacheKey, route);
+      return route;
+    }
   }
 
   /**
@@ -65,6 +215,9 @@ class RoutingService {
       distanceMeters: route.distanceMeters,
       durationSeconds: route.durationSeconds,
       formattedETA: `${Math.ceil(route.durationSeconds / 60)} mins`,
+      source: route.source,
+      fallbackUsed: route.fallbackUsed,
+      estimateOnly: route.estimateOnly,
       calculatedAt: route.calculatedAt
     };
   }

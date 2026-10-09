@@ -3,6 +3,7 @@ import { protect, requireApprovedDriver } from '../middleware/authMiddleware.js'
 import { createSoloTrip, claimBookingAtomic, executeTripStop } from '../services/tripService.js';
 import { acceptSoloOffer } from '../services/dispatchService.js';
 import DriverTrip from '../models/DriverTrip.js';
+import { serializeTrip } from '../services/tripDtoService.js';
 
 const router = express.Router();
 
@@ -151,13 +152,33 @@ router.post('/:tripId/stops/:stopId/execute', protect, requireApprovedDriver, as
     const io = req.app.get('io');
     if (io) {
       const tripRoom = `trip:${tripId}`;
-      io.to(tripRoom).emit('trip:stop_update', {
+      io.to(`user:${req.user._id.toString()}`).emit('trip:stop_update', {
         tripId,
         stopId,
         targetStatus,
-        stop: result.stop,
+        stop: result.stop ? {
+          ...(result.stop.toObject ? result.stop.toObject() : result.stop),
+          coordinates: result.stop.coordinates?.coordinates || result.stop.coordinates
+        } : null,
         activePassengerCount: result.trip.activePassengerCount
       });
+
+      if (result.booking?.passengerId) {
+        io.to(`user:${result.booking.passengerId.toString()}`).emit('trip:stop_update', {
+          tripId,
+          stopId,
+          targetStatus,
+          stop: result.stop ? {
+            stopId: result.stop.stopId,
+            stopType: result.stop.stopType,
+            name: result.stop.name,
+            coordinates: result.stop.coordinates?.coordinates || result.stop.coordinates,
+            sequenceOrder: result.stop.sequenceOrder,
+            status: result.stop.status
+          } : null,
+          activePassengerCount: result.trip.activePassengerCount
+        });
+      }
 
       io.to(tripRoom).emit('trip:status_change', {
         tripId,
@@ -213,10 +234,11 @@ router.get('/active', protect, requireApprovedDriver, async (req, res, next) => 
       driverId: req.user._id,
       status: { $in: ['dispatched', 'active'] }
     }).populate('driverId', 'fullName phoneNumber avatarUri driverProfile');
+    if (activeTrip) await activeTrip.populate('tripStops.passengerId', 'fullName phoneNumber avatarUri');
 
     res.json({
       success: true,
-      data: activeTrip
+      data: activeTrip ? serializeTrip(activeTrip, { includePassengerContact: true, viewerId: req.user._id }) : null
     });
   } catch (error) {
     next(error);
@@ -227,7 +249,8 @@ router.get('/active', protect, requireApprovedDriver, async (req, res, next) => 
 router.get('/:id', protect, async (req, res, next) => {
   try {
     const trip = await DriverTrip.findById(req.params.id)
-      .populate('driverId', 'fullName phoneNumber avatarUri driverProfile');
+      .populate('driverId', 'fullName phoneNumber avatarUri driverProfile')
+      .populate('tripStops.passengerId', 'fullName phoneNumber avatarUri');
 
     if (!trip) {
       return res.status(404).json({
@@ -251,7 +274,7 @@ router.get('/:id', protect, async (req, res, next) => {
 
     res.json({
       success: true,
-      data: trip
+      data: serializeTrip(trip, { includePassengerContact: isDriver || isAdmin, viewerId: req.user._id })
     });
   } catch (error) {
     next(error);

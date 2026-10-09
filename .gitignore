@@ -68,3 +68,9 @@ Thumbs.db
 campusride_clean.txt
 exportCode*.js
 build-hotfixes.js
+# Temporary build checkpoints
+frontend/.expo-export-*/
+frontend/.expo-remediation-*/
+frontend/.expo-test-export/
+.tools/
+tools/

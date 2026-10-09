@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, typography } from '../theme';
 
 // Existing Driver Screens
@@ -17,16 +18,22 @@ import EditDriverProfile from '../screens/driver/EditDriverProfile';
 import DriverSettings from '../screens/driver/DriverSettings';
 
 import { useAuth } from '../context/AuthContext';
+import driverService from '../api/services/driverService';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
 // 1. Driver Operational Tabs
 const DriverTabs = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
   const { user: authUser, logout } = useAuth();
   const [driverProfileData, setDriverProfileData] = useState(null);
 
+  const bottomInset = insets.bottom > 0 ? insets.bottom : 8;
+  const tabBarHeight = 56 + bottomInset;
+
   useEffect(() => {
+    let cancelled = false;
     if (authUser) {
       const rawAvatarUrl = authUser.avatarUri || authUser.avatarUrl || authUser.avatar || null;
       setDriverProfileData({
@@ -36,9 +43,35 @@ const DriverTabs = ({ navigation }) => {
         totalTrips: authUser.totalTrips || 0,
         tripsToday: authUser.tripsToday || 0,
         isApproved: authUser.isApproved,
+        isOnline: false,
+        availabilityHydrated: false,
         avatarUri: rawAvatarUrl ? `${rawAvatarUrl}?cb=${Date.now()}` : null,
       });
+
+      driverService.getDriverProfile()
+        .then((result) => {
+          if (cancelled || !result?.success || !result?.data) return;
+          const profile = result.data;
+          const profileAvatar = profile.avatarUri || profile.avatarUrl || rawAvatarUrl;
+          setDriverProfileData({
+            ...profile,
+            rating: profile.rating ?? profile.ratingAverage ?? authUser.rating ?? 5.0,
+            totalTrips: profile.totalTrips ?? authUser.totalTrips ?? 0,
+            tripsToday: profile.tripsToday ?? authUser.tripsToday ?? 0,
+            isApproved: profile.isApproved ?? authUser.isApproved,
+            isOnline: profile.isOnline === true,
+            availabilityHydrated: true,
+            avatarUri: profileAvatar ? `${profileAvatar}?cb=${Date.now()}` : null,
+          });
+        })
+        .catch((error) => {
+          console.warn('[DriverNavigator] Could not hydrate authoritative availability:', error?.message);
+        });
     }
+
+    return () => {
+      cancelled = true;
+    };
   }, [authUser]);
 
   return (
@@ -52,9 +85,10 @@ const DriverTabs = ({ navigation }) => {
           backgroundColor: colors.surface.base,
           borderTopColor: colors.border.subtle,
           borderTopWidth: 1,
-          height: 60,
-          paddingBottom: 8,
+          height: tabBarHeight,
+          paddingBottom: bottomInset,
           paddingTop: 6,
+          elevation: 0,
         },
         tabBarLabelStyle: {
           fontSize: typography.size.caption,
@@ -81,9 +115,9 @@ const DriverTabs = ({ navigation }) => {
             {...props}
             driverData={driverProfileData}
             onLogout={logout}
-            onViewRequests={() => navigation.navigate('ActiveRequests')}
+            onViewRequests={() => props.navigation.navigate('RequestsTab')}
             onChangeTab={(targetTab) => {
-              if (targetTab === 'trips') navigation.navigate('ActiveRequests');
+              if (targetTab === 'trips') props.navigation.navigate('RequestsTab');
               if (targetTab === 'profile') props.navigation.navigate('DriverProfileTab');
             }}
           />
@@ -99,10 +133,6 @@ const DriverTabs = ({ navigation }) => {
             onAcceptRide={(acceptedPassenger) => {
               navigation.navigate('DriverNavigation', { passenger: acceptedPassenger });
             }}
-            onChangeTab={(targetTab) => {
-              if (targetTab === 'home') props.navigation.navigate('DriverHomeTab');
-              if (targetTab === 'profile') props.navigation.navigate('DriverProfileTab');
-            }}
           />
         )}
       />
@@ -116,7 +146,7 @@ const DriverTabs = ({ navigation }) => {
             onLogout={logout}
             onNavigate={(targetTab) => {
               if (targetTab === 'home') props.navigation.navigate('DriverHomeTab');
-              if (targetTab === 'active-requests') navigation.navigate('ActiveRequests');
+              if (targetTab === 'active-requests') props.navigation.navigate('RequestsTab');
               if (targetTab === 'ride-history') navigation.navigate('RideHistory');
               if (targetTab === 'notifications') navigation.navigate('DriverNotis');
               if (targetTab === 'help-support') navigation.navigate('DriverSupport');
@@ -155,9 +185,6 @@ const ActiveRequestsWrapper = ({ navigation }) => {
       onAcceptRide={(passenger) => {
         navigation.navigate('DriverNavigation', { passenger });
       }}
-      onChangeTab={(tab) => {
-        if (tab === 'home') navigation.navigate('DriverMainTabs', { screen: 'DriverHomeTab' });
-      }}
     />
   );
 };
@@ -165,13 +192,18 @@ const ActiveRequestsWrapper = ({ navigation }) => {
 const DriverNavigationWrapper = ({ route, navigation }) => {
   const passenger = route.params?.passenger;
 
-  const handleFinishTrip = () => {
+  const handleFinishTrip = (completedTrip = passenger) => {
+    const stops = completedTrip?.tripStops || passenger?.tripStops || [];
+    const pickupStop = stops.find((stop) => stop.stopType === 'pickup');
+    const dropoffStop = [...stops].reverse().find((stop) => stop.stopType === 'dropoff');
+    const distanceMeters = completedTrip?.currentRoute?.distanceMeters;
+    const durationSeconds = completedTrip?.currentRoute?.durationSeconds;
     const dynamicTripPayload = {
       driverName: 'Driver',
-      pickupLocation: passenger?.pickupLocation || 'Campus Pickup',
-      destinationLocation: passenger?.dropoffLocation || 'Campus Destination',
-      durationText: '12 minutes',
-      distanceText: '4.2 km',
+      pickupLocation: pickupStop?.name || passenger?.pickup?.name || passenger?.pickupLocation || 'Campus Pickup',
+      destinationLocation: dropoffStop?.name || passenger?.dropoff?.name || passenger?.dropoffLocation || 'Campus Destination',
+      durationText: Number.isFinite(Number(durationSeconds)) && Number(durationSeconds) > 0 ? `${Math.ceil(Number(durationSeconds) / 60)} minutes` : 'Not recorded',
+      distanceText: Number.isFinite(Number(distanceMeters)) && Number(distanceMeters) > 0 ? `${(Number(distanceMeters) / 1000).toFixed(1)} km` : 'Not recorded',
     };
     navigation.navigate('TripSummary', { tripData: dynamicTripPayload });
   };
@@ -182,7 +214,6 @@ const DriverNavigationWrapper = ({ route, navigation }) => {
       rideData={passenger}
       onBack={() => navigation.goBack()}
       onTripCompleted={handleFinishTrip}
-      onArrive={handleFinishTrip}
       onCancelNoPenalty={() => navigation.navigate('DriverMainTabs', { screen: 'DriverHomeTab' })}
       onChangeTab={() => navigation.navigate('DriverMainTabs', { screen: 'DriverHomeTab' })}
     />

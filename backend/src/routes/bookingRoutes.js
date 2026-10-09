@@ -3,8 +3,40 @@ import { protect, requirePassenger } from '../middleware/authMiddleware.js';
 import { createRideBooking, cancelBooking } from '../services/bookingService.js';
 import { dispatchSoloBooking } from '../services/dispatchService.js';
 import RideBooking from '../models/RideBooking.js';
+import { getRedispatchValidationError } from '../utils/bookingAuthorization.js';
+import DriverTrip from '../models/DriverTrip.js';
+import { serializeTrip } from '../services/tripDtoService.js';
 
 const router = express.Router();
+
+// GET /api/v1/bookings/current - Recover the current passenger booking after reconnect/relaunch
+router.get('/current', protect, requirePassenger, async (req, res, next) => {
+  try {
+    const booking = await RideBooking.findOne({
+      passengerId: req.user._id,
+      status: { $in: ['pending', 'driver_assigned', 'arrived_at_pickup', 'in_progress'] }
+    }).sort({ createdAt: -1 })
+      .populate('driverId', 'fullName phoneNumber avatarUri driverProfile currentLocation');
+    let data = booking ? booking.toObject() : null;
+    if (booking?.driverTripId) {
+      const trip = await DriverTrip.findById(booking.driverTripId).populate('tripStops.passengerId', 'fullName avatarUri');
+      if (trip) data.currentTrip = serializeTrip(trip, { viewerId: req.user._id });
+    }
+    res.json({ success: true, data });
+  } catch (error) { next(error); }
+});
+
+// GET /api/v1/bookings/scheduled - Future bookings owned by this passenger
+router.get('/scheduled', protect, requirePassenger, async (req, res, next) => {
+  try {
+    const bookings = await RideBooking.find({
+      passengerId: req.user._id,
+      status: 'scheduled',
+      scheduledTime: { $gt: new Date() }
+    }).sort({ scheduledTime: 1 });
+    res.json({ success: true, data: bookings });
+  } catch (error) { next(error); }
+});
 
 // POST /api/v1/bookings - Create new RideBooking and dispatch
 router.post('/', protect, requirePassenger, async (req, res, next) => {
@@ -30,6 +62,18 @@ router.post('/', protect, requirePassenger, async (req, res, next) => {
       data: booking
     });
   } catch (error) {
+    if (error.message?.startsWith('ROAD_ROUTE_UNAVAILABLE')) {
+      return res.status(503).json({
+        success: false,
+        error: { code: 'ROAD_ROUTE_UNAVAILABLE', message: error.message }
+      });
+    }
+    if (error.message?.startsWith('STALE_ROUTE')) {
+      return res.status(409).json({ success: false, error: { code: 'STALE_ROUTE', message: error.message } });
+    }
+    if (error.message?.startsWith('INVALID_SCHEDULE_TIME')) {
+      return res.status(400).json({ success: false, error: { code: 'INVALID_SCHEDULE_TIME', message: error.message } });
+    }
     next(error);
   }
 });
@@ -42,6 +86,14 @@ router.post('/:id/dispatch', protect, async (req, res, next) => {
       return res.status(404).json({
         success: false,
         error: { code: 'BOOKING_NOT_FOUND', message: 'Booking not found' }
+      });
+    }
+
+    const validationError = getRedispatchValidationError(booking, req.user);
+    if (validationError) {
+      return res.status(validationError.status).json({
+        success: false,
+        error: { code: validationError.code, message: validationError.message }
       });
     }
 
@@ -152,12 +204,16 @@ router.post('/:id/cancel', protect, async (req, res, next) => {
     const updated = await cancelBooking(booking._id, req.user._id, cancelledRole, reason);
 
     const io = req.app.get('io');
-    if (io && updated.driverTripId) {
-      io.to(`trip:${updated.driverTripId.toString()}`).emit('ride:cancelled', {
+    if (io) {
+      const payload = {
         bookingId: updated._id,
         cancelledBy: req.user._id,
-        reason
-      });
+        reason,
+        status: updated.status
+      };
+      io.to(`user:${updated.passengerId.toString()}`).emit('booking:status_changed', payload);
+      if (updated.driverId) io.to(`user:${updated.driverId.toString()}`).emit('booking:status_changed', payload);
+      if (updated.driverTripId) io.to(`trip:${updated.driverTripId.toString()}`).emit('ride:cancelled', payload);
     }
 
     res.json({

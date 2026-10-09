@@ -13,7 +13,7 @@ import { Ionicons, Feather, FontAwesome5 } from '@expo/vector-icons';
 
 import ProfileScreen from './ProfileScreen'; 
 import RideHistoryScreen from './RideHistoryScreen'; 
-import AlertScreen from './AlertScreen';
+import SafetyCenterScreen from './SafetyCenterScreen';
 import HelpSupportScreen from './HelpSupportScreen';
 
 const NAVY = '#10206B';
@@ -48,9 +48,9 @@ export default function PassengersPage({ onLogout }) {
     );
   }
 
-  if (activeTab === 'alerts') {
+  if (activeTab === 'alerts' || activeTab === 'safety') {
     return (
-      <AlertScreen 
+      <SafetyCenterScreen 
         onNavigate={(tab) => setActiveTab(tab)} 
       />
     );

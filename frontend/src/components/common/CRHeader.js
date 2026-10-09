@@ -87,8 +87,8 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
   },
   logo: {
-    width: 140,
-    height: 32,
+    width: 156,
+    height: 36,
   },
 });
 

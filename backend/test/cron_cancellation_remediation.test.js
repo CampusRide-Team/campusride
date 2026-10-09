@@ -14,38 +14,49 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, '../.env.e2e') });
 
 describe('CampusRide — Cron MongoDB Cancellation Remediation Test', () => {
+  let mongoAvailable = false;
   let testPassenger = null;
   const createdBookingIds = [];
 
   before(async () => {
-    const mongoUri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/campusride_e2e';
-    if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 5000 });
-    }
+    try {
+      const mongoUri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/campusride_e2e';
+      if (mongoose.connection.readyState === 0) {
+        await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 3000, connectTimeoutMS: 3000 });
+      }
+      mongoAvailable = true;
 
-    testPassenger = await User.findOne({ email: 'passenger.a@campusride.ug.edu.gh' });
-    if (!testPassenger) {
-      testPassenger = await User.create({
-        fullName: 'Cron Test Passenger',
-        email: 'passenger.cron.test@campusride.ug.edu.gh',
-        phoneNumber: '+233240099881',
-        password: 'Password123!',
-        role: 'passenger',
-        approvalStatus: 'approved'
-      });
+      testPassenger = await User.findOne({ email: 'passenger.a@campusride.ug.edu.gh' });
+      if (!testPassenger) {
+        testPassenger = await User.create({
+          fullName: 'Cron Test Passenger',
+          email: 'passenger.cron.test@campusride.ug.edu.gh',
+          phoneNumber: '+233240099881',
+          password: 'Password123!',
+          role: 'passenger',
+          approvalStatus: 'approved'
+        });
+      }
+    } catch (err) {
+      console.warn('MongoDB not available for cron remediation test:', err.message);
     }
   });
 
   after(async () => {
-    if (createdBookingIds.length > 0) {
-      await RideBooking.deleteMany({ _id: { $in: createdBookingIds } });
-    }
-    if (mongoose.connection.readyState !== 0) {
+    try {
+      if (mongoAvailable) {
+        if (createdBookingIds.length > 0) {
+          await RideBooking.deleteMany({ _id: { $in: createdBookingIds } });
+        }
+      }
       await mongoose.disconnect();
+    } catch (err) {
+      // Ignore cleanup error
     }
   });
 
-  it('Scenario 1: Transitions stale pending booking with null cancellation to cancelled_timeout without MongoDB error', async () => {
+  it('Scenario 1: Transitions stale pending booking with null cancellation to cancelled_timeout without MongoDB error', async (t) => {
+    if (!mongoAvailable) return t.skip('MongoDB unavailable');
     // 1. Create a fresh pending booking where cancellation is null by default
     const booking = await RideBooking.create({
       passengerId: testPassenger._id,
@@ -109,7 +120,8 @@ describe('CampusRide — Cron MongoDB Cancellation Remediation Test', () => {
     assert.ok(Math.abs(afterRecord.cancellation.cancelledAt.getTime() - execTime.getTime()) < 5000, 'cancelledAt must be close to execution timestamp');
   });
 
-  it('Scenario 2: Non-stale pending bookings (<15 minutes) remain untouched in pending state with null cancellation', async () => {
+  it('Scenario 2: Non-stale pending bookings (<15 minutes) remain untouched in pending state with null cancellation', async (t) => {
+    if (!mongoAvailable) return t.skip('MongoDB unavailable');
     // 1. Create a non-stale pending booking (5 minutes old)
     const freshBooking = await RideBooking.create({
       passengerId: testPassenger._id,
@@ -156,7 +168,8 @@ describe('CampusRide — Cron MongoDB Cancellation Remediation Test', () => {
     assert.equal(freshRecord.cancellation, null, 'Fresh booking cancellation must remain null');
   });
 
-  it('Scenario 3: Handles batch processing of multiple stale bookings simultaneously without collision or null errors', async () => {
+  it('Scenario 3: Handles batch processing of multiple stale bookings simultaneously without collision or null errors', async (t) => {
+    if (!mongoAvailable) return t.skip('MongoDB unavailable');
     const batchBookingIds = [];
     const thirtyMinsAgo = new Date(Date.now() - 30 * 60 * 1000);
 

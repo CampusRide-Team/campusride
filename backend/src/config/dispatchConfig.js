@@ -14,7 +14,6 @@ export const DISPATCH_CONFIG = {
   TELEMETRY_PERSISTENCE_INTERVAL_MS: parseInt(process.env.TELEMETRY_PERSISTENCE_INTERVAL_MS, 10) || 5000, // 5 seconds
   
   // Phase 2.3 Shared Pooling & Detour Constants
-  SHARED_FARE_DISCOUNT_PERCENT: parseFloat(process.env.SHARED_FARE_DISCOUNT_PERCENT) || 20.0, // 20% pooling discount
   MAX_ADDITIONAL_DISTANCE_METERS: parseFloat(process.env.MAX_ADDITIONAL_DISTANCE_METERS) || 1500.0, // 1.5 km
   MAX_ADDITIONAL_RIDE_TIME_SECONDS: parseFloat(process.env.MAX_ADDITIONAL_RIDE_TIME_SECONDS) || 600.0, // 10 minutes (600s)
   DEFAULT_SHARED_CAPACITY: parseInt(process.env.DEFAULT_SHARED_CAPACITY, 10) || 3,

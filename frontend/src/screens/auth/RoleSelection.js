@@ -168,7 +168,7 @@ const RoleSelection = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.brand.baseBackground, // Canonical #ECE5D2
+    backgroundColor: colors.brand.introductoryCanvas || '#ECE5D2', // Canonical #ECE5D2
   },
   navBar: {
     height: 48,

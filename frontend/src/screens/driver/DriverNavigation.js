@@ -14,14 +14,17 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "../../components/maps/MapLibreCompat";
 import * as Location from "expo-location";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTheme } from "../../context/ThemeContext";  
 import api from "../../api/axios";
 import { getPersistentSocket } from "../../api/socketHelper";
+import routingService from "../../api/services/routingService";
+import { trimRouteToProgress } from "../../utils/routeProgress";
 
 const { width } = Dimensions.get("window");
+const useDefenseSimulatorTelemetry = process.env.EXPO_PUBLIC_DEFENSE_SIMULATION === "true";
 
 const DriverNavigation = ({
   onBack,
@@ -112,7 +115,8 @@ const DriverNavigation = ({
         stopId: 'pickup_fallback',
         stopType: 'pickup',
         location: currentRideData?.pickupLocationCoordinates || currentRideData?.pickupCoordinates || { name: currentRideData?.pickupLocation || currentRideData?.pickup || "Campus Pickup Point" },
-        name: currentRideData?.pickupLocation || currentRideData?.pickup || "Campus Pickup Point",
+        coordinates: currentRideData?.pickupLocationCoordinates || currentRideData?.pickupCoordinates,
+        name: currentRideData?.pickupLocation || currentRideData?.pickup?.name || "Location unavailable",
         passengerName: currentRideData?.passenger?.fullName || currentRideData?.passengerName || "Campus Passenger",
         status: (currentRideData?.status === 'arrived_at_pickup' || currentRideData?.status === 'arrived') ? 'arrived' : (['in_progress', 'active', 'completed'].includes(currentRideData?.status) ? 'completed' : 'pending'),
         sequenceOrder: 0
@@ -122,7 +126,8 @@ const DriverNavigation = ({
         stopId: 'dropoff_fallback',
         stopType: 'dropoff',
         location: currentRideData?.dropoffCoordinates || currentRideData?.destinationCoordinates || { name: currentRideData?.dropoffLocation || currentRideData?.destination || "Campus Destination" },
-        name: currentRideData?.dropoffLocation || currentRideData?.destination || "Campus Destination",
+        coordinates: currentRideData?.dropoffCoordinates || currentRideData?.destinationCoordinates,
+        name: currentRideData?.dropoffLocation || currentRideData?.dropoff?.name || "Location unavailable",
         passengerName: currentRideData?.passenger?.fullName || currentRideData?.passengerName || "Campus Passenger",
         status: currentRideData?.status === 'completed' ? 'completed' : 'pending',
         sequenceOrder: 1
@@ -151,8 +156,15 @@ const DriverNavigation = ({
   const [secondsWaiting, setSecondsWaiting] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [routeCoordinates, setRouteCoordinates] = useState([]);
+  const [remainingRouteCoordinates, setRemainingRouteCoordinates] = useState([]);
   const [driverHeading, setDriverHeading] = useState(0);
   const mapRef = useRef(null);
+  const routeProgressSegmentRef = useRef(0);
+
+  useEffect(() => {
+    routeProgressSegmentRef.current = 0;
+    setRemainingRouteCoordinates(routeCoordinates);
+  }, [routeCoordinates]);
 
   // Sync rideStatus when stops update
   useEffect(() => {
@@ -176,24 +188,73 @@ const DriverNavigation = ({
   };
 
   const activeTargetCoords = useMemo(() => {
-    if (activeStop?.location) {
-      return parseCoordinates(activeStop.location, 5.6037, -0.1870);
+    if (activeStop?.coordinates || activeStop?.location) {
+      const parsed = parseCoordinates(activeStop.coordinates || activeStop.location, NaN, NaN);
+      return Number.isFinite(parsed.latitude) && Number.isFinite(parsed.longitude) ? parsed : null;
     }
-    return { latitude: 5.6037, longitude: -0.1870 };
+    return null;
   }, [activeStop]);
 
-  const [driverCoords, setDriverCoords] = useState(activeTargetCoords);
+  const [driverCoords, setDriverCoords] = useState({ latitude: 5.6508, longitude: -0.1870 });
+
+  useEffect(() => {
+    if (routeCoordinates.length < 2 || rideStatus === 'completed') {
+      if (rideStatus === 'completed') setRemainingRouteCoordinates([]);
+      return;
+    }
+    const progress = trimRouteToProgress(routeCoordinates, driverCoords, {
+      previousSegmentIndex: routeProgressSegmentRef.current,
+    });
+    routeProgressSegmentRef.current = progress.segmentIndex;
+    setRemainingRouteCoordinates(progress.coordinates);
+  }, [driverCoords.latitude, driverCoords.longitude, rideStatus, routeCoordinates]);
 
   // 🔑 Passenger Info for current stop
-  const targetPassengerName = activeStop?.passengerName || currentRideData?.passenger?.fullName || currentRideData?.passengerName || "Campus Passenger";
-  const targetLocText = activeStop?.location?.name || activeStop?.name || "Campus Stop";
-  const passengerPhone = currentRideData?.passenger?.phoneNumber || currentRideData?.passengerPhone || null;
+  const targetPassengerName = activeStop?.passenger?.fullName || activeStop?.passengerName || currentRideData?.passenger?.fullName || currentRideData?.passengerName || "Campus Passenger";
+  const targetLocText = activeStop?.name || activeStop?.location?.name || "Location unavailable";
+  const passengerPhone = activeStop?.passenger?.phoneNumber || currentRideData?.passenger?.phoneNumber || currentRideData?.passengerPhone || null;
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadDriverRoute = async () => {
+      if (!driverCoords || !activeTargetCoords) return;
+      try {
+        const response = await routingService.getRoute(
+          driverCoords.longitude,
+          driverCoords.latitude,
+          activeTargetCoords.longitude,
+          activeTargetCoords.latitude,
+        );
+        const geometry = response?.data?.geometry?.coordinates;
+        if (!cancelled && response?.success && response.data?.estimateOnly !== true && Array.isArray(geometry) && geometry.length >= 3) {
+          setRouteCoordinates(geometry.map(([longitude, latitude]) => ({ longitude, latitude })));
+        } else if (!cancelled) {
+          setRouteCoordinates([]);
+        }
+      } catch (_error) {
+        if (!cancelled) setRouteCoordinates([]);
+      }
+    };
+    loadDriverRoute();
+    return () => { cancelled = true; };
+  }, [activeStop?.stopId, activeTargetCoords?.latitude, activeTargetCoords?.longitude]);
 
   // Real-time GPS Location, Room Joining & Live Telemetry socket streaming
   useEffect(() => {
     let positionSubscription = null;
     let socketInstance = null;
     let isMounted = true;
+
+    const handleDriverTelemetry = (data) => {
+      if (!useDefenseSimulatorTelemetry || !isMounted) return;
+      const activeTripId = tripId || currentRideData?._id;
+      if (data?.tripId?.toString() !== activeTripId?.toString()) return;
+      if (!Array.isArray(data?.coordinates) || data.coordinates.length !== 2) return;
+      const [longitude, latitude] = data.coordinates.map(Number);
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+      setDriverCoords({ latitude, longitude });
+      if (Number.isFinite(Number(data.heading))) setDriverHeading(Number(data.heading));
+    };
 
     const initTracking = async () => {
       try {
@@ -202,6 +263,10 @@ const DriverNavigation = ({
         const activeTripId = tripId || currentRideData?._id;
         if (socketInstance && socketInstance.connected && activeTripId) {
           socketInstance.emit("trip:join", { tripId: activeTripId });
+        }
+
+        if (socketInstance) {
+          socketInstance.on("driver:telemetry", handleDriverTelemetry);
         }
 
         // Listen for dynamic route updates (e.g. pool joins)
@@ -241,13 +306,14 @@ const DriverNavigation = ({
           if (!isMounted) return;
           if (data?.status === 'completed') {
             setRideStatus('completed');
-            if (onTripCompleted) onTripCompleted();
           }
         };
 
         socketInstance.on("trip:route-updated", handleRouteUpdated);
         socketInstance.on("trip:stop_update", handleStopUpdate);
         socketInstance.on("trip:status_change", handleStatusChange);
+
+        if (useDefenseSimulatorTelemetry) return;
 
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== "granted") return;
@@ -256,9 +322,7 @@ const DriverNavigation = ({
         const liveLat = initialLoc.coords.latitude;
         const liveLng = initialLoc.coords.longitude;
 
-        const initCoords = (Math.abs(liveLat - activeTargetCoords.latitude) > 0.2) 
-          ? activeTargetCoords 
-          : { latitude: liveLat, longitude: liveLng };
+        const initCoords = { latitude: liveLat, longitude: liveLng };
 
         setDriverCoords(initCoords);
 
@@ -308,9 +372,10 @@ const DriverNavigation = ({
         socketInstance.off("trip:route-updated");
         socketInstance.off("trip:stop_update");
         socketInstance.off("trip:status_change");
+        socketInstance.off("driver:telemetry", handleDriverTelemetry);
       }
     };
-  }, [rideId, tripId, activeTargetCoords.latitude, activeTargetCoords.longitude]);
+  }, [rideId, tripId, activeTargetCoords?.latitude, activeTargetCoords?.longitude]);
 
   useEffect(() => {
     let interval = null;
@@ -332,7 +397,7 @@ const DriverNavigation = ({
 
   const handleRecenterMap = () => {
     if (mapRef.current) {
-      mapRef.current.fitToCoordinates(routeCoordinates.length > 0 ? routeCoordinates : [driverCoords, activeTargetCoords], {
+      mapRef.current.fitToCoordinates(remainingRouteCoordinates.length > 0 ? remainingRouteCoordinates : [driverCoords, activeTargetCoords], {
         edgePadding: { top: 120, right: 60, bottom: 280, left: 60 },
         animated: true,
       });
@@ -385,7 +450,7 @@ const DriverNavigation = ({
           if (result?.trip?.status === 'completed') {
             setRideStatus("completed");
             if (onTripCompleted) {
-              onTripCompleted();
+              onTripCompleted(result.trip);
             } else if (onArrive) {
               onArrive();
             }
@@ -440,8 +505,8 @@ const DriverNavigation = ({
             : isAtStop
             ? "At Pickup Station"
             : !isPickup
-            ? "In Transit to Drop-off"
-            : "Navigating to Pickup"}
+            ? routeCoordinates.length > 0 ? "In Transit to Drop-off" : "Route unavailable"
+            : routeCoordinates.length > 0 ? "Navigating to Pickup" : "Route unavailable"}
         </Text>
         <TouchableOpacity onPress={handleRecenterMap} activeOpacity={0.7} style={styles.headerButton}>
           <MaterialCommunityIcons name="crosshairs-gps" size={24} color={theme.iconColor} />
@@ -450,13 +515,13 @@ const DriverNavigation = ({
 
       <View style={styles.mapViewportContainer}>
         <MapView
-          key={`${activeTargetCoords.latitude}-${activeTargetCoords.longitude}`}
+          key={`${activeTargetCoords?.latitude || 'unknown'}-${activeTargetCoords?.longitude || 'unknown'}`}
           ref={mapRef}
           provider={Platform.OS === "android" ? PROVIDER_GOOGLE : null}
           style={StyleSheet.absoluteFillObject}
           initialRegion={{
-            latitude: activeTargetCoords.latitude,
-            longitude: activeTargetCoords.longitude,
+            latitude: activeTargetCoords?.latitude || driverCoords.latitude,
+            longitude: activeTargetCoords?.longitude || driverCoords.longitude,
             latitudeDelta: 0.008,
             longitudeDelta: 0.008,
           }}
@@ -464,8 +529,8 @@ const DriverNavigation = ({
           showsPointsOfInterest={false}
           showsBuildings={false}
         >
-          {routeCoordinates.length > 0 && (
-            <Polyline coordinates={routeCoordinates} strokeColor="#2563EB" strokeWidth={5} />
+          {remainingRouteCoordinates.length > 0 && (
+            <Polyline coordinates={remainingRouteCoordinates} strokeColor="#2563EB" strokeWidth={5} />
           )}
 
           <Marker coordinate={driverCoords} anchor={{ x: 0.5, y: 0.5 }} flat={true}>
@@ -474,7 +539,7 @@ const DriverNavigation = ({
             </View>
           </Marker>
 
-          <Marker coordinate={activeTargetCoords} anchor={{ x: 0.5, y: 1.0 }}>
+          {activeTargetCoords ? <Marker coordinate={activeTargetCoords} anchor={{ x: 0.5, y: 1.0 }}>
             <View style={styles.pickupMarkerContainer}>
               <View style={[styles.pickupLabelBadge, { backgroundColor: theme.iconColor }, !isPickup && styles.dropoffBadgeVariant]}>
                 <Text style={[styles.pickupLabelText, { color: !isPickup ? "#1E3A8A" : "#FFFFFF" }]}>
@@ -485,7 +550,7 @@ const DriverNavigation = ({
                 <View style={[styles.pickupPinInnerNode, { backgroundColor: theme.background }]} />
               </View>
             </View>
-          </Marker>
+          </Marker> : null}
         </MapView>
 
         {/* Passenger & Multi-Stop Manifest Card */}
@@ -615,36 +680,36 @@ const styles = StyleSheet.create({
   endTripButtonVariant: { backgroundColor: "#EF4444" },
   header: { alignItems: "center", borderBottomWidth: 1, flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 24, paddingVertical: 14 },
   headerButton: { alignItems: "center", height: 40, justifyContent: "center", width: 40 },
-  headerTitleText: { fontSize: 15, fontWeight: "800", letterSpacing: -0.3 },
+  headerTitleText: { fontSize: 17, fontWeight: "800", letterSpacing: -0.3 },
   identityTextBlock: { flex: 1, justifyContent: "center", marginLeft: 16 },
   instructionNoteBanner: { alignItems: "center", borderRadius: 16, borderWidth: 1, flexDirection: "row", gap: 10, marginBottom: 16, padding: 12 },
-  instructionTextContent: { flex: 1, fontSize: 12, fontWeight: "500", lineHeight: 16 },
+  instructionTextContent: { flex: 1, fontSize: 14, fontWeight: "600", lineHeight: 19 },
   mapViewportContainer: { flex: 1, position: "relative" },
   passengerNameText: { fontSize: 20, fontWeight: "800", marginBottom: 4 },
   passengerSheet: { borderRadius: 16, borderWidth: 1, bottom: 16, left: 16, padding: 18, position: "absolute", right: 16 },
   pickupLabelBadge: { borderRadius: 8, marginBottom: -2, paddingHorizontal: 10, paddingVertical: 4, zIndex: 10 },
-  pickupLabelText: { fontSize: 9, fontWeight: "800", letterSpacing: 0.5 },
+  pickupLabelText: { fontSize: 11, fontWeight: "800", letterSpacing: 0.5 },
   pickupMarkerContainer: { alignItems: "center", justifyContent: "center" },
   pickupPinInnerNode: { borderRadius: 4, height: 8, width: 8 },
   pickupPinNode: { alignItems: "center", borderColor: "#FFFFFF", borderRadius: 12, borderWidth: 2, height: 24, justifyContent: "center", width: 24 },
   primaryActionButton: { alignItems: "center", borderRadius: 16, height: 56, justifyContent: "center" },
-  primaryButtonText: { fontSize: 15, fontWeight: "700" },
+  primaryButtonText: { fontSize: 16, fontWeight: "800" },
   profileMasterRow: { alignItems: "center", flexDirection: "row", marginBottom: 12 },
   startTripButtonVariant: { backgroundColor: "#A3E635" },
-  subLocationLabel: { fontSize: 13, fontWeight: "600", width: width * 0.34 },
+  subLocationLabel: { fontSize: 14, fontWeight: "700", width: width * 0.34 },
   subLocationRow: { alignItems: "center", flexDirection: "row", gap: 4 },
   timerAlertBannerVariant: { borderColor: "#FCA5A5", backgroundColor: "#FEE2E2" },
   timerAlertLabelVariant: { color: "#EF4444" },
   timerCountdownValue: { fontWeight: "800" },
   timerTrackingBanner: { alignItems: "center", borderRadius: 16, borderWidth: 1, flexDirection: "row", gap: 10, marginBottom: 16, padding: 12 },
-  timerTrackingLabel: { fontSize: 13, fontWeight: "600" },
+  timerTrackingLabel: { fontSize: 14, fontWeight: "700" },
   transitTrackingBanner: { alignItems: "center", borderRadius: 16, borderWidth: 1, flexDirection: "row", gap: 10, marginBottom: 16, padding: 12 },
-  transitTextContent: { flex: 1, fontSize: 12, fontWeight: "600" },
+  transitTextContent: { flex: 1, fontSize: 14, fontWeight: "600" },
   manifestContainer: { marginBottom: 12 },
   manifestScroll: { flexDirection: "row", gap: 8 },
   manifestPill: { flexDirection: "row", alignItems: "center", paddingVertical: 6, paddingHorizontal: 10, borderRadius: 12, borderWidth: 1, gap: 6 },
   manifestStopDot: { width: 8, height: 8, borderRadius: 4 },
-  manifestStopText: { fontSize: 11 },
+  manifestStopText: { fontSize: 12, fontWeight: "600" },
 });
 
 export default DriverNavigation;

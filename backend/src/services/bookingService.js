@@ -2,10 +2,9 @@ import RideBooking from '../models/RideBooking.js';
 import DriverTrip from '../models/DriverTrip.js';
 import { resolveLocation } from './poiService.js';
 import routingService from './routingService.js';
-import pricingService from './pricingService.js';
-import DISPATCH_CONFIG from '../config/dispatchConfig.js';
 
 export const VALID_BOOKING_TRANSITIONS = {
+  scheduled: ['pending', 'cancelled'],
   pending: ['driver_assigned', 'cancelled', 'cancelled_timeout', 'failed_no_drivers'],
   driver_assigned: ['arrived_at_pickup', 'cancelled'],
   arrived_at_pickup: ['in_progress', 'cancelled'],
@@ -55,7 +54,7 @@ export const validateStopOrdering = (tripStops) => {
 };
 
 /**
- * Creates a new RideBooking with resolved pickup/dropoff locations and structured fare estimation
+ * Creates a fare-free RideBooking with resolved endpoints and an authoritative road-route summary.
  */
 export const createRideBooking = async (passengerId, payload) => {
   const {
@@ -63,56 +62,64 @@ export const createRideBooking = async (passengerId, payload) => {
     dropoff,
     rideMode = 'solo',
     scheduledTime,
-    notes
+    notes,
+    routeRequestKey
   } = payload;
 
   if (!pickup || !dropoff) {
     throw new Error('Both pickup and dropoff locations are required');
   }
 
+  const parsedScheduledTime = scheduledTime ? new Date(scheduledTime) : null;
+  if (parsedScheduledTime && Number.isNaN(parsedScheduledTime.getTime())) {
+    throw new Error('INVALID_SCHEDULE_TIME: Scheduled time is invalid');
+  }
+  if (parsedScheduledTime && parsedScheduledTime.getTime() < Date.now() + 60 * 1000) {
+    throw new Error('INVALID_SCHEDULE_TIME: Scheduled rides must be at least one minute in the future');
+  }
+  if (parsedScheduledTime && parsedScheduledTime.getTime() > Date.now() + 30 * 24 * 60 * 60 * 1000) {
+    throw new Error('INVALID_SCHEDULE_TIME: Scheduled rides cannot be more than 30 days ahead');
+  }
+
   const resolvedPickup = await resolveLocation(pickup, [-0.1870, 5.6508]);
   const resolvedDropoff = await resolveLocation(dropoff, [-0.1852, 5.6595]);
+  const endpointFingerprint = routingService.getCacheKey([
+    resolvedPickup.coordinates.coordinates,
+    resolvedDropoff.coordinates.coordinates
+  ]);
+  // Older SDK 54 clients did not send a fingerprint; keep them compatible while
+  // enforcing endpoint identity for all updated clients that do provide one.
+  if (routeRequestKey && routeRequestKey !== endpointFingerprint) {
+    throw new Error('STALE_ROUTE: The reviewed route does not match the submitted pickup and destination');
+  }
 
-  // Calculate structured route and estimated fare
+  // Booking requires a real road route. The service's geodesic fallback is useful
+  // diagnostic context but must never be accepted as navigable road geometry.
   const route = await routingService.getRoute([
     resolvedPickup.coordinates.coordinates,
     resolvedDropoff.coordinates.coordinates
   ]);
-
-  let discountAmount = payload.discountAmount || 0;
-  if (rideMode === 'shared' && payload.discountAmount === undefined) {
-    const soloQuote = pricingService.calculateEstimatedFare({
-      distanceMeters: route.distanceMeters,
-      durationSeconds: route.durationSeconds,
-      rideMode: 'solo',
-      pricingModel: payload.pricingModel || 'platform_calculated',
-      customBaseFare: payload.customBaseFare || null,
-      customPerKmRate: payload.customPerKmRate || null,
-      discountAmount: 0
-    });
-    const discountPercent = DISPATCH_CONFIG.SHARED_FARE_DISCOUNT_PERCENT || 20;
-    discountAmount = Math.round(soloQuote.totalFare * (discountPercent / 100) * 100) / 100;
+  const geometryCoordinates = route?.geometry?.type === 'LineString' ? route.geometry.coordinates : null;
+  if (route?.estimateOnly === true || !Array.isArray(geometryCoordinates) || geometryCoordinates.length < 3) {
+    throw new Error('ROAD_ROUTE_UNAVAILABLE: A verified road-following route is required to create a booking');
   }
-
-  const fareBreakdown = pricingService.calculateEstimatedFare({
-    distanceMeters: route.distanceMeters,
-    durationSeconds: route.durationSeconds,
-    rideMode,
-    pricingModel: payload.pricingModel || 'platform_calculated',
-    customBaseFare: payload.customBaseFare || null,
-    customPerKmRate: payload.customPerKmRate || null,
-    discountAmount
-  });
 
   const newBooking = await RideBooking.create({
     passengerId,
     rideMode,
-    status: 'pending',
+    status: parsedScheduledTime ? 'scheduled' : 'pending',
     pickup: resolvedPickup,
     dropoff: resolvedDropoff,
-    fare: fareBreakdown,
-    scheduledTime: scheduledTime ? new Date(scheduledTime) : null,
-    expiresAt: new Date(Date.now() + 15 * 60 * 1000)
+    route: {
+      distanceMeters: route.distanceMeters,
+      durationSeconds: route.durationSeconds,
+      source: route.source,
+      estimateOnly: false,
+      calculatedAt: route.calculatedAt || new Date()
+      ,endpointFingerprint
+    },
+    scheduledTime: parsedScheduledTime,
+    expiresAt: new Date((parsedScheduledTime?.getTime() || Date.now()) + 15 * 60 * 1000)
   });
 
   return await RideBooking.findById(newBooking._id).populate('passengerId', 'fullName phoneNumber avatarUri');

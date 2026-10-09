@@ -7,7 +7,8 @@ export const driverService = {
   },
 
   updateLocation: async (coordinates) => {
-    const response = await api.put('/driver/location', { coordinates });
+    const [longitude, latitude] = coordinates;
+    const response = await api.put('/driver/location', { latitude, longitude });
     return response.data;
   },
 
@@ -21,18 +22,18 @@ export const driverService = {
     return response.data;
   },
 
-  getDriverEarnings: async () => {
-    const response = await api.get('/driver/earnings');
-    return response.data;
-  },
-
   getDriverAnalytics: async () => {
     const response = await api.get('/driver/analytics');
     return response.data;
   },
 
   getPendingRequests: async () => {
-    const response = await api.get('/driver/pending-requests');
+    const response = await api.get('/dispatch-offers/pending');
+    return response.data;
+  },
+
+  respondToOffer: async (offerId, responseValue) => {
+    const response = await api.post(`/dispatch-offers/${offerId}/respond`, { response: responseValue });
     return response.data;
   },
 
@@ -43,11 +44,6 @@ export const driverService = {
 
   getActiveTrip: async () => {
     const response = await api.get('/trips/active');
-    return response.data;
-  },
-
-  claimSoloBooking: async (bookingId) => {
-    const response = await api.post('/trips/solo', { bookingId });
     return response.data;
   },
 
