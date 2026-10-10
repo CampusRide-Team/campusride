@@ -18,6 +18,7 @@ export default function App() {
   const [currentDateTime, setCurrentDateTime] = useState('')
   const [sessionLoading, setSessionLoading] = useState(true)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
 
   // Dynamic Real-Time Status Clock Update Loop
   useEffect(() => {
@@ -32,6 +33,25 @@ export default function App() {
     updateSystemClock()
     const timerInterval = setInterval(updateSystemClock, 60000)
     return () => clearInterval(timerInterval)
+  }, [])
+
+  // Fetch unread notification count badge
+  useEffect(() => {
+    const fetchUnreadCount = async () => {
+      try {
+        const res = await api.get('/admin/notifications/snapshot')
+        if (res.data?.success && res.data?.data) {
+          const notes = res.data.data.notifications || []
+          const count = notes.filter((n) => n && n.isRead !== true && n.read !== true).length
+          setUnreadCount(count)
+        }
+      } catch (err) {
+        console.warn('Failed to load unread count')
+      }
+    }
+    fetchUnreadCount()
+    const interval = setInterval(fetchUnreadCount, 30000)
+    return () => clearInterval(interval)
   }, [])
 
   // Administrative Session Guard Verification
@@ -63,7 +83,6 @@ export default function App() {
     verifyAdminSessionToken()
   }, [])
 
-
   if (sessionLoading) {
     return (
       <div style={appStyles.appFrameLoading}>
@@ -80,7 +99,7 @@ export default function App() {
   return (
     <div style={appStyles.appFrame}>
       {/* GLOBAL LEFT SIDEBAR NAVIGATION */}
-      <Sidebar activePage={activePage} onNavigate={setActivePage} />
+      <Sidebar activePage={activePage} onNavigate={setActivePage} unreadCount={unreadCount} />
 
       {/* MAIN CONTENT VIEWPORT */}
       <main style={appStyles.mainViewport}>
@@ -118,8 +137,17 @@ export default function App() {
               <p style={appStyles.dateLabel}>TODAY'S DATE</p>
               <p style={appStyles.dateValue}>{currentDateTime || 'Loading live time...'}</p>
             </div>
-            <button style={appStyles.bellButton} onClick={() => setActivePage('notifications')} aria-label="Open Alerts Feed View">
+            <button 
+              style={appStyles.bellButton} 
+              onClick={() => setActivePage('notifications')} 
+              aria-label="Open Alerts Feed View"
+            >
               <Bell size={16} strokeWidth={2.5} color="#64748B" />
+              {unreadCount > 0 && (
+                <div style={appStyles.badgeIndicatorBubble}>
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </div>
+              )}
             </button>
           </div>
         </header>
@@ -132,7 +160,7 @@ export default function App() {
           {activePage === 'trips' && <TripsMonitoringScreen />}
           {activePage === 'user-directory' && <StudentsManagementScreen />}
           {activePage === 'analytics' && <AnalyticsScreen />} 
-          {activePage === 'notifications' && <NotificationsScreen />} 
+          {activePage === 'notifications' && (<NotificationsScreen onNavigate={setActivePage} />)}          
           {activePage === 'settings' && <SettingsScreen onLogout={() => setIsAuthenticated(false)} />}
           {activePage === 'admin-profile' && <AdminProfileScreen />}
 
@@ -177,6 +205,7 @@ const appStyles = {
     fontFamily: 'Inter, sans-serif'
   },
   bellButton: {
+    position: 'relative',
     height: '32px',
     width: '32px',
     borderRadius: '12px',
@@ -188,6 +217,24 @@ const appStyles = {
     cursor: 'pointer',
     outline: 'none',
     boxShadow: 'none'
+  },
+  badgeIndicatorBubble: {
+    position: 'absolute',
+    top: '-4px',
+    right: '-4px',
+    backgroundColor: '#E11D48',
+    color: '#ffffff',
+    fontSize: '9px',
+    fontWeight: 800,
+    height: '14px',
+    minWidth: '14px',
+    padding: '0 3px',
+    borderRadius: '50px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    border: '2px solid #ffffff',
+    boxSizing: 'content-box'
   },
   contentCanvas: {
     flex: 1,
@@ -262,7 +309,7 @@ const appStyles = {
   headerTitle: {
     fontSize: '18px',
     fontWeight: 800,
-    color: '#1E293B',
+    color: '#2563EB', // Updated to clean blue
     fontFamily: 'Inter, sans-serif',
     margin: 0
   },

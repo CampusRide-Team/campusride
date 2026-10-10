@@ -3,16 +3,12 @@ import {
   Shield, 
   Mail, 
   Phone, 
-  MapPin, 
   Calendar, 
   Laptop, 
   Smartphone, 
   ShieldCheck, 
   Activity, 
-  Clock,
-  Edit3,
-  CheckCircle2,
-  RefreshCw
+  Edit3
 } from 'lucide-react'
 import api from '../api/axios'
 
@@ -199,27 +195,31 @@ export default function AdminProfileScreen() {
           </div>
 
           <div style={apStyles.sessionsList}>
-            {sessions.map((sess) => (
-              <div key={sess.id} style={{
-                ...apStyles.sessionItem,
-                borderLeft: sess.current ? '4px solid #16A34A' : '4px solid #E2E8F0'
-              }}>
-                <div style={apStyles.sessionIcon}>
-                  {sess.device?.includes('iPhone') || sess.device?.includes('Mobile') ? (
-                    <Smartphone size={18} color="#1E3A8A" />
-                  ) : (
-                    <Laptop size={18} color="#1E3A8A" />
-                  )}
-                </div>
-                <div style={apStyles.sessionTextStack}>
-                  <div style={apStyles.sessionTitleRow}>
-                    <span style={apStyles.sessionDeviceName}>{sess.device}</span>
-                    {sess.current && <span style={apStyles.currentPill}>Current Device</span>}
+            {sessions.length === 0 ? (
+              <p style={apStyles.emptyText}>No active session metadata returned.</p>
+            ) : (
+              sessions.map((sess, idx) => (
+                <div key={sess.id || idx} style={{
+                  ...apStyles.sessionItem,
+                  borderLeft: sess.current ? '4px solid #16A34A' : '4px solid #E2E8F0'
+                }}>
+                  <div style={apStyles.sessionIcon}>
+                    {sess.device?.includes('iPhone') || sess.device?.includes('Mobile') ? (
+                      <Smartphone size={18} color="#1E3A8A" />
+                    ) : (
+                      <Laptop size={18} color="#1E3A8A" />
+                    )}
                   </div>
-                  <span style={apStyles.sessionSubText}>IP: {sess.ip} • Last active: {sess.activity}</span>
+                  <div style={apStyles.sessionTextStack}>
+                    <div style={apStyles.sessionTitleRow}>
+                      <span style={apStyles.sessionDeviceName}>{sess.device || 'Desktop Browser'}</span>
+                      {sess.current && <span style={apStyles.currentPill}>Current Device</span>}
+                    </div>
+                    <span style={apStyles.sessionSubText}>IP: {sess.ip || '127.0.0.1'} • Last active: {sess.activity || 'Just now'}</span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 
@@ -231,18 +231,22 @@ export default function AdminProfileScreen() {
           </div>
 
           <div style={apStyles.auditLogsList}>
-            {auditLogs.map((log) => (
-              <div key={log.id} style={apStyles.auditLogItem}>
-                <div style={{ ...apStyles.auditDot, backgroundColor: log.color || '#16A34A' }} />
-                <div style={apStyles.auditTextStack}>
-                  <div style={apStyles.auditTitleRow}>
-                    <span style={apStyles.auditActionTitle}>{log.action}</span>
-                    <span style={apStyles.auditTime}>{log.time}</span>
+            {auditLogs.length === 0 ? (
+              <p style={apStyles.emptyText}>No recent audit logs recorded.</p>
+            ) : (
+              auditLogs.map((log, idx) => (
+                <div key={log.id || idx} style={apStyles.auditLogItem}>
+                  <div style={{ ...apStyles.auditDot, backgroundColor: log.color || '#16A34A' }} />
+                  <div style={apStyles.auditTextStack}>
+                    <div style={apStyles.auditTitleRow}>
+                      <span style={apStyles.auditActionTitle}>{log.action || 'System Action'}</span>
+                      <span style={apStyles.auditTime}>{log.time || 'Recently'}</span>
+                    </div>
+                    <p style={apStyles.auditDetails}>{log.details || 'No additional details provided.'}</p>
                   </div>
-                  <p style={apStyles.auditDetails}>{log.details}</p>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       </div>
@@ -267,7 +271,7 @@ const apStyles = {
   screenTitle: {
     fontSize: '22px',
     fontWeight: 800,
-    color: '#1E3A8A',
+    color: '#2563EB',
     margin: 0
   },
   screenSubtitle: {
@@ -286,7 +290,7 @@ const apStyles = {
     padding: '10px 18px',
     fontSize: '12px',
     fontWeight: 700,
-    color: '#1E3A8A',
+    color: '#2563EB',
     cursor: 'pointer',
     boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
   },
@@ -343,7 +347,7 @@ const apStyles = {
     paddingTop: '16px'
   },
   saveBtn: {
-    backgroundColor: '#1E3A8A',
+    backgroundColor: '#2563EB',
     color: '#ffffff',
     border: 'none',
     borderRadius: '10px',
@@ -379,14 +383,14 @@ const apStyles = {
     width: '84px',
     height: '84px',
     borderRadius: '24px',
-    backgroundColor: '#1E3A8A',
+    backgroundColor: '#2563EB',
     color: '#ffffff',
     fontSize: '28px',
     fontWeight: 800,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: '0 4px 14px rgba(30,58,138,0.2)'
+    boxShadow: '0 4px 14px rgba(37,99,235,0.2)'
   },
   heroInfoStack: {
     display: 'flex',
@@ -461,7 +465,7 @@ const apStyles = {
   cardTitle: {
     fontSize: '14px',
     fontWeight: 800,
-    color: '#1E3A8A',
+    color: '#2563EB',
     margin: 0,
     textTransform: 'uppercase',
     letterSpacing: '0.4px',
@@ -490,7 +494,7 @@ const apStyles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    flexShrink: 0
+    flexShrink: '0'
   },
   sessionTextStack: {
     display: 'flex',
@@ -569,6 +573,13 @@ const apStyles = {
     margin: '2px 0 0 0',
     lineHeight: '1.4'
   },
+  emptyText: {
+    fontSize: '12px',
+    color: '#94A3B8',
+    fontStyle: 'italic',
+    margin: 0,
+    textAlign: 'left'
+  },
   loadingFrame: {
     display: 'flex',
     alignItems: 'center',
@@ -578,7 +589,7 @@ const apStyles = {
   },
   loadingText: {
     fontSize: '14px',
-    color: '#1E3A8A',
+    color: '#2563EB',
     fontWeight: 700
   }
 }

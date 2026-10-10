@@ -9,8 +9,8 @@ export const getApiBaseUrl = () => {
     // Strip trailing /api/v1 or trailing slash to normalize base host URL
     return url.trim().replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '');
   }
-  // Local development default fallback (10.0.2.2 for Android emulator, localhost for iOS/Web)
-  return Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://localhost:5000';
+  // Local development fallback using your PC's active Wi-Fi IP address
+  return 'http://10.196.117.129:5000';
 };
 
 export const API_BASE_URL = getApiBaseUrl();
