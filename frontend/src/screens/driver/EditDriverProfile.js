@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,116 +7,135 @@ import {
   ScrollView,
   TextInput,
   Image,
-  Dimensions,
   Alert,
   ActivityIndicator,
   Platform,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { StatusBar } from "expo-status-bar";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import * as ImagePicker from "expo-image-picker";
-import { useTheme } from "../../context/ThemeContext";  
-import api from "../../api/axios";
+  KeyboardAvoidingView,
+  StatusBar,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
+import { useTheme } from '../../context/ThemeContext';
+import { fonts, radii, spacing } from '../../theme';
+import { CRIcon } from '../../components/common';
+import api from '../../api/axios';
 
-const { width } = Dimensions.get("window");
-
-const EditDriverProfile = ({
+export default function EditDriverProfile({
   onBack,
   onChangeTab,
   driverData,
   onProfileUpdated,
-}) => {
-  const { theme, darkModeEnabled } = useTheme();  
-  const [fullName, setFullName] = useState(driverData?.fullName || "");
-  const [phoneNumber, setPhoneNumber] = useState(driverData?.phoneNumber || "");
-  const [email, setEmail] = useState(driverData?.email || "");
+}) {
+  const { theme, isDark } = useTheme();
+  const { colors } = theme;
+
+  const [fullName, setFullName] = useState(driverData?.fullName || '');
+  const [phoneNumber, setPhoneNumber] = useState(driverData?.phoneNumber || '');
+  const [email] = useState(driverData?.email || '');
   const [avatarUri, setAvatarUri] = useState(driverData?.avatarUri || null);
+  const [selectedImage, setSelectedImage] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (driverData) {
       if (driverData.fullName) setFullName(driverData.fullName);
       if (driverData.phoneNumber) setPhoneNumber(driverData.phoneNumber);
-      if (driverData.email) setEmail(driverData.email);
       if (driverData.avatarUri) setAvatarUri(driverData.avatarUri);
     }
   }, [driverData]);
 
+  const initials = (fullName?.trim() || 'Driver')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase() || 'D';
+
+  const currentAvatarUri = selectedImage?.uri || (avatarUri && avatarUri.startsWith('http') ? `${avatarUri}?t=${Date.now()}` : avatarUri);
+
   const handleUpdatePhoto = async () => {
     Alert.alert(
-      "Update Profile Photo",
-      "Choose an option to update your profile picture:",
+      'Update Profile Photo',
+      'Choose an option to update your photo:',
       [
         {
-          text: "Take Photo (Camera)",
+          text: 'Take Photo',
           onPress: async () => {
-            const cameraPermission =
-              await ImagePicker.requestCameraPermissionsAsync();
-            if (!cameraPermission.granted) {
-              Alert.alert(
-                "Permission Denied",
-                "CampusRide requires camera access to snap pictures.",
-              );
-              return;
-            }
+            try {
+              const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
+              if (!cameraPermission.granted) {
+                Alert.alert('Permission Required', 'Camera access is required to take a picture.');
+                return;
+              }
 
-            const result = await ImagePicker.launchCameraAsync({
-              mediaTypes: ["images"],
-              allowsEditing: true,
-              aspect: [1, 1],
-              quality: 0.7,
-            });
+              const result = await ImagePicker.launchCameraAsync({
+                mediaTypes: ['images'],
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.7,
+              });
 
-            if (!result.canceled && result.assets && result.assets.length > 0) {
-              setAvatarUri(result.assets[0].uri);
+              if (!result.canceled && result.assets && result.assets.length > 0) {
+                const asset = result.assets[0];
+                const filename = asset.uri.split('/').pop() || 'profile.jpg';
+                const match = /\.(\w+)$/.exec(filename);
+                const type = match ? `image/${match[1]}` : 'image/jpeg';
+                setSelectedImage({ uri: asset.uri, name: filename, type });
+              }
+            } catch (err) {
+              console.warn('Camera error:', err.message);
             }
           },
         },
         {
-          text: "Choose From Gallery",
+          text: 'Choose from Gallery',
           onPress: async () => {
-            const galleryPermission =
-              await ImagePicker.requestMediaLibraryPermissionsAsync();
-            if (!galleryPermission.granted) {
-              Alert.alert(
-                "Permission Denied",
-                "CampusRide requires gallery access to browse pictures.",
-              );
-              return;
-            }
+            try {
+              const galleryPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+              if (!galleryPermission.granted) {
+                Alert.alert('Permission Required', 'Gallery access is required to choose a picture.');
+                return;
+              }
 
-            const result = await ImagePicker.launchImageLibraryAsync({
-              mediaTypes: ["images"],
-              allowsEditing: true,
-              aspect: [1, 1],
-              quality: 0.7,
-            });
+              const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['images'],
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.7,
+              });
 
-            if (!result.canceled && result.assets && result.assets.length > 0) {
-              setAvatarUri(result.assets[0].uri);
+              if (!result.canceled && result.assets && result.assets.length > 0) {
+                const asset = result.assets[0];
+                const filename = asset.uri.split('/').pop() || 'profile.jpg';
+                const match = /\.(\w+)$/.exec(filename);
+                const type = match ? `image/${match[1]}` : 'image/jpeg';
+                setSelectedImage({ uri: asset.uri, name: filename, type });
+              }
+            } catch (err) {
+              console.warn('Gallery error:', err.message);
             }
           },
         },
         {
-          text: "Cancel",
-          style: "cancel",
+          text: 'Cancel',
+          style: 'cancel',
         },
-      ],
-      { cancelable: true },
+      ]
     );
   };
 
   const handleSaveChanges = async () => {
-    const finalName = fullName.trim() || driverData?.fullName || "";
-    const finalPhone = phoneNumber.trim() || driverData?.phoneNumber || "";
-    const isNewPhotoSelected = avatarUri && avatarUri !== driverData?.avatarUri;
+    const finalName = fullName.trim();
+    const finalPhone = phoneNumber.trim().replace(/\s+/g, '');
 
-    if (!finalName && !finalPhone && !isNewPhotoSelected) {
-      Alert.alert(
-        "Validation Error",
-        "Profile inputs cannot be left completely empty.",
-      );
+    if (!finalName) {
+      Alert.alert('Validation Error', 'Please enter your full name.');
+      return;
+    }
+
+    if (!finalPhone || finalPhone.length < 8) {
+      Alert.alert('Validation Error', 'Please enter a valid phone number.');
       return;
     }
 
@@ -124,419 +143,285 @@ const EditDriverProfile = ({
       setIsSubmitting(true);
 
       const profilePayload = new FormData();
-      profilePayload.append("fullName", finalName);
-      profilePayload.append("phoneNumber", finalPhone);
-      profilePayload.append("email", email.trim() || driverData?.email || "");
+      profilePayload.append('fullName', finalName);
+      profilePayload.append('phoneNumber', finalPhone);
+      profilePayload.append('email', email.trim());
 
-      if (isNewPhotoSelected) {
-        const localUriFilename = avatarUri.split("/").pop() || "avatar.jpg";
-        const matchFileExtension = /\.(\w+)$/.exec(localUriFilename);
-        const fileExt = matchFileExtension
-          ? matchFileExtension[1].toLowerCase()
-          : "jpg";
-        const mimeTypeFormat = fileExt === "png" ? "image/png" : "image/jpeg";
+      if (selectedImage) {
+        const fileExt = selectedImage.name?.split('.').pop()?.toLowerCase() || 'jpg';
+        const mimeTypeFormat = fileExt === 'png' ? 'image/png' : 'image/jpeg';
 
-        profilePayload.append("avatar", {
-          uri:
-            Platform.OS === "android"
-              ? avatarUri
-              : avatarUri.replace("file://", ""),
+        profilePayload.append('avatar', {
+          uri: Platform.OS === 'android' ? selectedImage.uri : selectedImage.uri.replace('file://', ''),
           name: `profile_${Date.now()}.${fileExt}`,
           type: mimeTypeFormat,
         });
       }
 
-      const response = await api.put("/driver/profile", profilePayload, {
+      const response = await api.put('/driver/profile', profilePayload, {
         headers: {
-          "Content-Type": "multipart/form-data",
+          'Content-Type': 'multipart/form-data',
         },
       });
 
       if (response.data?.success) {
-        Alert.alert("Success", "Profile updated successfully!");
-        if (onProfileUpdated) onProfileUpdated(response.data.data);
-        if (onBack) onBack();
+        Alert.alert('Profile Updated', 'Your profile details have been saved.', [
+          {
+            text: 'OK',
+            onPress: () => {
+              if (onProfileUpdated) onProfileUpdated(response.data.data);
+              if (onBack) onBack();
+            },
+          },
+        ]);
       }
     } catch (error) {
-      console.error("Profile update transactional exception error:", error);
-      Alert.alert(
-        "Update Error",
-        "Failed to synchronize profile photo with backend.",
-      );
+      console.error('Driver profile update error:', error);
+      const msg = error.response?.data?.error?.message || error.message || 'Failed to update profile details.';
+      Alert.alert('Update Failed', msg);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={["top", "bottom"]}>
-      <StatusBar style={theme.statusBar} />
+    <SafeAreaView
+      style={[styles.safeArea, { backgroundColor: colors.brand.baseBackground }]}
+      edges={['top', 'left', 'right']}
+    >
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={colors.brand.baseBackground}
+      />
 
-      {/* Top Bar Navbar Section */}
-      <View style={[styles.topBar, { backgroundColor: theme.background, borderBottomColor: theme.tabBarBorder }]}>
-        <TouchableOpacity
-          onPress={onBack}
-          activeOpacity={0.7}
-          style={styles.topBarButton}
-          disabled={isSubmitting}
-        >
-          <MaterialCommunityIcons name="arrow-left" size={24} color={theme.iconColor} />
-        </TouchableOpacity>
-        <Text style={[styles.topBarTitle, { color: theme.iconColor }]}>Edit Profile</Text>
-        <View style={styles.topBarSpacer} />
-      </View>
-
-      <ScrollView
-        contentContainerStyle={[styles.scrollContainer, { backgroundColor: theme.background }]}
-        showsVerticalScrollIndicator={false}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {/* Profile Image Node Display Block */}
-        <View style={styles.avatarSection}>
-          <View style={styles.photoContainer}>
-            {avatarUri ? (
-                <Image 
-                  source={{ 
-                    uri: avatarUri.startsWith("http") 
-                      ? `${avatarUri}?t=${Date.now()}` 
-                      : avatarUri 
-                  }} 
-                  style={styles.avatarImage} 
-                />
-              ) : (
-              <View style={[styles.avatarPlaceholder, { backgroundColor: theme.iconColor }]}>
-                <Text style={styles.avatarInitials}>
-                  {fullName?.trim()
-                    ? fullName
-                        .trim()
-                        .split(" ")
-                        .map((n) => n[0])
-                        .join("")
-                        .toUpperCase()
-                    : "D"}
-                </Text>
-              </View>
-            )}
-
+        {/* Header */}
+        <View style={styles.header}>
+          {onBack ? (
             <TouchableOpacity
-              style={[styles.pencilBadgeButton, { borderColor: theme.background }]}
-              activeOpacity={0.85}
-              onPress={handleUpdatePhoto}
+              onPress={onBack}
+              activeOpacity={0.7}
+              style={[styles.backButton, { backgroundColor: colors.surface.elevated }]}
               disabled={isSubmitting}
             >
-              <MaterialCommunityIcons name="pencil" size={16} color="#1E3A8A" />
+              <CRIcon name="arrow-back" size={20} color={colors.text.primary} />
+            </TouchableOpacity>
+          ) : (
+            <View style={{ width: 40 }} />
+          )}
+          <Text style={[styles.headerTitle, { color: colors.text.primary }]}>
+            Personal Information
+          </Text>
+          <View style={{ width: 40 }} />
+        </View>
+
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          {/* Avatar Section */}
+          <View style={styles.avatarSection}>
+            <TouchableOpacity
+              style={[styles.avatarWrap, { backgroundColor: colors.surface.elevated }]}
+              onPress={handleUpdatePhoto}
+              activeOpacity={0.8}
+              disabled={isSubmitting}
+            >
+              {currentAvatarUri ? (
+                <Image source={{ uri: currentAvatarUri }} style={styles.avatarImg} />
+              ) : (
+                <Text style={[styles.avatarInitials, { color: colors.text.primary }]}>
+                  {initials}
+                </Text>
+              )}
+
+              <View style={[styles.cameraBadge, { backgroundColor: colors.brand.primary, borderColor: colors.brand.baseBackground }]}>
+                <CRIcon name="camera" size={14} color={colors.brand.onGoldText} />
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={handleUpdatePhoto} activeOpacity={0.7} disabled={isSubmitting}>
+              <Text style={[styles.changePhotoText, { color: colors.brand.primary }]}>
+                Change profile photo
+              </Text>
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity
-            onPress={handleUpdatePhoto}
-            activeOpacity={0.7}
-            style={styles.changePhotoLink}
-            disabled={isSubmitting}
-          >
-            <Text style={[styles.changePhotoLinkText, { color: theme.iconColor }]}>Change Photo</Text>
-          </TouchableOpacity>
-        </View>
+          {/* Form Stack */}
+          <View style={styles.formStack}>
+            {/* Full Name */}
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: colors.text.secondary }]}>FULL NAME</Text>
+              <View style={[styles.inputBox, { backgroundColor: colors.surface.tile || '#F3F3F1', borderColor: colors.border.subtle }]}>
+                <TextInput
+                  style={[styles.input, { color: colors.text.primary }]}
+                  value={fullName}
+                  onChangeText={setFullName}
+                  placeholder="Enter full name"
+                  placeholderTextColor={colors.text.muted}
+                  editable={!isSubmitting}
+                />
+              </View>
+            </View>
 
-        {/* Dynamic Theme Form Array Stack */}
-        <View style={styles.formStack}>
-          <View style={styles.inputWrapper}>
-            <Text style={[styles.inputLabelText, { color: theme.mainText }]}>Full Name</Text>
-            <TextInput
-              style={[styles.textFieldInput, { backgroundColor: theme.cardBackground, borderColor: theme.borderColor, color: theme.mainText }]}
-              value={fullName}
-              onChangeText={setFullName}
-              placeholder="Enter your name"
-              placeholderTextColor={theme.subText}
-              editable={!isSubmitting}
-            />
+            {/* Phone Number */}
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: colors.text.secondary }]}>PHONE NUMBER</Text>
+              <View style={[styles.inputBox, { backgroundColor: colors.surface.tile || '#F3F3F1', borderColor: colors.border.subtle }]}>
+                <TextInput
+                  style={[styles.input, { color: colors.text.primary }]}
+                  value={phoneNumber}
+                  onChangeText={setPhoneNumber}
+                  keyboardType="phone-pad"
+                  placeholder="e.g. 0240000002"
+                  placeholderTextColor={colors.text.muted}
+                  editable={!isSubmitting}
+                />
+              </View>
+            </View>
+
+            {/* Email (Read Only) */}
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: colors.text.secondary }]}>
+                EMAIL ADDRESS (VERIFIED)
+              </Text>
+              <View style={[styles.inputBox, { backgroundColor: colors.surface.disabled, borderColor: colors.border.subtle }]}>
+                <TextInput
+                  style={[styles.input, { color: colors.text.muted }]}
+                  value={email}
+                  editable={false}
+                  selectTextOnFocus={false}
+                />
+                <CRIcon name="lock-closed-outline" size={16} color={colors.text.muted} />
+              </View>
+            </View>
           </View>
 
-          <View style={styles.inputWrapper}>
-            <Text style={[styles.inputLabelText, { color: theme.mainText }]}>Phone Number</Text>
-            <TextInput
-              style={[styles.textFieldInput, { backgroundColor: theme.cardBackground, borderColor: theme.borderColor, color: theme.mainText }]}
-              value={phoneNumber}
-              onChangeText={setPhoneNumber}
-              keyboardType="phone-pad"
-              placeholder="Enter phone number"
-              placeholderTextColor={theme.subText}
-              editable={!isSubmitting}
-            />
-          </View>
-
-          <View style={styles.inputWrapper}>
-            <Text style={[styles.inputLabelText, { color: theme.mainText }]}>Email Address (Read-Only)</Text>
-            <TextInput
-              style={[
-                styles.textFieldInput,
-                styles.disabledInputField,
-                { 
-                  backgroundColor: darkModeEnabled ? "#1E293B" : "#E2E8F0", 
-                  borderColor: darkModeEnabled ? "#334155" : "#CBD5E1", 
-                  color: theme.subText 
-                }
-              ]}
-              value={email}
-              editable={false}
-              selectTextOnFocus={false}
-            />
-          </View>
-        </View>
-
-        {/* Call To Actions Stacks Footer */}
-        <View style={styles.actionButtonsContainer}>
+          {/* Save Changes CTA */}
           <TouchableOpacity
             style={[
-              styles.saveChangesButton,
-              { backgroundColor: theme.iconColor },
-              isSubmitting && styles.disabledSaveButton,
+              styles.saveBtn,
+              { backgroundColor: colors.brand.primary },
+              isSubmitting && { opacity: 0.65 },
             ]}
-            activeOpacity={0.85}
             onPress={handleSaveChanges}
             disabled={isSubmitting}
+            activeOpacity={0.8}
           >
             {isSubmitting ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
+              <ActivityIndicator size="small" color={colors.brand.onGoldText} />
             ) : (
-              <Text style={styles.saveButtonText}>Save Changes</Text>
+              <Text style={[styles.saveBtnText, { color: colors.brand.onGoldText }]}>
+                Save Changes
+              </Text>
             )}
           </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={onBack}
-            activeOpacity={0.7}
-            style={styles.cancelButton}
-            disabled={isSubmitting}
-          >
-            <Text style={[styles.cancelButtonText, { color: theme.subText }]}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-
-      {/* Persistence Base System Tab Footer Navigation Frame */}
-      <View style={[styles.bottomNav, { backgroundColor: theme.background, borderTopColor: theme.tabBarBorder }]}>
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={() => onChangeTab && onChangeTab("home")}
-          activeOpacity={0.7}
-          disabled={isSubmitting}
-        >
-          <View style={styles.tabIconBackground}>
-            <MaterialCommunityIcons
-              name="home-outline"
-              size={24}
-              color="#94A3B8"
-            />
-          </View>
-          <Text style={[styles.navLabel, { color: "#94A3B8" }]}>Home</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={() => onChangeTab && onChangeTab("trips")}
-          activeOpacity={0.7}
-          disabled={isSubmitting}
-        >
-          <View style={styles.tabIconBackground}>
-            <MaterialCommunityIcons
-              name="car-multiple"
-              size={24}
-              color="#94A3B8"
-            />
-          </View>
-          <Text style={[styles.navLabel, { color: "#94A3B8" }]}>Trips</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={() => onBack && onBack()}
-          activeOpacity={0.7}
-          disabled={isSubmitting}
-        >
-          <View
-            style={[
-              styles.tabIconBackground,
-              !darkModeEnabled && styles.activeTabIconBackground,
-              darkModeEnabled && { backgroundColor: "#334155" },
-            ]}
-          >
-            <MaterialCommunityIcons
-              name="account-circle"
-              size={24}
-              color={theme.iconColor}
-            />
-          </View>
-          <Text style={[styles.navLabelActive, { color: theme.iconColor }]}>Profile</Text>
-        </TouchableOpacity>
-      </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
-};
+}
 
 const styles = StyleSheet.create({
-  actionButtonsContainer: {
-    alignItems: "center",
-    flexDirection: "column",
-    gap: 16,
-    width: "100%",
+  safeArea: {
+    flex: 1,
   },
-  activeTabIconBackground: {
-    backgroundColor: "#F1F5F9",
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
   },
-  avatarImage: {
-    borderRadius: 60,
-    height: 120,
-    width: 120,
+  backButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  avatarInitials: {
-    color: "#FFFFFF",
-    fontSize: 40,
-    fontWeight: "800",
+  headerTitle: {
+    fontFamily: fonts.extraBold,
+    fontSize: 20,
+    letterSpacing: -0.4,
   },
-  avatarPlaceholder: {
-    alignItems: "center",
-    borderRadius: 60,
-    elevation: 2,
-    height: 120,
-    justifyContent: "center",
-    width: 120,
+  scrollContent: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xxl,
   },
   avatarSection: {
-    alignItems: "center",
-    marginBottom: 32,
-    marginTop: 8,
+    alignItems: 'center',
+    marginBottom: spacing.xl,
   },
-  bottomNav: {
-    borderTopWidth: 1,
-    flexDirection: "row",
-    height: 74,
+  avatarWrap: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    marginBottom: spacing.xs + 2,
   },
-  cancelButton: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 6,
-    width: "100%",
+  avatarImg: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 44,
   },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: "700",
+  avatarInitials: {
+    fontFamily: fonts.extraBold,
+    fontSize: 32,
   },
-  changePhotoLink: {
-    paddingVertical: 4,
+  cameraBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  changePhotoLinkText: {
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  container: {
-    flex: 1,
-  },
-  disabledInputField: {
-    fontStyle: "normal",
-  },
-  disabledSaveButton: {
-    backgroundColor: "#94A3B8",
+  changePhotoText: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
   },
   formStack: {
-    gap: 20,
-    marginBottom: 40,
+    gap: spacing.md,
+    marginBottom: spacing.xl,
   },
-  inputLabelText: {
-    fontSize: 13,
-    fontWeight: "700",
-    letterSpacing: 0.3,
-    marginBottom: 8,
+  inputGroup: {
+    gap: spacing.xs,
   },
-  inputWrapper: {
-    flexDirection: "column",
-  },
-  navItem: {
-    alignItems: "center",
-    flex: 1,
-    justifyContent: "center",
-  },
-  navLabel: {
+  label: {
+    fontFamily: fonts.semiBold,
     fontSize: 11,
-    fontWeight: "600",
+    letterSpacing: 0.6,
   },
-  navLabelActive: {
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  pencilBadgeButton: {
-    alignItems: "center",
-    backgroundColor: "#A3E635",
-    borderRadius: 17,
-    borderWidth: 3,
-    bottom: 0,
-    height: 34,
-    justifyContent: "center",
-    position: "absolute",
-    right: 4,
-    width: 34,
-  },
-  photoContainer: {
-    height: 120,
-    marginBottom: 16,
-    position: "relative",
-    width: 120,
-  },
-  saveButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  saveChangesButton: {
-    alignItems: "center",
-    borderRadius: 16,
-    height: 56,
-    justifyContent: "center",
-    width: "100%",
-  },
-  scrollContainer: {
-    flexGrow: 1,
-    paddingBottom: 40,
-    paddingHorizontal: 24,
-    paddingTop: 24,
-  },
-  tabIconBackground: {
-    alignItems: "center",
-    borderRadius: 16,
-    justifyContent: "center",
-    marginBottom: 2,
-    paddingHorizontal: 20,
-    paddingVertical: 4,
-  },
-  textFieldInput: {
-    borderRadius: 16,
+  inputBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 50,
+    borderRadius: radii.md,
     borderWidth: 1,
-    fontSize: 16,
-    fontWeight: "600",
-    height: 56,
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.md,
   },
-  topBar: {
-    alignItems: "center",
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: 24,
-    paddingVertical: 14,
+  input: {
+    flex: 1,
+    fontFamily: fonts.medium,
+    fontSize: 14.5,
+    height: '100%',
   },
-  topBarButton: {
-    alignItems: "center",
-    height: 40,
-    justifyContent: "center",
-    width: 40,
+  saveBtn: {
+    height: 50,
+    borderRadius: radii.md,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  topBarSpacer: {
-    width: 40,
-  },
-  topBarTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    letterSpacing: -0.5,
+  saveBtnText: {
+    fontFamily: fonts.bold,
+    fontSize: 15,
   },
 });
-
-export default EditDriverProfile;

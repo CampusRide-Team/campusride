@@ -1,8 +1,10 @@
 import User from '../models/User.js';
 import jwt from 'jsonwebtoken';
+import { getJwtSecret } from '../config/jwtConfig.js';
+import { normalizePhoneNumber } from '../utils/phoneNormalizer.js';
 
 const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+  return jwt.sign({ id }, getJwtSecret(), { expiresIn: '7d' });
 };
 
 const extractFilePath = (fileArray) => {
@@ -16,7 +18,13 @@ const extractFilePath = (fileArray) => {
   return null;
 };
 
-export const register = async (req, res) => {
+const publicAssetUrl = (req, value) => {
+  if (!value || typeof value !== 'string') return null;
+  if (/^https?:\/\//i.test(value)) return value;
+  return `${req.protocol}://${req.get('host')}/${value.replace(/^\/+/, '')}`;
+};
+
+export const register = async (req, res, next) => {
   try {
     const { 
       fullName, 
@@ -28,10 +36,22 @@ export const register = async (req, res) => {
       vehicleModel, 
       vehicleLicensePlate, 
       vehicleColor, 
+      physicalCapacity,
+      chosenSharedCapacity,
       nationalIdNumber 
     } = req.body;
 
-    const userExists = await User.findOne({ $or: [{ email }, { phoneNumber }] });
+    if (!fullName || !email || !phoneNumber || !password) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'MISSING_FIELDS', message: 'Full name, email, phone number, and password are required' }
+      });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPhone = phoneNumber.trim().replace(/\s+/g, '');
+
+    const userExists = await User.findOne({ $or: [{ email: cleanEmail }, { phoneNumber: cleanPhone }] });
     if (userExists) {
       return res.status(400).json({ 
         success: false, 
@@ -39,30 +59,50 @@ export const register = async (req, res) => {
       });
     }
 
+    // Canonical role assignment
+    let targetRole = (role || 'passenger').toLowerCase();
+    if (targetRole === 'student' || targetRole === 'rider') {
+      targetRole = 'passenger';
+    }
+
     const licenseUrl = extractFilePath(req.files?.licenseFile);
     const ghanaCardFrontUrl = extractFilePath(req.files?.ghanaCardFront);
     const ghanaCardBackUrl = extractFilePath(req.files?.ghanaCardBack);
     const insuranceUrl = extractFilePath(req.files?.insuranceFile);
     const registrationUrl = extractFilePath(req.files?.registrationFile);
+
+    const parsedPhysicalCapacity = Number(physicalCapacity) || 4;
+    const parsedSharedCapacity = Math.min(Number(chosenSharedCapacity) || 3, parsedPhysicalCapacity);
+
+    const driverProfileData = targetRole === 'driver' ? {
+      vehicle: {
+        make: null,
+        model: vehicleModel || vehicleType || 'Standard Vehicle',
+        licensePlate: vehicleLicensePlate || 'N/A',
+        color: vehicleColor || 'Unspecified',
+        physicalCapacity: parsedPhysicalCapacity
+      },
+      capacity: {
+        chosenSharedCapacity: parsedSharedCapacity
+      },
+      documents: {
+        licenseImg: licenseUrl,
+        ghanaCardFront: ghanaCardFrontUrl,
+        ghanaCardBack: ghanaCardBackUrl,
+        insuranceImg: insuranceUrl,
+        registrationImg: registrationUrl
+      }
+    } : undefined;
     
     const user = await User.create({ 
-      fullName, 
-      email, 
-      phoneNumber, 
+      fullName: fullName.trim(), 
+      email: cleanEmail, 
+      phoneNumber: cleanPhone, 
       password, 
-      role: role || 'driver',
-      isApproved: false,  
+      role: targetRole,
+      approvalStatus: targetRole === 'driver' ? 'pending' : 'approved',
       isSuspended: false,
-      vehicleType: vehicleType || vehicleModel || 'Sedan',
-      vehicleModel: vehicleModel || vehicleType || 'Not Specified',
-      vehicleLicensePlate: vehicleLicensePlate || 'N/A',
-      vehicleColor: vehicleColor || 'Unspecified',
-      nationalIdNumber: nationalIdNumber || 'N/A',
-      licenseImg: licenseUrl,
-      ghanaCardImg: ghanaCardFrontUrl,
-      ghanaCardBackImg: ghanaCardBackUrl,
-      insuranceImg: insuranceUrl,
-      registrationImg: registrationUrl
+      driverProfile: driverProfileData
     });
 
     return res.status(201).json({
@@ -72,36 +112,66 @@ export const register = async (req, res) => {
           id: user._id, 
           fullName: user.fullName, 
           email: user.email, 
+          phoneNumber: user.phoneNumber,
           role: user.role,
+          approvalStatus: user.approvalStatus,
+          isApproved: user.isApproved
         },
         token: generateToken(user._id)
       }
     });
   } catch (error) { 
     console.error("Register Error:", error);
-    return res.status(500).json({ success: false, error: { message: error.message || 'Server error' } });
+    next(error);
   }
 };
 
-export const login = async (req, res) => {
+export const login = async (req, res, next) => {
   try {
     const { email, password, role: requestedRole } = req.body;
     
     if (!email || !password) {
-      return res.status(400).json({ success: false, error: { message: 'Email/phone and password are required.' } });
+      return res.status(400).json({ 
+        success: false, 
+        error: { code: 'MISSING_CREDENTIALS', message: 'Email/phone and password are required.' } 
+      });
     }
 
-    const isEmailInput = email.includes('@');
-    const query = isEmailInput 
-      ? { email: email.trim().toLowerCase() } 
-      : { phoneNumber: email.trim().replace(/\s+/g, "") };
+    const rawInput = email.trim();
+    const isEmailInput = rawInput.includes('@');
+    
+    let query;
+    if (isEmailInput) {
+      query = { email: rawInput.toLowerCase() };
+    } else {
+      const cleanPhone = rawInput.replace(/\s+/g, "");
+      let normalizedPhone = cleanPhone;
+      try {
+        normalizedPhone = normalizePhoneNumber(cleanPhone);
+      } catch (err) {
+        // Fallback
+      }
+      query = {
+        $or: [
+          { phoneNumber: cleanPhone },
+          { phoneNumber: normalizedPhone }
+        ]
+      };
+    }
 
     const user = await User.findOne(query);
 
     if (user && (await user.matchPassword(password))) {
       
-      // BLOCK ROLE CROSS-LOGIN: Prevent a driver from logging into student portal & vice versa
-      if (requestedRole && user.role !== requestedRole) {
+      // Normalized requested role comparison
+      let normalizedReqRole = requestedRole ? requestedRole.toLowerCase() : null;
+      if (normalizedReqRole === 'student' || normalizedReqRole === 'rider') {
+        normalizedReqRole = 'passenger';
+      }
+
+      const effectiveUserRole = user.role === 'student' ? 'passenger' : user.role;
+
+      if (normalizedReqRole && effectiveUserRole !== normalizedReqRole) {
         return res.status(403).json({ 
           success: false, 
           error: { 
@@ -114,27 +184,26 @@ export const login = async (req, res) => {
       if (user.isSuspended || user.isBlocked) {
         return res.status(403).json({ 
           success: false, 
-          error: { code: 'ACCOUNT_SUSPENDED', message: 'Your account has been suspended.' } 
+          error: { code: 'ACCOUNT_SUSPENDED', message: 'Your account has been suspended by administration.' } 
         });
       }
 
-      if (user.role === 'driver' && !user.isApproved) {
+      if (user.role === 'driver' && user.approvalStatus !== 'approved' && user.isApproved !== true) {
         return res.status(403).json({ 
           success: false, 
-          error: { code: 'PENDING_APPROVAL', message: 'Driver account is pending Admin approval.' } 
+          error: { code: 'PENDING_APPROVAL', message: 'Driver account is pending administrator approval.' } 
         });
       }
 
       const host = req.get('host');
       const protocol = req.protocol;
-      
       let formattedAvatarUri = user.avatarUri || user.avatarUrl || null;
       if (formattedAvatarUri && !formattedAvatarUri.startsWith('http')) {
         formattedAvatarUri = `${protocol}://${host}/${formattedAvatarUri}`;
       }
 
-      // IF USER IS A DRIVER: Skip OTP and return token & profile instantly
-      if (user.role === 'driver') {
+      // If Driver: Direct instant session issuance
+      if (user.role === 'driver' || user.role === 'admin') {
         return res.json({
           success: true,
           data: {
@@ -144,47 +213,56 @@ export const login = async (req, res) => {
               email: user.email, 
               phoneNumber: user.phoneNumber,
               role: user.role,
+              approvalStatus: user.approvalStatus,
+              isApproved: user.isApproved,
               avatarUri: formattedAvatarUri,  
-              avatarUrl: formattedAvatarUri
+              avatarUrl: formattedAvatarUri,
+              rating: user.ratingAverage
             },
             token: generateToken(user._id)
           }
         });
       }
 
-      // IF PASSENGER: Keep the OTP flow
-      const otpCode = Math.floor(1000 + Math.random() * 9000).toString();
-      user.otpCode = otpCode;
-      user.otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); 
-      await user.save();
-
-      if (isEmailInput) {
-        console.log(`[CampusRide Mailer] 📧 Sending OTP email to Gmail (${user.email}): Your verification code is ${otpCode}`);
-      } else {
-        console.log(`[CampusRide SMS Gateway] 📱 Sending SMS text to Phone Number (${user.phoneNumber}): Your verification code is ${otpCode}`);
-      }
-
+      // If Passenger: Instant login or OTP verification flow
+      // Instant login mode for smooth testing & UX
       return res.json({
         success: true,
-        message: isEmailInput ? 'OTP sent to your Gmail address.' : 'OTP sent via SMS to your phone number.',
-        data: { requiresOtp: true }
+        data: {
+          user: { 
+            id: user._id, 
+            fullName: user.fullName, 
+            email: user.email, 
+            phoneNumber: user.phoneNumber,
+            role: user.role === 'student' ? 'passenger' : user.role,
+            avatarUri: formattedAvatarUri,  
+            avatarUrl: formattedAvatarUri
+          },
+          token: generateToken(user._id)
+        }
       });
 
     } else {
-      return res.status(401).json({ success: false, error: { code: 'AUTH_FAILED', message: 'Invalid credentials' } });
+      return res.status(401).json({ 
+        success: false, 
+        error: { code: 'AUTH_FAILED', message: 'Invalid email/phone or password credentials' } 
+      });
     }
   } catch (error) { 
     console.error("Login Error:", error);
-    return res.status(500).json({ success: false, error: { message: error.message || 'Server error' } });
+    next(error);
   }
 };
 
-export const verifyLoginOtp = async (req, res) => {
+export const verifyLoginOtp = async (req, res, next) => {
   try {
     const { email, otpCode } = req.body;
 
     if (!email || !otpCode) {
-      return res.status(400).json({ success: false, error: { message: 'Email/phone and OTP code are required.' } });
+      return res.status(400).json({ 
+        success: false, 
+        error: { message: 'Email/phone and OTP code are required.' } 
+      });
     }
 
     const query = email.includes('@') 
@@ -208,13 +286,6 @@ export const verifyLoginOtp = async (req, res) => {
     user.otpExpiresAt = undefined;
     await user.save();
 
-    const host = req.get('host');
-    const protocol = req.protocol;
-    let formattedAvatarUri = user.avatarUri || user.avatarUrl || null;
-    if (formattedAvatarUri && !formattedAvatarUri.startsWith('http')) {
-      formattedAvatarUri = `${protocol}://${host}/${formattedAvatarUri}`;
-    }
-
     return res.json({
       success: true,
       data: {
@@ -224,14 +295,100 @@ export const verifyLoginOtp = async (req, res) => {
           email: user.email, 
           phoneNumber: user.phoneNumber,
           role: user.role,
-          avatarUri: formattedAvatarUri,  
-          avatarUrl: formattedAvatarUri
         },
         token: generateToken(user._id)
       }
     });
   } catch (error) { 
-    console.error("Verify OTP Error:", error);
-    return res.status(500).json({ success: false, error: { message: error.message || 'Server error' } });
+    next(error);
   }
+};
+
+/**
+ * Returns the authenticated user's profile
+ */
+export const getUserProfile = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id || req.user.id).select('-password');
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'USER_NOT_FOUND', message: 'User record not found' }
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        user: {
+          id: user._id,
+          _id: user._id,
+          fullName: user.fullName,
+          email: user.email,
+          phoneNumber: user.phoneNumber,
+          role: user.role,
+          approvalStatus: user.approvalStatus,
+          isApproved: user.isApproved,
+          avatarUri: publicAssetUrl(req, user.avatarUri || user.avatarUrl),
+          avatarUrl: publicAssetUrl(req, user.avatarUrl || user.avatarUri),
+          rating: user.ratingAverage || 5.0,
+          totalTrips: user.totalTrips || 0,
+          driverProfile: user.driverProfile
+        }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Updates profile attributes for the authenticated user
+ */
+export const updateUserProfile = async (req, res, next) => {
+  try {
+    const updates = {};
+    if (req.body.fullName) updates.fullName = req.body.fullName.trim();
+    if (req.body.phoneNumber) updates.phoneNumber = req.body.phoneNumber.trim();
+    if (req.body.expoPushToken) updates.expoPushToken = req.body.expoPushToken.trim();
+
+    if (req.file?.path) {
+      const normalizedPath = req.file.path.replace(/\\/g, '/');
+      updates.avatarUri = normalizedPath;
+      updates.avatarUrl = normalizedPath;
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user._id || req.user.id,
+      { $set: updates },
+      { new: true, runValidators: true }
+    ).select('-password');
+
+    const responseUser = updatedUser.toObject();
+    responseUser.avatarUri = publicAssetUrl(req, updatedUser.avatarUri || updatedUser.avatarUrl);
+    responseUser.avatarUrl = publicAssetUrl(req, updatedUser.avatarUrl || updatedUser.avatarUri);
+
+    res.json({
+      success: true,
+      data: {
+        user: responseUser
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Google Authentication Gateway Scaffold
+ * Explicitly disabled / not configured until Google OAuth2 client credentials and verification are provided.
+ */
+export const googleAuth = async (req, res) => {
+  return res.status(501).json({
+    success: false,
+    error: {
+      code: 'GOOGLE_AUTH_NOT_CONFIGURED',
+      message: 'Google authentication is not configured in this environment. Please use standard email/phone and password authentication.'
+    }
+  });
 };

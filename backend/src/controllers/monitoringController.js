@@ -1,8 +1,10 @@
  import User from '../models/User.js';
-import Ride from '../models/Ride.js';
+import DriverTrip from '../models/DriverTrip.js';
+import RideBooking from '../models/RideBooking.js';
+import CampusPOI from '../models/CampusPOI.js';
 
 // Helper to determine bounding box (approx 150m)
-const range = 0.0015;
+const range = 0.0020;
 const zones = [
   { name: 'Pentagon / Evandy Cluster', lat: 5.6575, lng: -0.1912 },
   { name: 'Night Market Hub Area', lat: 5.6478, lng: -0.1835 },
@@ -15,52 +17,63 @@ const zones = [
 export const getMonitoringSnapshot = async (req, res, next) => {
   try {
     const twentyMinutesAgo = new Date(Date.now() - 20 * 60 * 1000);
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
 
     // 1. Fetch live operations numbers
     const [
-      activeRidesCount,
+      activeTripsCount,
       completedTodayCount,
       unmatchedPingsCount,
       activeTripsData,
       onlineDrivers
     ] = await Promise.all([
-      Ride.countDocuments({ status: 'ongoing' }),
-      Ride.countDocuments({ 
+      DriverTrip.countDocuments({ status: { $in: ['dispatched', 'active'] } }),
+      DriverTrip.countDocuments({ 
         status: 'completed', 
-        createdAt: { $gte: new Date().setHours(0,0,0,0) } 
+        createdAt: { $gte: todayStart } 
       }),
-      Ride.countDocuments({ status: 'requested' }),
-      Ride.find({ status: { $in: ['requested', 'searching', 'ongoing', 'arrived'] } })
+      RideBooking.countDocuments({ status: 'pending' }),
+      DriverTrip.find({ status: { $in: ['dispatched', 'active'] } })
         .sort({ createdAt: -1 })
-        .populate('riderId', 'fullName')
-        .populate('driverId', 'fullName profilePicture vehicleDetails'),
-      User.find({ role: 'driver', isApproved: true, isOnline: true })
+        .populate('driverId', 'fullName profilePicture avatar avatarUrl driverProfile vehicleDetails')
+        .populate('tripStops.passengerId', 'fullName'),
+      User.find({ role: 'driver', approvalStatus: 'approved', isOnline: true })
     ]);
 
     // 2. Map Dynamic Stat Cards
     const metrics = [
-      { id: 1, label: 'Active Rides', value: activeRidesCount.toString(), change: 'Live On-Map', bg: '#DBEAFE', color: '#16A34A' },
+      { id: 1, label: 'Active Trips', value: activeTripsCount.toString(), change: 'Live On-Map', bg: '#DBEAFE', color: '#16A34A' },
       { id: 2, label: 'Completed Today', value: completedTodayCount.toString(), change: 'Resetting Midnight', bg: '#E2E8F0', color: '#16A34A' },
       { id: 3, label: 'Unmatched Pings', value: unmatchedPingsCount.toString(), change: 'Awaiting Driver', bg: '#FEF9C3', color: '#CA8A04' },
       { id: 4, label: 'Reported Disputes', value: '0', change: 'Immediate Overlook', bg: '#FEE2E2', color: '#DC2626' } // Fallback baseline
     ];
 
     // 3. Map Active Dispatch Items
-    const activeTrips = activeTripsData.map(ride => {
+    const activeTrips = activeTripsData.map(trip => {
       let statusColor = '#1E40AF';
       let statusBg = '#EFF6FF';
-      if (ride.status === 'requested') { statusColor = '#854D0E'; statusBg = '#FFFBEB'; }
-      if (ride.status === 'arrived') { statusColor = '#15803D'; statusBg = '#DCFCE7'; }
+      if (trip.status === 'dispatched') { statusColor = '#854D0E'; statusBg = '#FFFBEB'; }
+      if (trip.status === 'active') { statusColor = '#15803D'; statusBg = '#DCFCE7'; }
+
+      const stops = trip.tripStops || [];
+      const pickupStop = stops.find(s => s.stopType === 'pickup') || stops[0];
+      const dropoffStop = stops.find(s => s.stopType === 'dropoff') || stops[stops.length - 1];
+      const passengerName = pickupStop?.passengerId?.fullName || (stops.length > 0 ? `${stops.length} Passenger(s)` : 'Passenger');
+      const routeText = pickupStop && dropoffStop ? `${pickupStop.name} → ${dropoffStop.name}` : 'Campus Run';
+      const vehicle = trip.driverId?.driverProfile?.vehicle?.model 
+        ? `${trip.driverId.driverProfile.vehicle.model} (${trip.driverId.driverProfile.vehicle.licensePlate})`
+        : trip.driverId?.vehicleDetails || 'Pending Assignment';
 
       return {
-        id: ride._id,
-        studentName: ride.riderId?.fullName || 'Student Rider',
-        driverName: ride.driverId?.fullName || 'Searching...',
-        route: `${ride.pickupLocation || 'Origin'} → ${ride.dropoffLocation || 'Destination'}`,
-        status: ride.status.toUpperCase(),
+        id: trip._id.toString().substring(Math.max(0, trip._id.toString().length - 6)).toUpperCase(),
+        studentName: passengerName,
+        driverName: trip.driverId?.fullName || 'Searching...',
+        route: routeText,
+        status: trip.status.toUpperCase(),
         statusBg,
         statusColor,
-        vehicle: ride.driverId?.vehicleDetails || 'Pending Assignment'
+        vehicle
       };
     });
 
@@ -69,17 +82,17 @@ export const getMonitoringSnapshot = async (req, res, next) => {
       zones.map(async (zone) => {
         // Count active driver locations sitting in this boundary
         const localDrivers = onlineDrivers.filter(driver => {
-          if (!driver.currentLatitude || !driver.currentLongitude) return false;
-          return Math.abs(driver.currentLatitude - zone.lat) <= range &&
-                 Math.abs(driver.currentLongitude - zone.lng) <= range;
+          if (!driver.currentLocation?.coordinates) return false;
+          const [lng, lat] = driver.currentLocation.coordinates;
+          return Math.abs(lat - zone.lat) <= range && Math.abs(lng - zone.lng) <= range;
         }).length;
 
         // Count pending rides in this zone
-        const localRequests = await Ride.countDocuments({
-          status: 'requested',
+        const localRequests = await RideBooking.countDocuments({
+          status: 'pending',
           createdAt: { $gte: twentyMinutesAgo },
-          pickupLatitude: { $gte: zone.lat - range, $lte: zone.lat + range },
-          pickupLongitude: { $gte: zone.lng - range, $lte: zone.lng + range }
+          "pickup.coordinates.coordinates.1": { $gte: zone.lat - range, $lte: zone.lat + range },
+          "pickup.coordinates.coordinates.0": { $gte: zone.lng - range, $lte: zone.lng + range }
         });
 
         let load = "Optimal";
@@ -111,8 +124,8 @@ export const getMonitoringSnapshot = async (req, res, next) => {
     );
 
     // 5. Build Dynamic Live Roster Map
-    const allDrivers = await User.find({ role: 'driver', isApproved: true })
-      .select('fullName vehicleDetails isOnline rating totalTrips profilePicture isSuspended');
+    const allDrivers = await User.find({ role: 'driver', approvalStatus: 'approved' })
+      .select('fullName driverProfile vehicleDetails isOnline rating ratingAverage totalTrips profilePicture isSuspended');
 
     const driverRoster = allDrivers.map(drv => {
       let status = "OFFLINE";
@@ -129,19 +142,22 @@ export const getMonitoringSnapshot = async (req, res, next) => {
         statusBg = "#DCFCE7";
       }
 
+      const model = drv.driverProfile?.vehicle?.model || drv.vehicleDetails || 'No Registered Car';
+      const plate = drv.driverProfile?.vehicle?.licensePlate || '';
+
       return {
-        id: drv._id,
+        id: drv._id.toString(),
         name: drv.fullName,
-        vehicle: drv.vehicleDetails || 'No Registered Car',
+        vehicle: plate ? `${model} (${plate})` : model,
         status,
         statusColor,
         statusBg,
         details: drv.isOnline ? 'Online • Broadcom Transceiver Active' : 'Offline • Handshake Idle',
         lifetimeTrips: {
           completed: drv.totalTrips || 0,
-          canceled: 0 // Fetch dynamically if tracked in your model
+          canceled: 0
         },
-        infractionsLog: drv.isSuspended ? [{ type: 'Account Suspended', date: 'LIVE', details: 'Flagged for off-app transit solicitation.' }] : []
+        infractionsLog: drv.isSuspended ? [{ type: 'Account Suspended', date: 'LIVE', details: 'Flagged for moderation review.' }] : []
       };
     });
 
@@ -159,7 +175,7 @@ export const getMonitoringSnapshot = async (req, res, next) => {
   }
 };
 
- export const handleDriverIntervention = async (req, res, next) => {
+export const handleDriverIntervention = async (req, res, next) => {
   try {
     const { action } = req.body;
     let update = {};
@@ -170,7 +186,7 @@ export const getMonitoringSnapshot = async (req, res, next) => {
       update = { isOnline: false };
     }
 
-    const driver = await User.findByIdAndUpdate(req.params.id, update, { new: true });
+    const driver = await User.findByIdAndUpdate(req.params.id, update, { returnDocument: 'after' });
     if (!driver) {
       return res.status(404).json({ success: false, error: { message: 'Driver not found' } });
     }

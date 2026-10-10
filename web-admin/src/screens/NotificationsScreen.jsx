@@ -10,11 +10,14 @@ import {
   ChevronRight,
   ClipboardList,
   Megaphone,
-  X
+  X,
+  CheckCheck,
+  Check,
+  CheckCircle2
 } from 'lucide-react'
 import api from '../api/axios'
 
-export default function NotificationsScreen() {
+export default function NotificationsScreen({ onNavigate }) {
   const [activeTab, setActivePageTab] = useState('all') 
   const [notifications, setNotifications] = useState([])
   const [criticalAlerts, setCriticalAlerts] = useState([])
@@ -27,6 +30,12 @@ export default function NotificationsScreen() {
   const [broadcastTarget, setBroadcastTarget] = useState('ALL') 
   const [broadcastUrgency, setBroadcastUrgency] = useState('INFO') 
   const [isSending, setIsSending] = useState(false)
+  const [toastMessage, setToastMessage] = useState('')
+
+  const showToast = (msg) => {
+    setToastMessage(msg)
+    setTimeout(() => setToastMessage(''), 3500)
+  }
 
   const fetchNotificationsData = async (isInitial = false) => {
     try {
@@ -57,6 +66,8 @@ export default function NotificationsScreen() {
             icon: config.icon,
             bg: config.bg,
             sideBg: config.sideBg,
+            isRead: note.isRead || false,
+            time: note.time || '2 min ago',
             actionText: note.category === 'driver' ? 'Verify Credentials' : note.category === 'rides' ? 'Inspect Live' : 'Acknowledge'
           }
         }).filter(Boolean)
@@ -64,11 +75,10 @@ export default function NotificationsScreen() {
         setNotifications(hydratedNotes)
         setCriticalAlerts(hydratedNotes.filter(n => n.urgency === 'CRITICAL'))
         
-        // Dynamically structure the sidebar items using true live counters from the database
         setPendingTasks([
-          { id: '1', title: 'Pending Driver Screenings', count: `${metrics.pendingDrivers || 0} left` },
-          { id: '2', title: 'Active Transit Running Streams', count: `${metrics.activeRides || 0} current` },
-          { id: '3', title: 'Total Users Connected', count: `${metrics.systemLoad || 0} entities` }
+          { id: '1', title: 'Pending Driver Screenings', count: `${metrics.pendingDrivers || 0} left`, targetRoute: 'drivers' },
+          { id: '2', title: 'Active Transit Running Streams', count: `${metrics.activeRides || 0} current`, targetRoute: 'rides' },
+          { id: '3', title: 'Total Users Connected', count: `${metrics.systemLoad || 0} entities`, targetRoute: 'users' }
         ])
       }
     } catch (error) {
@@ -88,7 +98,6 @@ export default function NotificationsScreen() {
 
     try {
       setIsSending(true)
-      
       const res = await api.post('/admin/notifications/broadcast', {
         title: broadcastTitle,
         body: broadcastMessage, 
@@ -97,49 +106,63 @@ export default function NotificationsScreen() {
       })
 
       if (res.data?.success) {
-        alert("System broadcast successfully deployed!")
+        showToast("System broadcast successfully deployed!")
         setBroadcastTitle('')
         setBroadcastMessage('')
         setIsModalOpen(false)
         fetchNotificationsData(false) 
       }
     } catch (err) {
-      console.error("Failed deploying global broadcast payload configuration:", err)
-      alert("Error sending message. Please check the backend console logs.")
+      console.error("Failed deploying broadcast payload:", err)
+      showToast("Error sending message. Check backend logs.")
     } finally {
       setIsSending(false)
     }
   }
 
-  const handleActionClick = async (notificationId, actionType) => {
-    if (actionType === 'dismiss') {
-      try {
-        const res = await api.delete(`/admin/notifications/${notificationId}`)
-        
-        if (res.data?.success) {
-          const targetIdStr = String(notificationId).trim();
-          
-          setNotifications(prev => prev.filter(note => {
-            const noteId = note._id ? String(note._id).trim() : '';
-            const fallbackId = note.id ? String(note.id).trim() : '';
-            return noteId !== targetIdStr && fallbackId !== targetIdStr;
-          }));
-          
-          setCriticalAlerts(prev => prev.filter(note => {
-            const noteId = note._id ? String(note._id).trim() : '';
-            const fallbackId = note.id ? String(note.id).trim() : '';
-            return noteId !== targetIdStr && fallbackId !== targetIdStr;
-          }));
-        }
-      } catch (err) {
-        console.error("Failed to dismiss notification:", err)
-        alert("Failed to dismiss this notification.")
+  const handleMarkAsRead = (id) => {
+    setNotifications(prev => prev.map(n => {
+      const nId = n._id || n.id;
+      if (String(nId) === String(id)) {
+        return { ...n, isRead: true };
       }
-    } else {
-      console.log(`Notification action: [${actionType}] targeted at entry: ${notificationId}`)
+      return n;
+    }));
+  }
+
+  const handleMarkAllAsRead = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+    showToast("All notifications marked as read.");
+  }
+
+  const handleActionClick = async (notificationId, category) => {
+  handleMarkAsRead(notificationId);
+  
+  if (category === 'driver' && onNavigate) {
+    onNavigate('driver-verification');
+  } else if (category === 'rides' && onNavigate) {
+    onNavigate('trips');
+  } else {
+    showToast("Notification acknowledged.");
+  }
+}
+
+  const handleDismiss = async (notificationId) => {
+    try {
+      const res = await api.delete(`/admin/notifications/${notificationId}`)
+      if (res.data?.success || res.status === 200) {
+        const targetIdStr = String(notificationId).trim();
+        setNotifications(prev => prev.filter(note => String(note._id || note.id).trim() !== targetIdStr));
+        setCriticalAlerts(prev => prev.filter(note => String(note._id || note.id).trim() !== targetIdStr));
+        showToast("Notification dismissed.");
+      }
+    } catch (err) {
+      console.error("Failed to dismiss notification:", err)
+      showToast("Failed to dismiss notification.")
     }
   }
 
+  const unreadCount = notifications.filter(n => !n.isRead).length;
   const filteredFeed = notifications.filter(n => {
     if (activeTab === 'all') return true
     return n.category === activeTab
@@ -156,15 +179,34 @@ export default function NotificationsScreen() {
   return (
     <div style={ntStyles.workspaceWrapperContainer}>
 
-      {/* NEW HEADER AREA WITH QUICK ACTION TRIGGER */}
+      {/* TOAST NOTIFICATION BANNER */}
+      {toastMessage && (
+        <div style={ntStyles.toastBanner}>
+          <CheckCircle2 size={16} color="#1E3A8A" /> {toastMessage}
+        </div>
+      )}
+
+      {/* HEADER AREA WITH UNREAD COUNT & BROADCAST TRIGGER */}
       <div style={ntStyles.dashboardHeaderBlockFlexRow}>
         <div style={{ textAlign: 'left' }}>
-          <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>System Notifications Hub</h2>
-          <p style={{ fontSize: '12px', color: '#64748B', margin: '2px 0 0 0', fontWeight: 500 }}>Monitor live operations data updates and broadcast messaging streams</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <h2 style={ntStyles.screenTitleMainText}>System Notifications Hub</h2>
+            {unreadCount > 0 && (
+              <span style={ntStyles.headerUnreadBadge}>{unreadCount} unread</span>
+            )}
+          </div>
+          <p style={ntStyles.screenSubtitleSupportingText}>Monitor live operations data updates and broadcast messaging streams</p>
         </div>
-        <button onClick={() => setIsModalOpen(true)} style={ntStyles.toolbarBroadcastActionButton}>
-          <Megaphone size={14} /> Send Global Broadcast
-        </button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          {unreadCount > 0 && (
+            <button onClick={handleMarkAllAsRead} style={ntStyles.toolbarMarkAllButton}>
+              <CheckCheck size={14} /> Mark All Read
+            </button>
+          )}
+          <button onClick={() => setIsModalOpen(true)} style={ntStyles.toolbarBroadcastActionButton}>
+            <Megaphone size={14} /> Send Global Broadcast
+          </button>
+        </div>
       </div>
 
       {/* SPLIT LAYOUT CANVAS PANELS */}
@@ -175,10 +217,12 @@ export default function NotificationsScreen() {
           <div style={ntStyles.feedContainerCard}>
 
             <div style={ntStyles.tabHeaderSwitcherTrackRow}>
-              <button onClick={() => setActivePageTab('all')} style={{ ...ntStyles.switchTriggerButton, backgroundColor: activeTab === 'all' ? '#ffffff' : 'transparent', fontWeight: activeTab === 'all' ? 800 : 600, color: activeTab === 'all' ? '#1E3A8A' : '#64748B' }}>All Activity</button>
-              <button onClick={() => setActivePageTab('system')} style={{ ...ntStyles.switchTriggerButton, backgroundColor: activeTab === 'system' ? '#ffffff' : 'transparent', fontWeight: activeTab === 'system' ? 800 : 600, color: activeTab === 'system' ? '#1E3A8A' : '#64748B' }}>System Events</button>
-              <button onClick={() => setActivePageTab('driver')} style={{ ...ntStyles.switchTriggerButton, backgroundColor: activeTab === 'driver' ? '#ffffff' : 'transparent', fontWeight: activeTab === 'driver' ? 800 : 600, color: activeTab === 'driver' ? '#1E3A8A' : '#64748B' }}>Driver Context</button>
-              <button onClick={() => setActivePageTab('rides')} style={{ ...ntStyles.switchTriggerButton, backgroundColor: activeTab === 'rides' ? '#ffffff' : 'transparent', fontWeight: activeTab === 'rides' ? 800 : 600, color: activeTab === 'rides' ? '#1E3A8A' : '#64748B' }}>Ride Runs</button>
+              <button onClick={() => setActivePageTab('all')} style={{ ...ntStyles.switchTriggerButton, backgroundColor: activeTab === 'all' ? '#ffffff' : 'transparent', fontWeight: activeTab === 'all' ? 800 : 600, color: activeTab === 'all' ? '#1E3A8A' : '#64748B', boxShadow: activeTab === 'all' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none' }}>
+                All Activity {notifications.filter(n => !n.isRead).length > 0 && <span style={ntStyles.tabDotBadge} />}
+              </button>
+              <button onClick={() => setActivePageTab('system')} style={{ ...ntStyles.switchTriggerButton, backgroundColor: activeTab === 'system' ? '#ffffff' : 'transparent', fontWeight: activeTab === 'system' ? 800 : 600, color: activeTab === 'system' ? '#1E3A8A' : '#64748B', boxShadow: activeTab === 'system' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none' }}>System Events</button>
+              <button onClick={() => setActivePageTab('driver')} style={{ ...ntStyles.switchTriggerButton, backgroundColor: activeTab === 'driver' ? '#ffffff' : 'transparent', fontWeight: activeTab === 'driver' ? 800 : 600, color: activeTab === 'driver' ? '#1E3A8A' : '#64748B', boxShadow: activeTab === 'driver' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none' }}>Driver Context</button>
+              <button onClick={() => setActivePageTab('rides')} style={{ ...ntStyles.switchTriggerButton, backgroundColor: activeTab === 'rides' ? '#ffffff' : 'transparent', fontWeight: activeTab === 'rides' ? 800 : 600, color: activeTab === 'rides' ? '#1E3A8A' : '#64748B', boxShadow: activeTab === 'rides' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none' }}>Ride Runs</button>
             </div>
 
             <div style={ntStyles.notificationsVerticalScrollFrame}>
@@ -186,16 +230,24 @@ export default function NotificationsScreen() {
                 filteredFeed.map((note) => {
                   const itemKey = note._id || note.id || Math.random().toString();
                   const displayDesc = note.desc || note.body || note.message || "No content provided.";
-                  const displayTime = note.time || "Recent";
 
                   return (
-                    <div key={itemKey} style={{ ...ntStyles.notificationItemStripBlock, borderLeft: `4px solid ${note.sideBg || '#1E3A8A'}` }}>
+                    <div 
+                      key={itemKey} 
+                      style={{ 
+                        ...ntStyles.notificationItemStripBlock, 
+                        borderLeft: `4px solid ${note.sideBg || '#1E3A8A'}`,
+                        opacity: note.isRead ? 0.7 : 1,
+                        backgroundColor: note.isRead ? '#F8FAFC' : '#ffffff'
+                      }}
+                    >
                       <div style={{ ...ntStyles.itemBadgeNodeIcon, backgroundColor: note.bg || '#EFF6FF' }}>{note.icon}</div>
 
                       <div style={ntStyles.itemTextDetailsMetadataStackGroup}>
                         <div style={ntStyles.itemFlexTopHeaderLine}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <span style={ntStyles.itemPrimaryHeadingTitleText}>{note.title || "Untitled Notification"}</span>
+                            {!note.isRead && <span style={ntStyles.unreadDotIndicator} />}
                             <span style={{
                               fontSize: '9px',
                               fontWeight: 700,
@@ -208,27 +260,33 @@ export default function NotificationsScreen() {
                               {note.type === 'SYSTEM_ALERT' ? 'System Log' : 'Broadcast'}
                             </span>
                           </div>
-                          <span style={ntStyles.itemMicroTimestampLabelText}>{displayTime}</span>
+                          <span style={ntStyles.itemMicroTimestampLabelText}>{note.time}</span>
                         </div>
                         <p style={ntStyles.itemParagraphDescriptionBodyText}>{displayDesc}</p>
 
                         <div style={ntStyles.itemActionButtonsClusterRow}>
                           <button 
-                            onClick={() => handleActionClick(itemKey, 'investigate')} 
+                            onClick={() => handleActionClick(itemKey, note.category)} 
                             style={ntStyles.itemPrimaryActionButtonMarkup}
                           >
                             {note.actionText || 'Acknowledge'}
                           </button>
                           
-                          {/* Only allow dismissal actions for actual global broadcasts */}
-                          {note.type !== 'SYSTEM_ALERT' && (
+                          {!note.isRead && (
                             <button 
-                              onClick={() => handleActionClick(itemKey, 'dismiss')} 
-                              style={ntStyles.itemSecondaryDismissButtonMarkup}
+                              onClick={() => handleMarkAsRead(itemKey)} 
+                              style={ntStyles.itemMarkReadButtonMarkup}
                             >
-                              Dismiss
+                              <Check size={12} /> Mark Read
                             </button>
                           )}
+
+                          <button 
+                            onClick={() => handleDismiss(itemKey)} 
+                            style={ntStyles.itemSecondaryDismissButtonMarkup}
+                          >
+                            Dismiss
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -284,12 +342,16 @@ export default function NotificationsScreen() {
             </div>
             <div style={ntStyles.widgetVerticalContentStackList}>
               {pendingTasks.map((task, index) => (
-                <div key={index} style={ntStyles.taskListItemRowStrip}>
+                <div 
+                  key={index} 
+                  style={ntStyles.taskListItemRowStrip}
+                  onClick={() => onNavigate && onNavigate(task.targetRoute)}
+                >
                   <div style={ntStyles.widgetTextGroupDetailsStack}>
                     <span style={ntStyles.widgetItemTitleStrongText}>{task.title}</span>
                     <span style={ntStyles.widgetItemParagraphSupportingDescriptionText}>{task.count}</span>
                   </div>
-                  <Eye size={12} color="#94A3B8" style={ntStyles.clickableHoverAssetCursor} />
+                  <Eye size={14} color="#1E3A8A" style={ntStyles.clickableHoverAssetCursor} />
                 </div>
               ))}
             </div>
@@ -388,13 +450,73 @@ const ntStyles = {
     flexDirection: 'column',
     gap: '24px',
     width: '100%',
-    boxSizing: 'border-box'
+    boxSizing: 'border-box',
+    backgroundColor: 'transparent',
+    padding: '0',
+    minHeight: 'auto',
+    fontFamily: 'Inter, system-ui, sans-serif',
+    color: '#0F172A',
+    position: 'relative'
+  },
+  toastBanner: {
+    position: 'fixed',
+    top: '20px',
+    right: '24px',
+    backgroundColor: '#ffffff',
+    color: '#1E3A8A',
+    border: '1px solid #E2E8F0',
+    padding: '12px 20px',
+    borderRadius: '12px',
+    boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    fontSize: '13px',
+    fontWeight: 700,
+    zIndex: 99999
   },
   dashboardHeaderBlockFlexRow: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    width: '100%'
+    width: '100%',
+    flexWrap: 'wrap',
+    gap: '16px'
+  },
+  screenTitleMainText: {
+    fontSize: '22px',
+    fontWeight: 800,
+    color: '#0F172A',
+    margin: 0,
+    letterSpacing: '-0.5px'
+  },
+  headerUnreadBadge: {
+    backgroundColor: '#EFF6FF',
+    color: '#1E3A8A',
+    fontSize: '11px',
+    fontWeight: 700,
+    padding: '2px 8px',
+    borderRadius: '6px',
+    border: '1px solid #BFDBFE'
+  },
+  screenSubtitleSupportingText: {
+    fontSize: '13px',
+    color: '#64748B',
+    fontWeight: 500,
+    margin: '4px 0 0 0'
+  },
+  toolbarMarkAllButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    backgroundColor: '#F1F5F9',
+    color: '#334155',
+    border: '1px solid #E2E8F0',
+    borderRadius: '12px',
+    padding: '12px 16px',
+    fontSize: '12px',
+    fontWeight: 700,
+    cursor: 'pointer'
   },
   toolbarBroadcastActionButton: {
     display: 'flex',
@@ -413,7 +535,7 @@ const ntStyles = {
   },
   splitContentRowCanvas: {
     display: 'flex',
-    gap: '32px',
+    gap: '24px',
     width: '100%',
     boxSizing: 'border-box',
     alignItems: 'stretch'
@@ -441,7 +563,8 @@ const ntStyles = {
     padding: '4px',
     gap: '4px',
     margin: '0 24px 20px 24px',
-    boxSizing: 'border-box'
+    boxSizing: 'border-box',
+    border: '1px solid #E2E8F0'
   },
   switchTriggerButton: {
     flex: 1,
@@ -451,7 +574,17 @@ const ntStyles = {
     fontSize: '11px',
     cursor: 'pointer',
     outline: 'none',
-    transition: 'all 0.1s ease'
+    transition: 'all 0.1s ease',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px'
+  },
+  tabDotBadge: {
+    width: '6px',
+    height: '6px',
+    borderRadius: '50%',
+    backgroundColor: '#1E3A8A'
   },
   notificationsVerticalScrollFrame: {
     display: 'flex',
@@ -468,7 +601,7 @@ const ntStyles = {
     padding: '16px',
     border: '1px solid #E2E8F0',
     borderRadius: '14px',
-    backgroundColor: '#ffffff'
+    transition: 'all 0.2s ease'
   },
   itemBadgeNodeIcon: {
     width: '32px',
@@ -495,7 +628,13 @@ const ntStyles = {
   itemPrimaryHeadingTitleText: {
     fontSize: '13px',
     fontWeight: 700,
-    color: '#1E293B'
+    color: '#0F172A'
+  },
+  unreadDotIndicator: {
+    width: '7px',
+    height: '7px',
+    borderRadius: '50%',
+    backgroundColor: '#1E3A8A'
   },
   itemMicroTimestampLabelText: {
     fontSize: '10px',
@@ -525,10 +664,23 @@ const ntStyles = {
     fontWeight: 700,
     cursor: 'pointer'
   },
+  itemMarkReadButtonMarkup: {
+    backgroundColor: '#F1F5F9',
+    color: '#475569',
+    border: '1px solid #E2E8F0',
+    borderRadius: '8px',
+    padding: '6px 10px',
+    fontSize: '11px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px'
+  },
   itemSecondaryDismissButtonMarkup: {
-    backgroundColor: '#FFF1F2',
-    color: '#E11D48',
-    border: 'none',
+    backgroundColor: '#FEF2F2',
+    color: '#DC2626',
+    border: '1px solid #FEE2E2',
     borderRadius: '8px',
     padding: '6px 14px',
     fontSize: '11px',
@@ -557,10 +709,11 @@ const ntStyles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    background: 'none',
-    border: 'none',
+    background: '#F1F5F9',
+    border: '1px solid #E2E8F0',
+    borderRadius: '6px',
     cursor: 'pointer',
-    padding: '4px'
+    padding: '6px'
   },
   rightWorkspaceSidebarPanel: {
     display: 'flex',
@@ -572,13 +725,12 @@ const ntStyles = {
   },
   criticalSidebarWidgetCard: {
     backgroundColor: '#ffffff',
-    border: '1px solid #FFE4E6',
+    border: '1px solid #FEE2E2',
     borderRadius: '16px',
     padding: '20px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '16px',
-    boxShadow: '0 1px 2px rgba(225,29,72,0.01)'
+    gap: '16px'
   },
   widgetHeaderFlexLine: {
     display: 'flex',
@@ -589,7 +741,7 @@ const ntStyles = {
   widgetBlockTitleErrorThemeText: {
     fontSize: '12px',
     fontWeight: 800,
-    color: '#991B1B',
+    color: '#DC2626',
     margin: 0,
     textTransform: 'uppercase',
     letterSpacing: '0.4px'
@@ -606,10 +758,10 @@ const ntStyles = {
     textAlign: 'left'
   },
   criticalCardIndicatorBulletNode: {
-    width: '5px',
-    height: '5px',
+    width: '6px',
+    height: '6px',
     borderRadius: '50%',
-    backgroundColor: '#E11D48',
+    backgroundColor: '#DC2626',
     marginTop: '6px',
     flexShrink: 0
   },
@@ -622,7 +774,7 @@ const ntStyles = {
   widgetItemTitleStrongText: {
     fontSize: '12px',
     fontWeight: 700,
-    color: '#1E293B'
+    color: '#0F172A'
   },
   widgetItemParagraphSupportingDescriptionText: {
     fontSize: '11px',
@@ -656,7 +808,9 @@ const ntStyles = {
     padding: '10px 12px',
     border: '1px solid #F1F5F9',
     borderRadius: '10px',
-    backgroundColor: '#FAFCFF'
+    backgroundColor: '#FAFCFF',
+    cursor: 'pointer',
+    transition: 'border-color 0.15s ease'
   },
   clickableHoverAssetCursor: {
     cursor: 'pointer'
@@ -666,17 +820,18 @@ const ntStyles = {
     alignItems: 'center',
     justifyContent: 'center',
     height: '75vh',
-    width: '100%'
+    width: '100%',
+    backgroundColor: 'transparent',
+    color: '#1E3A8A'
   },
   loadingText: {
     fontSize: '14px',
-    color: '#1E3A8A',
     fontWeight: 700
   },
   modalOverlayFrame: {
     position: 'fixed',
     inset: 0,
-    backgroundColor: 'rgba(15,23,42,0.6)',
+    backgroundColor: 'rgba(15,23,42,0.5)',
     backdropFilter: 'blur(4px)',
     display: 'flex',
     alignItems: 'center',
@@ -709,7 +864,7 @@ const ntStyles = {
   modalHeadingTitleText: {
     fontSize: '15px',
     fontWeight: 800,
-    color: '#1E3A8A',
+    color: '#0F172A',
     margin: 0,
     textTransform: 'uppercase',
     letterSpacing: '0.4px'
@@ -750,7 +905,7 @@ const ntStyles = {
     borderRadius: '10px',
     padding: '10px 14px',
     fontSize: '13px',
-    color: '#334155',
+    color: '#0F172A',
     fontWeight: 600,
     outline: 'none'
   },
@@ -767,15 +922,10 @@ const ntStyles = {
     borderRadius: '10px',
     padding: '10px 14px',
     fontSize: '13px',
-    color: '#334155',
+    color: '#0F172A',
     fontWeight: 600,
     outline: 'none',
     cursor: 'pointer'
-  },
-  modalInlineFormFieldsSplitRow: {
-    display: 'flex',
-    gap: '16px',
-    width: '100%'
   },
   modalTextAreaInput: {
     width: '100%',
@@ -785,7 +935,7 @@ const ntStyles = {
     borderRadius: '10px',
     padding: '12px 14px',
     fontSize: '13px',
-    color: '#334155',
+    color: '#0F172A',
     fontWeight: 600,
     outline: 'none',
     resize: 'none',

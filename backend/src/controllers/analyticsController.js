@@ -1,12 +1,14 @@
- import User from '../models/User.js';
-import Ride from '../models/Ride.js';
+import User from '../models/User.js';
+import DriverTrip from '../models/DriverTrip.js';
+import RideBooking from '../models/RideBooking.js';
+import CampusPOI from '../models/CampusPOI.js';
 
-  const getAnalyticsSnapshot = async (req, res, next) => {
+const getAnalyticsSnapshot = async (req, res, next) => {
   try {
     const past7Days = new Date();
     past7Days.setDate(past7Days.getDate() - 7);
     const todayStart = new Date();
-    todayStart.setHours(0,0,0,0);
+    todayStart.setHours(0, 0, 0, 0);
 
     // 1. Core Summary Metrics Aggregations
     const [
@@ -16,24 +18,24 @@ import Ride from '../models/Ride.js';
       rawDriverPerformance,
       weeklyDistribution
     ] = await Promise.all([
-      Ride ? Ride.countDocuments({ status: 'completed', createdAt: { $gte: past7Days } }) : Promise.resolve(0),
-      Ride ? Ride.countDocuments({ status: 'completed', createdAt: { $gte: todayStart } }) : Promise.resolve(0),
-      User.countDocuments({ role: 'driver', isApproved: true, isOnline: true }),
+      DriverTrip ? DriverTrip.countDocuments({ status: 'completed', createdAt: { $gte: past7Days } }) : Promise.resolve(0),
+      DriverTrip ? DriverTrip.countDocuments({ status: 'completed', createdAt: { $gte: todayStart } }) : Promise.resolve(0),
+      User.countDocuments({ role: 'driver', approvalStatus: 'approved', isOnline: true }),
       
       // Top performing approved drivers
-      User.find({ role: 'driver', isApproved: true })
-        .sort({ rating: -1, totalTrips: -1 })
+      User.find({ role: 'driver', approvalStatus: 'approved' })
+        .sort({ ratingAverage: -1, totalTrips: -1 })
         .limit(5)
-        .select('fullName rating totalTrips isOnline isSuspended'),
+        .select('fullName rating ratingAverage totalTrips tripsCompleted isOnline isSuspended'),
 
-      // Aggregate ride parameters split by type across the last 7 days
-      Ride ? Ride.aggregate([
+      // Aggregate ride parameters split by ride mode (solo vs shared) across the last 7 days
+      DriverTrip ? DriverTrip.aggregate([
         { $match: { status: 'completed', createdAt: { $gte: past7Days } } },
         {
           $group: {
             _id: {
               day: { $dayOfWeek: '$createdAt' },
-              type: { $ifNull: ['$rideType', 'standard'] }
+              type: { $ifNull: ['$tripType', 'solo'] }
             },
             count: { $sum: 1 }
           }
@@ -49,7 +51,7 @@ import Ride from '../models/Ride.js';
       { id: 4, label: 'Completed Today', value: completedTodayCount.toString(), change: 'Resetting Midnight', icon: 'trendingUp', bg: '#FEF9C3' }
     ];
 
-     const targetHubs = [
+    const targetHubs = [
       { name: 'Pentagon / Evandy Cluster', lat: 5.6575, lng: -0.1912, color: '#EFF6FF', textColor: '#1E40AF' },
       { name: 'Night Market Hub Area', lat: 5.6478, lng: -0.1835, color: '#DCFCE7', textColor: '#15803D' },
       { name: 'Main Gate Transit Line', lat: 5.6440, lng: -0.1870, color: '#FFFBEB', textColor: '#854D0E' }
@@ -57,11 +59,11 @@ import Ride from '../models/Ride.js';
 
     const popularZones = await Promise.all(
       targetHubs.map(async (hub, idx) => {
-        const range = 0.0015; // ~150m boundary box
-        const hubRunsCount = Ride ? await Ride.countDocuments({
+        const range = 0.0020; // ~200m boundary box
+        const hubRunsCount = RideBooking ? await RideBooking.countDocuments({
           status: 'completed',
-          pickupLatitude: { $gte: hub.lat - range, $lte: hub.lat + range },
-          pickupLongitude: { $gte: hub.lng - range, $lte: hub.lng + range }
+          "pickup.coordinates.coordinates.1": { $gte: hub.lat - range, $lte: hub.lat + range },
+          "pickup.coordinates.coordinates.0": { $gte: hub.lng - range, $lte: hub.lng + range }
         }) : 0;
 
         return {
@@ -75,7 +77,7 @@ import Ride from '../models/Ride.js';
       })
     );
 
-     const driverPerformance = rawDriverPerformance.map(drv => {
+    const driverPerformance = rawDriverPerformance.map(drv => {
       let status = 'OFFLINE';
       let statusColor = '#475569';
       let statusBg = '#E2E8F0';
@@ -90,20 +92,22 @@ import Ride from '../models/Ride.js';
         statusBg = '#DCFCE7';
       }
 
-      const hasTrips = drv.totalTrips > 0;
+      const tripCount = drv.totalTrips || drv.tripsCompleted || 0;
+      const effectiveRating = drv.ratingAverage || drv.rating || 5.0;
+
       return {
         name: drv.fullName,
-        rating: hasTrips && drv.rating ? drv.rating.toFixed(2) : 'N/A',
-        trips: drv.totalTrips || 0,
+        rating: tripCount > 0 ? effectiveRating.toFixed(2) : '5.00',
+        trips: tripCount,
         status,
         statusColor,
         statusBg
       };
     });
 
-     const daysMap = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    const daysMap = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
     const chartData = [1, 2, 3, 4, 5, 6, 7].map(dayNum => {
-      const standardMatch = weeklyDistribution.find(d => d._id.day === dayNum && d._id.type === 'standard');
+      const standardMatch = weeklyDistribution.find(d => d._id.day === dayNum && (d._id.type === 'solo' || d._id.type === 'standard'));
       const premiumMatch = weeklyDistribution.find(d => d._id.day === dayNum && (d._id.type === 'shared' || d._id.type === 'premium'));
       
       return {
@@ -113,7 +117,7 @@ import Ride from '../models/Ride.js';
       };
     });
 
-     const activityOverview = {
+    const activityOverview = {
       growth: tripsThisWeekCount > 0 ? `${(tripsThisWeekCount / 5).toFixed(1)}x` : '1.0x',
       trends: tripsThisWeekCount > 0 ? 'Active' : '0%',
       morningProgress: tripsThisWeekCount > 0 ? '78%' : '0%',

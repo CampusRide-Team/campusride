@@ -10,104 +10,167 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "../../components/maps/MapLibreCompat";
 import * as Location from "expo-location";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTheme } from "../../context/ThemeContext";  
 import api from "../../api/axios";
 import { getPersistentSocket } from "../../api/socketHelper";
+import routingService from "../../api/services/routingService";
+import { trimRouteToProgress } from "../../utils/routeProgress";
 
 const { width } = Dimensions.get("window");
+const useDefenseSimulatorTelemetry = process.env.EXPO_PUBLIC_DEFENSE_SIMULATION === "true";
 
 const DriverNavigation = ({
   onBack,
   onTripCompleted,
+  onArrive,
   onCancelNoPenalty,
   onChangeTab,
   rideData,
+  passenger,
 }) => {
   const { theme, darkModeEnabled } = useTheme();  
   
-  const [currentRideData, setCurrentRideData] = useState(rideData || {});
+  const initialData = rideData || passenger || {};
+  const [currentRideData, setCurrentRideData] = useState(initialData);
   const [isFetchingRide, setIsFetchingRide] = useState(true);
 
-  // 🔑 Guaranteed ID Extraction supporting MongoDB `_id` and `id`
+  // 🔑 Guaranteed ID Extraction supporting Trip ID and Booking ID
   const rideId = 
+    currentRideData?.bookingId ||
     currentRideData?._id || 
     currentRideData?.id || 
     currentRideData?.rideId;
 
-  // 🔑 Force fresh backend fetch on mount to guarantee populated passenger details
+  const tripId = 
+    currentRideData?.driverTripId ||
+    currentRideData?.tripId ||
+    (currentRideData?.tripStops ? currentRideData?._id : null) ||
+    rideId;
+
+  // 🔑 Force fresh backend fetch on mount to guarantee populated details
   useEffect(() => {
     let isMounted = true;
 
-    const fetchRideDetails = async () => {
-      if (!rideId) {
-        if (isMounted) setIsFetchingRide(false);
-        return;
-      }
-
+    const fetchDetails = async () => {
       try {
-        console.log(`🔍 Fetching fresh populated ride data for ID: ${rideId}`);
-        const response = await api.get(`/rides/${rideId}`);
-        if (isMounted && response.data?.success && response.data?.data) {
-          console.log("✅ Successfully populated ride details from backend");
-          setCurrentRideData(response.data.data);
+        let tripDataFetched = false;
+        if (tripId) {
+          try {
+            const tripRes = await api.get(`/trips/${tripId}`);
+            if (isMounted && tripRes.data?.success && tripRes.data?.data) {
+              setCurrentRideData(prev => ({ ...prev, ...tripRes.data.data }));
+              tripDataFetched = true;
+            }
+          } catch (tripErr) {
+            try {
+              const activeRes = await api.get("/trips/active");
+              if (isMounted && activeRes.data?.success && activeRes.data?.data) {
+                setCurrentRideData(prev => ({ ...prev, ...activeRes.data.data }));
+                tripDataFetched = true;
+              }
+            } catch (activeErr) {}
+          }
+        }
+
+        if (rideId && !tripDataFetched) {
+          try {
+            const response = await api.get(`/rides/${rideId}`);
+            if (isMounted && response.data?.success && response.data?.data) {
+              setCurrentRideData(prev => ({ ...prev, ...response.data.data }));
+            }
+          } catch (rideErr) {
+            console.warn("Failed to fetch ride details:", rideErr.message);
+          }
         }
       } catch (error) {
-        console.error("❌ Failed to fetch ride details:", error.response?.data || error.message);
+        console.error("Failed to populate ride details:", error.message);
       } finally {
         if (isMounted) setIsFetchingRide(false);
       }
     };
 
-    fetchRideDetails();
+    fetchDetails();
 
     return () => {
       isMounted = false;
     };
-  }, [rideId]);
+  }, [rideId, tripId]);
 
-  const [rideStatus, setRideStatus] = useState(currentRideData?.status || "accepted");
+  // Derive sorted authoritative stops manifest
+  const sortedStops = useMemo(() => {
+    if (Array.isArray(currentRideData?.tripStops) && currentRideData.tripStops.length > 0) {
+      return [...currentRideData.tripStops].sort((a, b) => (a.sequenceOrder ?? 0) - (b.sequenceOrder ?? 0));
+    }
+    // Fallback for simple solo ride object
+    return [
+      {
+        _id: 'pickup_fallback',
+        stopId: 'pickup_fallback',
+        stopType: 'pickup',
+        location: currentRideData?.pickupLocationCoordinates || currentRideData?.pickupCoordinates || { name: currentRideData?.pickupLocation || currentRideData?.pickup || "Campus Pickup Point" },
+        coordinates: currentRideData?.pickupLocationCoordinates || currentRideData?.pickupCoordinates,
+        name: currentRideData?.pickupLocation || currentRideData?.pickup?.name || "Location unavailable",
+        passengerName: currentRideData?.passenger?.fullName || currentRideData?.passengerName || "Campus Passenger",
+        status: (currentRideData?.status === 'arrived_at_pickup' || currentRideData?.status === 'arrived') ? 'arrived' : (['in_progress', 'active', 'completed'].includes(currentRideData?.status) ? 'completed' : 'pending'),
+        sequenceOrder: 0
+      },
+      {
+        _id: 'dropoff_fallback',
+        stopId: 'dropoff_fallback',
+        stopType: 'dropoff',
+        location: currentRideData?.dropoffCoordinates || currentRideData?.destinationCoordinates || { name: currentRideData?.dropoffLocation || currentRideData?.destination || "Campus Destination" },
+        coordinates: currentRideData?.dropoffCoordinates || currentRideData?.destinationCoordinates,
+        name: currentRideData?.dropoffLocation || currentRideData?.dropoff?.name || "Location unavailable",
+        passengerName: currentRideData?.passenger?.fullName || currentRideData?.passengerName || "Campus Passenger",
+        status: currentRideData?.status === 'completed' ? 'completed' : 'pending',
+        sequenceOrder: 1
+      }
+    ];
+  }, [currentRideData]);
+
+  // Current actionable stop
+  const activeStop = useMemo(() => {
+    return sortedStops.find(s => s.status !== 'completed' && s.status !== 'cancelled' && s.status !== 'skipped') || sortedStops[sortedStops.length - 1];
+  }, [sortedStops]);
+
+  const isAtStop = activeStop?.status === 'arrived';
+  const isPickup = activeStop?.stopType === 'pickup';
+  const allStopsCompleted = sortedStops.every(s => s.status === 'completed' || s.status === 'cancelled' || s.status === 'skipped');
+
+  // Derive initial status
+  const getInitialStatus = () => {
+    if (allStopsCompleted) return "completed";
+    if (isAtStop) return "arrived";
+    if (activeStop && !isPickup) return "in_progress";
+    return "accepted";
+  };
+
+  const [rideStatus, setRideStatus] = useState(getInitialStatus());
   const [secondsWaiting, setSecondsWaiting] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [routeCoordinates, setRouteCoordinates] = useState([]);
+  const [remainingRouteCoordinates, setRemainingRouteCoordinates] = useState([]);
   const [driverHeading, setDriverHeading] = useState(0);
-  const [isFocusMode, setIsFocusMode] = useState(false);
   const mapRef = useRef(null);
+  const routeProgressSegmentRef = useRef(0);
 
-  // 🔑 Bulletproof Passenger Name Extraction
-  const passengerName = 
-    currentRideData?.passenger?.fullName || 
-    currentRideData?.passengerName || 
-    currentRideData?.name || 
-    currentRideData?.passenger?.name ||
-    "Student Rider";
+  useEffect(() => {
+    routeProgressSegmentRef.current = 0;
+    setRemainingRouteCoordinates(routeCoordinates);
+  }, [routeCoordinates]);
 
-  // 🔑 Bulletproof Passenger Phone Extraction for Calling
-  const passengerPhone = 
-    currentRideData?.passenger?.phoneNumber || 
-    currentRideData?.passengerPhone || 
-    currentRideData?.phone ||
-    currentRideData?.passenger?.phone ||
-    null;
-
-  // 🔑 Exact Pickup Location Extraction
-  const pickupLocText = 
-    currentRideData?.pickupLocation || 
-    currentRideData?.pickup || 
-    currentRideData?.location ||
-    "Campus Pickup Point";
-
-  // 🔑 Exact Dropoff Location Extraction
-  const dropoffLocText = 
-    currentRideData?.dropoffLocation || 
-    currentRideData?.destination || 
-    currentRideData?.dropoff ||
-    "Campus Destination";
+  // Sync rideStatus when stops update
+  useEffect(() => {
+    const nextStatus = getInitialStatus();
+    setRideStatus(nextStatus);
+  }, [allStopsCompleted, isAtStop, isPickup, activeStop]);
 
   // 🔑 Robust Coordinate Parser for MongoDB GeoJSON & Arrays [lng, lat]
   const parseCoordinates = (targetData, fallbackLat, fallbackLng) => {
@@ -124,70 +187,133 @@ const DriverNavigation = ({
     return { latitude: fallbackLat, longitude: fallbackLng };
   };
 
-  const pickupCoords = useMemo(() => parseCoordinates(
-    currentRideData?.pickupCoordinates || currentRideData?.pickupLocationCoordinates || currentRideData?.location, 
-    5.6037, 
-    -0.1870
-  ), [currentRideData]);
-
-  const dropoffCoords = useMemo(() => parseCoordinates(
-    currentRideData?.dropoffCoordinates || currentRideData?.destinationCoordinates, 
-    5.6595, 
-    -0.1852
-  ), [currentRideData]);
-
-  const [driverCoords, setDriverCoords] = useState(pickupCoords);
-
-  const activeTargetCoords = (rideStatus === "in_progress" || rideStatus === "completed") 
-    ? dropoffCoords 
-    : pickupCoords;
-
-  useEffect(() => {
-    if (mapRef.current && pickupCoords.latitude !== 5.6037) {
-      mapRef.current.fitToCoordinates([driverCoords, pickupCoords], {
-        edgePadding: { top: 120, right: 60, bottom: 280, left: 60 },
-        animated: true,
-      });
+  const activeTargetCoords = useMemo(() => {
+    if (activeStop?.coordinates || activeStop?.location) {
+      const parsed = parseCoordinates(activeStop.coordinates || activeStop.location, NaN, NaN);
+      return Number.isFinite(parsed.latitude) && Number.isFinite(parsed.longitude) ? parsed : null;
     }
-  }, [pickupCoords.latitude, pickupCoords.longitude]);
+    return null;
+  }, [activeStop]);
+
+  const [driverCoords, setDriverCoords] = useState({ latitude: 5.6508, longitude: -0.1870 });
 
   useEffect(() => {
-    let isMounted = true;
+    if (routeCoordinates.length < 2 || rideStatus === 'completed') {
+      if (rideStatus === 'completed') setRemainingRouteCoordinates([]);
+      return;
+    }
+    const progress = trimRouteToProgress(routeCoordinates, driverCoords, {
+      previousSegmentIndex: routeProgressSegmentRef.current,
+    });
+    routeProgressSegmentRef.current = progress.segmentIndex;
+    setRemainingRouteCoordinates(progress.coordinates);
+  }, [driverCoords.latitude, driverCoords.longitude, rideStatus, routeCoordinates]);
 
-    const fetchRoadRoute = async (start, end) => {
+  // 🔑 Passenger Info for current stop
+  const targetPassengerName = activeStop?.passenger?.fullName || activeStop?.passengerName || currentRideData?.passenger?.fullName || currentRideData?.passengerName || "Campus Passenger";
+  const targetLocText = activeStop?.name || activeStop?.location?.name || "Location unavailable";
+  const passengerPhone = activeStop?.passenger?.phoneNumber || currentRideData?.passenger?.phoneNumber || currentRideData?.passengerPhone || null;
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadDriverRoute = async () => {
+      if (!driverCoords || !activeTargetCoords) return;
       try {
-        const url = `https://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?overview=full&geometries=geojson`;
-        const response = await fetch(url);
-        const data = await response.json();
-
-        if (isMounted && data.routes && data.routes.length > 0) {
-          const coords = data.routes[0].geometry.coordinates.map(coord => ({
-            latitude: coord[1],
-            longitude: coord[0],
-          }));
-          setRouteCoordinates(coords);
+        const response = await routingService.getRoute(
+          driverCoords.longitude,
+          driverCoords.latitude,
+          activeTargetCoords.longitude,
+          activeTargetCoords.latitude,
+        );
+        const geometry = response?.data?.geometry?.coordinates;
+        if (!cancelled && response?.success && response.data?.estimateOnly !== true && Array.isArray(geometry) && geometry.length >= 3) {
+          setRouteCoordinates(geometry.map(([longitude, latitude]) => ({ longitude, latitude })));
+        } else if (!cancelled) {
+          setRouteCoordinates([]);
         }
-      } catch (error) {
-        if (isMounted) setRouteCoordinates([start, end]);
+      } catch (_error) {
+        if (!cancelled) setRouteCoordinates([]);
       }
     };
+    loadDriverRoute();
+    return () => { cancelled = true; };
+  }, [activeStop?.stopId, activeTargetCoords?.latitude, activeTargetCoords?.longitude]);
 
-    if (driverCoords && activeTargetCoords) {
-      fetchRoadRoute(driverCoords, activeTargetCoords);
-    }
-
-    return () => {
-      isMounted = false;
-    };
-  }, [driverCoords, activeTargetCoords]);
-
+  // Real-time GPS Location, Room Joining & Live Telemetry socket streaming
   useEffect(() => {
-    let positionSubscription;
-    let socketInstance;
+    let positionSubscription = null;
+    let socketInstance = null;
+    let isMounted = true;
+
+    const handleDriverTelemetry = (data) => {
+      if (!useDefenseSimulatorTelemetry || !isMounted) return;
+      const activeTripId = tripId || currentRideData?._id;
+      if (data?.tripId?.toString() !== activeTripId?.toString()) return;
+      if (!Array.isArray(data?.coordinates) || data.coordinates.length !== 2) return;
+      const [longitude, latitude] = data.coordinates.map(Number);
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+      setDriverCoords({ latitude, longitude });
+      if (Number.isFinite(Number(data.heading))) setDriverHeading(Number(data.heading));
+    };
 
     const initTracking = async () => {
       try {
         socketInstance = await getPersistentSocket();
+
+        const activeTripId = tripId || currentRideData?._id;
+        if (socketInstance && socketInstance.connected && activeTripId) {
+          socketInstance.emit("trip:join", { tripId: activeTripId });
+        }
+
+        if (socketInstance) {
+          socketInstance.on("driver:telemetry", handleDriverTelemetry);
+        }
+
+        // Listen for dynamic route updates (e.g. pool joins)
+        const handleRouteUpdated = (data) => {
+          if (!isMounted) return;
+          console.log("📍 Multi-stop route updated for driver:", data);
+          if (data?.stops) {
+            setCurrentRideData(prev => ({
+              ...prev,
+              tripStops: data.stops,
+              activePassengerCount: data.activePassengerCount ?? prev.activePassengerCount,
+              reservedPassengerCount: data.reservedPassengerCount ?? prev.reservedPassengerCount,
+            }));
+          }
+        };
+
+        const handleStopUpdate = (data) => {
+          if (!isMounted) return;
+          if (data?.stop) {
+            setCurrentRideData(prev => {
+              const currentStops = prev.tripStops || [];
+              const updatedStops = currentStops.map(s => 
+                (s._id === data.stop._id || s.stopId === data.stop.stopId || s.sequenceOrder === data.stop.sequenceOrder)
+                  ? { ...s, ...data.stop }
+                  : s
+              );
+              return {
+                ...prev,
+                tripStops: updatedStops,
+                activePassengerCount: data.activePassengerCount ?? prev.activePassengerCount,
+              };
+            });
+          }
+        };
+
+        const handleStatusChange = (data) => {
+          if (!isMounted) return;
+          if (data?.status === 'completed') {
+            setRideStatus('completed');
+          }
+        };
+
+        socketInstance.on("trip:route-updated", handleRouteUpdated);
+        socketInstance.on("trip:stop_update", handleStopUpdate);
+        socketInstance.on("trip:status_change", handleStatusChange);
+
+        if (useDefenseSimulatorTelemetry) return;
 
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== "granted") return;
@@ -196,9 +322,7 @@ const DriverNavigation = ({
         const liveLat = initialLoc.coords.latitude;
         const liveLng = initialLoc.coords.longitude;
 
-        const initCoords = (Math.abs(liveLat - pickupCoords.latitude) > 0.2) 
-          ? pickupCoords 
-          : { latitude: liveLat, longitude: liveLng };
+        const initCoords = { latitude: liveLat, longitude: liveLng };
 
         setDriverCoords(initCoords);
 
@@ -219,14 +343,13 @@ const DriverNavigation = ({
               setDriverHeading(location.coords.heading);
             }
 
-            if (socketInstance && rideId) {
-              socketInstance.emit("driver:location-update", {
-                rideId,
-                latitude: coords.latitude,
-                longitude: coords.longitude,
-                lat: coords.latitude,
-                lng: coords.longitude,
+            if (socketInstance && socketInstance.connected && activeTripId) {
+              socketInstance.emit("driver:telemetry", {
+                tripId: activeTripId,
+                coordinates: [coords.longitude, coords.latitude],
                 heading: location.coords.heading || 0,
+                speed: location.coords.speed ? (location.coords.speed * 3.6) : 0,
+                timestamp: new Date()
               });
             }
           },
@@ -237,20 +360,34 @@ const DriverNavigation = ({
     };
 
     initTracking();
+
     return () => {
+      isMounted = false;
       if (positionSubscription) positionSubscription.remove();
+      if (socketInstance) {
+        const activeTripId = tripId || currentRideData?._id;
+        if (activeTripId) {
+          socketInstance.emit("trip:leave", { tripId: activeTripId });
+        }
+        socketInstance.off("trip:route-updated");
+        socketInstance.off("trip:stop_update");
+        socketInstance.off("trip:status_change");
+        socketInstance.off("driver:telemetry", handleDriverTelemetry);
+      }
     };
-  }, [rideId, pickupCoords.latitude, pickupCoords.longitude]);
+  }, [rideId, tripId, activeTargetCoords?.latitude, activeTargetCoords?.longitude]);
 
   useEffect(() => {
     let interval = null;
-    if (rideStatus === "arrived") {
+    if (isAtStop) {
       interval = setInterval(() => {
         setSecondsWaiting((prev) => prev + 1);
       }, 1000);
+    } else {
+      setSecondsWaiting(0);
     }
     return () => clearInterval(interval);
-  }, [rideStatus]);
+  }, [isAtStop]);
 
   const formatTime = (totalSeconds) => {
     const mins = Math.floor(totalSeconds / 60);
@@ -258,59 +395,78 @@ const DriverNavigation = ({
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const isCancellationEligible = secondsWaiting >= 300;
-
   const handleRecenterMap = () => {
     if (mapRef.current) {
-      mapRef.current.fitToCoordinates(routeCoordinates.length > 0 ? routeCoordinates : [driverCoords, activeTargetCoords], {
+      mapRef.current.fitToCoordinates(remainingRouteCoordinates.length > 0 ? remainingRouteCoordinates : [driverCoords, activeTargetCoords], {
         edgePadding: { top: 120, right: 60, bottom: 280, left: 60 },
         animated: true,
       });
     }
   };
 
+  // 🚀 Physical Stop Milestone Execution
   const handlePrimaryAction = async () => {
-    if (!rideId) {
-      Alert.alert("Error", "Invalid ride reference.");
+    const activeTripId = tripId || currentRideData?._id;
+    if (!activeTripId) {
+      Alert.alert("Error", "Invalid trip reference.");
+      return;
+    }
+
+    if (!activeStop) {
+      Alert.alert("Complete", "All stops have been completed.");
       return;
     }
 
     try {
       setIsSubmitting(true);
+      const driverLocation = [driverCoords.longitude, driverCoords.latitude];
+      const stopId = activeStop._id || activeStop.stopId;
 
-      if (rideStatus === "accepted") {
-        const response = await api.put(`/rides/${rideId}/status`, { status: "arrived" });
-        if (response.data?.success) setRideStatus("arrived");
-      } else if (rideStatus === "arrived") {
-        const response = await api.put(`/rides/${rideId}/status`, { status: "in_progress" });
-        if (response.data?.success) {
-          setRideStatus("in_progress");
-          handleRecenterMap();
+      if (!isAtStop) {
+        // Step A: Mark Arrived at Stop
+        const stopRes = await api.post(`/trips/${activeTripId}/stops/${stopId}/execute`, {
+          targetStatus: "arrived",
+          driverLocation,
+        });
+
+        if (stopRes.data?.success) {
+          setCurrentRideData(prev => {
+            const currentStops = prev.tripStops || [];
+            const updated = currentStops.map(s => 
+              (s._id === stopId || s.stopId === stopId) ? { ...s, status: 'arrived' } : s
+            );
+            return { ...prev, tripStops: updated };
+          });
         }
-      } else if (rideStatus === "in_progress") {
-        const response = await api.put(`/rides/${rideId}/status`, { status: "completed" });
-        if (response.data?.success) {
-          setRideStatus("completed");
-          if (onTripCompleted) onTripCompleted();
+      } else {
+        // Step B: Complete Stop (Boarding or Drop-off)
+        const stopRes = await api.post(`/trips/${activeTripId}/stops/${stopId}/execute`, {
+          targetStatus: "completed",
+          driverLocation,
+        });
+
+        if (stopRes.data?.success) {
+          const result = stopRes.data.data;
+          if (result?.trip?.status === 'completed') {
+            setRideStatus("completed");
+            if (onTripCompleted) {
+              onTripCompleted(result.trip);
+            } else if (onArrive) {
+              onArrive();
+            }
+          } else {
+            setCurrentRideData(prev => ({
+              ...prev,
+              tripStops: result?.trip?.tripStops || prev.tripStops,
+              activePassengerCount: result?.trip?.activePassengerCount ?? prev.activePassengerCount,
+              reservedPassengerCount: result?.trip?.reservedPassengerCount ?? prev.reservedPassengerCount,
+            }));
+            handleRecenterMap();
+          }
         }
       }
     } catch (error) {
-      Alert.alert("Error", error.response?.data?.error?.message || "Failed to update ride status.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleCancelRide = async () => {
-    if (!rideId) return;
-    try {
-      setIsSubmitting(true);
-      const response = await api.post(`/rides/${rideId}/cancel-no-penalty`);
-      if (response.data?.success && onCancelNoPenalty) {
-        onCancelNoPenalty();
-      }
-    } catch (error) {
-      Alert.alert("Error", "Could not complete cancellation.");
+      Alert.alert("Milestone Error", error.response?.data?.error?.message || error.message || "Failed to update trip milestone.");
     } finally {
       setIsSubmitting(false);
     }
@@ -333,6 +489,8 @@ const DriverNavigation = ({
     );
   }
 
+  const isSharedTrip = currentRideData?.tripType === 'shared' || sortedStops.length > 2;
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={["top", "bottom"]}>
       <StatusBar style={theme.statusBar} />
@@ -342,7 +500,13 @@ const DriverNavigation = ({
           <MaterialCommunityIcons name="arrow-left" size={24} color={theme.iconColor} />
         </TouchableOpacity>
         <Text style={[styles.headerTitleText, { color: theme.iconColor }]}>
-          {rideStatus === "in_progress" ? "In Transit to Drop-off" : rideStatus === "arrived" ? "At Pickup Point" : "Navigating to Pickup"}
+          {isSharedTrip
+            ? `Shared Pool • ${currentRideData.activePassengerCount || 0}/${currentRideData.maxCapacity || 3} Onboard`
+            : isAtStop
+            ? "At Pickup Station"
+            : !isPickup
+            ? routeCoordinates.length > 0 ? "In Transit to Drop-off" : "Route unavailable"
+            : routeCoordinates.length > 0 ? "Navigating to Pickup" : "Route unavailable"}
         </Text>
         <TouchableOpacity onPress={handleRecenterMap} activeOpacity={0.7} style={styles.headerButton}>
           <MaterialCommunityIcons name="crosshairs-gps" size={24} color={theme.iconColor} />
@@ -351,13 +515,13 @@ const DriverNavigation = ({
 
       <View style={styles.mapViewportContainer}>
         <MapView
-          key={`${pickupCoords.latitude}-${pickupCoords.longitude}`}
+          key={`${activeTargetCoords?.latitude || 'unknown'}-${activeTargetCoords?.longitude || 'unknown'}`}
           ref={mapRef}
           provider={Platform.OS === "android" ? PROVIDER_GOOGLE : null}
           style={StyleSheet.absoluteFillObject}
           initialRegion={{
-            latitude: pickupCoords.latitude,
-            longitude: pickupCoords.longitude,
+            latitude: activeTargetCoords?.latitude || driverCoords.latitude,
+            longitude: activeTargetCoords?.longitude || driverCoords.longitude,
             latitudeDelta: 0.008,
             longitudeDelta: 0.008,
           }}
@@ -365,8 +529,8 @@ const DriverNavigation = ({
           showsPointsOfInterest={false}
           showsBuildings={false}
         >
-          {routeCoordinates.length > 0 && (
-            <Polyline coordinates={routeCoordinates} strokeColor="#2563EB" strokeWidth={5} />
+          {remainingRouteCoordinates.length > 0 && (
+            <Polyline coordinates={remainingRouteCoordinates} strokeColor="#2563EB" strokeWidth={5} />
           )}
 
           <Marker coordinate={driverCoords} anchor={{ x: 0.5, y: 0.5 }} flat={true}>
@@ -375,21 +539,21 @@ const DriverNavigation = ({
             </View>
           </Marker>
 
-          <Marker coordinate={activeTargetCoords} anchor={{ x: 0.5, y: 1.0 }}>
+          {activeTargetCoords ? <Marker coordinate={activeTargetCoords} anchor={{ x: 0.5, y: 1.0 }}>
             <View style={styles.pickupMarkerContainer}>
-              <View style={[styles.pickupLabelBadge, { backgroundColor: theme.iconColor }, rideStatus === "in_progress" && styles.dropoffBadgeVariant]}>
-                <Text style={[styles.pickupLabelText, { color: rideStatus === "in_progress" ? "#1E3A8A" : "#FFFFFF" }]}>
-                  {rideStatus === "in_progress" ? "DROP-OFF" : "PICKUP"}
+              <View style={[styles.pickupLabelBadge, { backgroundColor: theme.iconColor }, !isPickup && styles.dropoffBadgeVariant]}>
+                <Text style={[styles.pickupLabelText, { color: !isPickup ? "#1E3A8A" : "#FFFFFF" }]}>
+                  {isPickup ? "PICKUP" : "DROP-OFF"}
                 </Text>
               </View>
-              <View style={[styles.pickupPinNode, { backgroundColor: theme.iconColor }, rideStatus === "in_progress" && styles.dropoffPinVariant]}>
+              <View style={[styles.pickupPinNode, { backgroundColor: theme.iconColor }, !isPickup && styles.dropoffPinVariant]}>
                 <View style={[styles.pickupPinInnerNode, { backgroundColor: theme.background }]} />
               </View>
             </View>
-          </Marker>
+          </Marker> : null}
         </MapView>
 
-        {/* Passenger Information Card */}
+        {/* Passenger & Multi-Stop Manifest Card */}
         <View style={[styles.passengerSheet, { backgroundColor: theme.cardBackground, borderColor: theme.borderColor }]}>
           <View style={styles.profileMasterRow}>
             <View style={styles.avatarContainerMock}>
@@ -398,12 +562,12 @@ const DriverNavigation = ({
 
             <View style={styles.identityTextBlock}>
               <Text style={[styles.passengerNameText, { color: theme.mainText }]} numberOfLines={1}>
-                {passengerName}
+                {targetPassengerName}
               </Text>
               <View style={styles.subLocationRow}>
                 <MaterialCommunityIcons name="routes" size={14} color={theme.subText} />
                 <Text style={[styles.subLocationLabel, { color: theme.subText }]} numberOfLines={1}>
-                  {rideStatus === "in_progress" ? dropoffLocText : pickupLocText}
+                  {targetLocText}
                 </Text>
               </View>
             </View>
@@ -419,48 +583,77 @@ const DriverNavigation = ({
             </View>
           </View>
 
-          {rideStatus === "in_progress" ? (
+          {/* Stop Timeline for Multi-Stop Trips */}
+          {isSharedTrip && (
+            <View style={styles.manifestContainer}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.manifestScroll}>
+                {sortedStops.map((stop, idx) => {
+                  const isCur = (stop._id === activeStop?._id || stop.stopId === activeStop?.stopId);
+                  const isDone = stop.status === 'completed';
+                  return (
+                    <View 
+                      key={stop._id || stop.stopId || idx} 
+                      style={[
+                        styles.manifestPill, 
+                        { backgroundColor: theme.background, borderColor: isCur ? theme.iconColor : theme.borderColor },
+                        isCur && { borderWidth: 1.5 }
+                      ]}
+                    >
+                      <View style={[styles.manifestStopDot, { backgroundColor: isDone ? '#16a34a' : isCur ? '#2563EB' : '#94A3B8' }]} />
+                      <Text style={[styles.manifestStopText, { color: theme.mainText, fontWeight: isCur ? '800' : '600' }]} numberOfLines={1}>
+                        #{idx + 1} {stop.stopType === 'pickup' ? 'Pick' : 'Drop'}: {stop.passengerName?.split(' ')[0] || 'Passenger'}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
+
+          {isAtStop ? (
+            <View style={[styles.timerTrackingBanner, { backgroundColor: theme.iconWrap, borderColor: theme.tabBarBorder }]}>
+              <MaterialCommunityIcons name="clock-outline" size={16} color={theme.iconColor} />
+              <Text style={[styles.timerTrackingLabel, { color: theme.iconColor }]}>
+                Waiting for {targetPassengerName}: <Text style={[styles.timerCountdownValue, { color: theme.iconColor }]}>{formatTime(secondsWaiting)}</Text>
+              </Text>
+            </View>
+          ) : !isPickup ? (
             <View style={[styles.transitTrackingBanner, { backgroundColor: theme.iconWrap, borderColor: theme.tabBarBorder }]}>
               <MaterialCommunityIcons name="rocket-launch" size={16} color={theme.iconColor} />
-              <Text style={[styles.transitTextContent, { color: theme.iconColor }]}>Trip in progress. Navigating to drop-off.</Text>
-            </View>
-          ) : rideStatus === "arrived" ? (
-            <View style={[styles.timerTrackingBanner, { backgroundColor: theme.iconWrap, borderColor: theme.tabBarBorder }, isCancellationEligible && styles.timerAlertBannerVariant]}>
-              <MaterialCommunityIcons name={isCancellationEligible ? "alert-circle" : "clock-outline"} size={16} color={isCancellationEligible ? "#EF4444" : theme.iconColor} />
-              <Text style={[styles.timerTrackingLabel, { color: theme.iconColor }, isCancellationEligible && styles.timerAlertLabelVariant]}>
-                {isCancellationEligible ? <Text>Passenger late. <Text style={styles.boldText}>Penalty-free cancellation active.</Text></Text> : <Text>Waiting for passenger: <Text style={[styles.timerCountdownValue, { color: theme.iconColor }]}>{formatTime(secondsWaiting)}</Text></Text>}
+              <Text style={[styles.transitTextContent, { color: theme.iconColor }]}>
+                Navigating to drop-off station for {targetPassengerName}.
               </Text>
             </View>
           ) : (
             <View style={[styles.instructionNoteBanner, { backgroundColor: theme.background, borderColor: theme.borderColor }]}>
               <MaterialCommunityIcons name="information" size={16} color={theme.iconColor} />
-              <Text style={[styles.instructionTextContent, { color: theme.subText }]}>In-app navigation active. Follow route to pickup station.</Text>
+              <Text style={[styles.instructionTextContent, { color: theme.subText }]}>
+                In-app navigation active. Follow route to pickup location.
+              </Text>
             </View>
           )}
 
           <View style={styles.actionButtonsStack}>
-            {rideStatus === "arrived" && isCancellationEligible && (
-              <TouchableOpacity style={styles.cancelRideButton} activeOpacity={0.85} onPress={handleCancelRide} disabled={isSubmitting}>
-                <Text style={styles.cancelButtonText}>Cancel Ride (No Penalty)</Text>
-              </TouchableOpacity>
-            )}
-
             <TouchableOpacity
               style={[
                 styles.primaryActionButton,
                 { backgroundColor: theme.iconColor },
-                rideStatus === "arrived" && styles.startTripButtonVariant,
-                rideStatus === "in_progress" && styles.endTripButtonVariant,
+                isAtStop && styles.startTripButtonVariant,
+                !isPickup && isAtStop && styles.endTripButtonVariant,
               ]}
               activeOpacity={0.85}
               onPress={handlePrimaryAction}
-              disabled={isSubmitting}
+              disabled={isSubmitting || allStopsCompleted}
             >
               {isSubmitting ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Text style={[styles.primaryButtonText, rideStatus === "arrived" && { color: "#1E3A8A" }]}>
-                  {rideStatus === "in_progress" ? "End Trip   🏁" : rideStatus === "arrived" ? "Start Trip   ➔" : "Arrived at Pickup   ✓"}
+                <Text style={[styles.primaryButtonText, isAtStop && !isPickup ? { color: "#FFFFFF" } : isAtStop ? { color: "#1E3A8A" } : {}]}>
+                  {allStopsCompleted
+                    ? "Trip Completed 🏁"
+                    : !isAtStop
+                    ? `Arrived at ${isPickup ? 'Pickup' : 'Drop-off'} ✓`
+                    : `${isPickup ? 'Board' : 'Complete Drop-off for'} ${targetPassengerName} ➔`}
                 </Text>
               )}
             </TouchableOpacity>
@@ -487,31 +680,36 @@ const styles = StyleSheet.create({
   endTripButtonVariant: { backgroundColor: "#EF4444" },
   header: { alignItems: "center", borderBottomWidth: 1, flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 24, paddingVertical: 14 },
   headerButton: { alignItems: "center", height: 40, justifyContent: "center", width: 40 },
-  headerTitleText: { fontSize: 16, fontWeight: "800", letterSpacing: -0.3 },
+  headerTitleText: { fontSize: 17, fontWeight: "800", letterSpacing: -0.3 },
   identityTextBlock: { flex: 1, justifyContent: "center", marginLeft: 16 },
-  instructionNoteBanner: { alignItems: "center", borderRadius: 16, borderWidth: 1, flexDirection: "row", gap: 10, marginBottom: 20, padding: 14 },
-  instructionTextContent: { flex: 1, fontSize: 12, fontWeight: "500", lineHeight: 16 },
+  instructionNoteBanner: { alignItems: "center", borderRadius: 16, borderWidth: 1, flexDirection: "row", gap: 10, marginBottom: 16, padding: 12 },
+  instructionTextContent: { flex: 1, fontSize: 14, fontWeight: "600", lineHeight: 19 },
   mapViewportContainer: { flex: 1, position: "relative" },
-  passengerNameText: { fontSize: 22, fontWeight: "800", marginBottom: 4 },
-  passengerSheet: { borderRadius: 16, borderWidth: 1, bottom: 16, left: 16, padding: 20, position: "absolute", right: 16 },
+  passengerNameText: { fontSize: 20, fontWeight: "800", marginBottom: 4 },
+  passengerSheet: { borderRadius: 16, borderWidth: 1, bottom: 16, left: 16, padding: 18, position: "absolute", right: 16 },
   pickupLabelBadge: { borderRadius: 8, marginBottom: -2, paddingHorizontal: 10, paddingVertical: 4, zIndex: 10 },
-  pickupLabelText: { fontSize: 9, fontWeight: "800", letterSpacing: 0.5 },
+  pickupLabelText: { fontSize: 11, fontWeight: "800", letterSpacing: 0.5 },
   pickupMarkerContainer: { alignItems: "center", justifyContent: "center" },
   pickupPinInnerNode: { borderRadius: 4, height: 8, width: 8 },
   pickupPinNode: { alignItems: "center", borderColor: "#FFFFFF", borderRadius: 12, borderWidth: 2, height: 24, justifyContent: "center", width: 24 },
   primaryActionButton: { alignItems: "center", borderRadius: 16, height: 56, justifyContent: "center" },
-  primaryButtonText: { fontSize: 15, fontWeight: "700" },
-  profileMasterRow: { alignItems: "center", flexDirection: "row", marginBottom: 16 },
+  primaryButtonText: { fontSize: 16, fontWeight: "800" },
+  profileMasterRow: { alignItems: "center", flexDirection: "row", marginBottom: 12 },
   startTripButtonVariant: { backgroundColor: "#A3E635" },
-  subLocationLabel: { fontSize: 13, fontWeight: "600", width: width * 0.34 },
+  subLocationLabel: { fontSize: 14, fontWeight: "700", width: width * 0.34 },
   subLocationRow: { alignItems: "center", flexDirection: "row", gap: 4 },
   timerAlertBannerVariant: { borderColor: "#FCA5A5", backgroundColor: "#FEE2E2" },
   timerAlertLabelVariant: { color: "#EF4444" },
   timerCountdownValue: { fontWeight: "800" },
-  timerTrackingBanner: { alignItems: "center", borderRadius: 16, borderWidth: 1, flexDirection: "row", gap: 10, marginBottom: 20, padding: 14 },
-  timerTrackingLabel: { fontSize: 13, fontWeight: "600" },
-  transitTrackingBanner: { alignItems: "center", borderRadius: 16, borderWidth: 1, flexDirection: "row", gap: 10, marginBottom: 20, padding: 14 },
-  transitTextContent: { flex: 1, fontSize: 12, fontWeight: "600" },
+  timerTrackingBanner: { alignItems: "center", borderRadius: 16, borderWidth: 1, flexDirection: "row", gap: 10, marginBottom: 16, padding: 12 },
+  timerTrackingLabel: { fontSize: 14, fontWeight: "700" },
+  transitTrackingBanner: { alignItems: "center", borderRadius: 16, borderWidth: 1, flexDirection: "row", gap: 10, marginBottom: 16, padding: 12 },
+  transitTextContent: { flex: 1, fontSize: 14, fontWeight: "600" },
+  manifestContainer: { marginBottom: 12 },
+  manifestScroll: { flexDirection: "row", gap: 8 },
+  manifestPill: { flexDirection: "row", alignItems: "center", paddingVertical: 6, paddingHorizontal: 10, borderRadius: 12, borderWidth: 1, gap: 6 },
+  manifestStopDot: { width: 8, height: 8, borderRadius: 4 },
+  manifestStopText: { fontSize: 12, fontWeight: "600" },
 });
 
 export default DriverNavigation;

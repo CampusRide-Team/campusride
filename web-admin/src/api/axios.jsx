@@ -1,18 +1,29 @@
 // web-admin/src/api/axios.jsx
 import axios from 'axios';
 
+export const getAdminApiBaseUrl = () => {
+  if (import.meta.env?.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL;
+  }
+  return 'http://localhost:5000/api/v1';
+};
+
 const api = axios.create({
-  baseURL: 'https://c5m62bwc-5000.uks1.devtunnels.ms/api/v1', 
+  baseURL: getAdminApiBaseUrl(), 
   timeout: 10000,
+  headers: {
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+  },
 });
 
 // Automatically inject the JWT token into every outgoing request
 api.interceptors.request.use(
   (config) => {
-    // 💡 Ensure your login screen saves the token under this exact key!
-    const token = localStorage.getItem('adminToken'); 
+    const token = localStorage.getItem('adminToken') || localStorage.getItem('token'); 
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      const cleanToken = token.replace(/^["']|["']$/g, '').trim().replace(/^Bearer\s+/i, '');
+      config.headers.Authorization = `Bearer ${cleanToken}`;
     }
     return config;
   },
@@ -21,4 +32,4 @@ api.interceptors.request.use(
   }
 );
 
-export default api;
+export default api;

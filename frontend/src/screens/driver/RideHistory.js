@@ -1,492 +1,447 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Dimensions,
+  RefreshControl,
   ActivityIndicator,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { StatusBar } from "expo-status-bar";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useTheme } from "../../context/ThemeContext";  
-import api from "../../api/axios"; 
+  StatusBar,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTheme } from '../../context/ThemeContext';
+import { fonts, radii, spacing } from '../../theme';
+import { CRIcon } from '../../components/common';
+import api from '../../api/axios';
 
-const { width } = Dimensions.get("window");
+export default function RideHistory({ onBack, onChangeTab }) {
+  const { theme, isDark } = useTheme();
+  const { colors } = theme;
 
-const RideHistory = ({ onBack, onChangeTab }) => {
-  const { theme, darkModeEnabled } = useTheme();  
   const [historyData, setHistoryData] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeFilter, setActiveFilter] = useState("completed");
-  const [showFilterMenu, setShowFilterMenu] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [activeFilter, setActiveFilter] = useState('all'); // 'all' | 'completed' | 'cancelled'
 
   const formatRideDate = (dateString) => {
     try {
       const date = new Date(dateString);
-      return date.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
+      if (isNaN(date.getTime())) return 'Recent trip';
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
       });
-    } catch (err) {
-      return "Recent Trip";
+    } catch {
+      return 'Recent trip';
     }
   };
 
-  const fetchRideHistory = async () => {
-    setIsLoading(true);
-    try {
-      const response = await api.get("/driver/earnings");
+  const fetchRideHistory = useCallback(async (isRefresh = false) => {
+    if (isRefresh) {
+      setIsRefreshing(true);
+    } else {
+      setIsLoading(true);
+    }
 
-      if (response.data?.success && response.data?.data?.recentTrips) {
-        setHistoryData(response.data.data.recentTrips);
-      } else if (response.data?.success && Array.isArray(response.data.data)) {
+    try {
+      const response = await api.get('/bookings/history');
+      if (response.data?.success && Array.isArray(response.data.data)) {
         setHistoryData(response.data.data);
+      } else {
+        setHistoryData([]);
       }
     } catch (err) {
-      console.error("Error fetching trip archives from backend:", err);
+      console.error('Error fetching driver ride history:', err.message);
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchRideHistory();
-  }, []);
+  }, [fetchRideHistory]);
 
-  const filteredRides = historyData.filter(
-    (ride) =>
-      (ride.status || "completed").toLowerCase() === activeFilter.toLowerCase(),
-  );
+  const filteredRides = historyData.filter((ride) => {
+    if (activeFilter === 'all') return true;
+    const status = (ride.status || 'completed').toLowerCase();
+    if (activeFilter === 'completed') return status === 'completed';
+    if (activeFilter === 'cancelled') return status.includes('cancel') || status.includes('failed');
+    return true;
+  });
+
+  const filterTabs = [
+    { key: 'all', label: 'All Trips' },
+    { key: 'completed', label: 'Completed' },
+    { key: 'cancelled', label: 'Cancelled' },
+  ];
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={["top", "bottom"]}>
-      <StatusBar style={theme.statusBar} />
+    <SafeAreaView
+      style={[styles.safeArea, { backgroundColor: colors.brand.baseBackground }]}
+      edges={['top', 'left', 'right']}
+    >
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={colors.brand.baseBackground}
+      />
 
-      {/* Top Bar Navbar Section */}
-      <View style={[styles.topBar, { backgroundColor: theme.background, borderBottomColor: theme.tabBarBorder }]}>
-        <TouchableOpacity
-          onPress={onBack}
-          activeOpacity={0.7}
-          style={styles.topBarButton}
-        >
-          <MaterialCommunityIcons name="arrow-left" size={24} color={theme.iconColor} />
-        </TouchableOpacity>
-        <Text style={[styles.topBarTitle, { color: theme.iconColor }]}>Ride History</Text>
-        <TouchableOpacity
-          activeOpacity={0.7}
-          style={[
-            styles.topBarButton,
-            showFilterMenu && [styles.activeFilterBtn, { backgroundColor: theme.cardBackground }],
-          ]}
-          onPress={() => setShowFilterMenu(!showFilterMenu)}
-        >
-          <MaterialCommunityIcons
-            name="filter-variant"
-            size={24}
-            color={theme.iconColor}
-          />
-        </TouchableOpacity>
+      {/* Header */}
+      <View style={styles.header}>
+        {onBack ? (
+          <TouchableOpacity
+            onPress={onBack}
+            activeOpacity={0.7}
+            style={[styles.backButton, { backgroundColor: colors.surface.elevated }]}
+          >
+            <CRIcon name="arrow-back" size={20} color={colors.text.primary} />
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 40 }} />
+        )}
+        <Text style={[styles.headerTitle, { color: colors.text.primary }]}>Ride History</Text>
+        <View style={{ width: 40 }} />
       </View>
 
-      {/* Inline Filter Drawer Dropdown Option */}
-      {showFilterMenu && (
-        <View style={[styles.filterDrawer, { backgroundColor: theme.cardBackground, borderBottomColor: theme.borderColor }]}>
-          <TouchableOpacity
-            style={[
-              styles.filterOption,
-              { backgroundColor: darkModeEnabled ? "#334155" : "#E2E8F0" },
-              activeFilter === "completed" && { backgroundColor: theme.iconColor },
-            ]}
-            onPress={() => {
-              setActiveFilter("completed");
-              setShowFilterMenu(false);
-            }}
-          >
-            <Text
+      {/* Filter Segmented Control */}
+      <View style={styles.filterRow}>
+        {filterTabs.map((tab) => {
+          const isSelected = activeFilter === tab.key;
+          return (
+            <TouchableOpacity
+              key={tab.key}
               style={[
-                styles.filterOptionText,
-                { color: theme.subText },
-                activeFilter === "completed" && styles.selectedFilterText,
+                styles.filterTab,
+                { backgroundColor: colors.surface.elevated, borderColor: colors.border.subtle },
+                isSelected && { backgroundColor: colors.brand.primary, borderColor: colors.brand.primaryPressed },
               ]}
+              onPress={() => setActiveFilter(tab.key)}
+              activeOpacity={0.75}
             >
-              Completed Trips
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.filterOption,
-              { backgroundColor: darkModeEnabled ? "#334155" : "#E2E8F0" },
-              activeFilter === "cancelled" && { backgroundColor: theme.iconColor },
-            ]}
-            onPress={() => {
-              setActiveFilter("cancelled");
-              setShowFilterMenu(false);
-            }}
-          >
-            <Text
-              style={[
-                styles.filterOptionText,
-                { color: theme.subText },
-                activeFilter === "cancelled" && styles.selectedFilterText,
-              ]}
-            >
-              Cancelled Trips
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
+              <Text
+                style={[
+                  styles.filterLabel,
+                  { color: colors.text.secondary },
+                  isSelected && { color: colors.brand.onGoldText, fontFamily: fonts.bold },
+                ]}
+              >
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
 
-      {/* Core Dynamic Content Switching Context Area */}
+      {/* Main Content Area */}
       {isLoading ? (
-        <View style={styles.loaderContainer}>
-          <ActivityIndicator size="large" color={theme.iconColor} />
-          <Text style={[styles.loadingText, { color: theme.subText }]}>Retrieving transit ledger...</Text>
+        <View style={styles.centerState}>
+          <ActivityIndicator size="large" color={colors.brand.primary} />
+          <Text style={[styles.loadingText, { color: colors.text.secondary }]}>
+            Loading ride archives...
+          </Text>
         </View>
       ) : filteredRides.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <MaterialCommunityIcons name="car-off" size={64} color={theme.subText} />
-          <Text style={[styles.emptyText, { color: theme.subText }]}>
-            No {activeFilter} rides recorded yet
+        <View style={styles.centerState}>
+          <View style={[styles.emptyIconWrap, { backgroundColor: colors.surface.elevated }]}>
+            <CRIcon name="car-outline" size={32} color={colors.text.muted} />
+          </View>
+          <Text style={[styles.emptyTitle, { color: colors.text.primary }]}>No rides found</Text>
+          <Text style={[styles.emptySubtitle, { color: colors.text.secondary }]}>
+            {activeFilter === 'all'
+              ? 'Completed trips and transit archives will appear here.'
+              : `No ${activeFilter} rides recorded yet.`}
           </Text>
         </View>
       ) : (
         <ScrollView
-          contentContainerStyle={[styles.scrollContainer, { backgroundColor: theme.background }]}
+          contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={() => fetchRideHistory(true)}
+              tintColor={colors.brand.primary}
+              colors={[colors.brand.primary]}
+            />
+          }
         >
-          {filteredRides.map((ride) => (
-            <View key={ride._id || ride.id} style={[styles.historyCard, { backgroundColor: theme.cardBackground, borderColor: theme.borderColor }]}>
-              {/* Metadata Header Meta Row */}
-              <View style={styles.cardHeaderRow}>
-                <View style={styles.headerLeftMeta}>
-                  <Text style={[styles.dateText, { color: theme.subText }]}>
+          {filteredRides.map((ride) => {
+            const isCompleted = (ride.status || 'completed').toLowerCase() === 'completed';
+            const pickupName = ride.pickupLocation?.address || ride.pickup?.name || ride.pickupLocation || ride.pickup || 'Campus Pickup';
+            const dropoffName = ride.destinationLocation?.address || ride.dropoff?.name || ride.dropoffLocation || ride.destination || 'Campus Destination';
+            const rideType = (ride.type || ride.rideMode || 'Solo').toLowerCase().includes('shared') ? 'Shared' : 'Solo';
+            const tripId = ride._id || ride.id || '';
+            const shortId = tripId ? `#${tripId.slice(-6).toUpperCase()}` : '';
+
+            return (
+              <View
+                key={tripId || Math.random().toString()}
+                style={[
+                  styles.card,
+                  { backgroundColor: colors.surface.tile || '#F3F3F1', borderColor: colors.border.subtle },
+                ]}
+              >
+                {/* Top Row: Date + Mode Badge + Status Badge */}
+                <View style={styles.cardHeader}>
+                  <Text style={[styles.dateText, { color: colors.text.muted }]}>
                     {formatRideDate(ride.createdAt || ride.updatedAt)}
                   </Text>
-                  <Text
-                    style={[
-                      styles.statusText,
-                      ride.status === "cancelled" && { color: "#EF4444" },
-                    ]}
-                  >
-                    {ride.status
-                      ? ride.status.charAt(0).toUpperCase() +
-                        ride.status.slice(1)
-                      : "Completed"}
-                  </Text>
+
+                  <View style={styles.badgesRow}>
+                    <View style={[styles.modeBadge, { backgroundColor: colors.surface.elevated }]}>
+                      <Text style={[styles.modeBadgeText, { color: colors.text.secondary }]}>
+                        {rideType}
+                      </Text>
+                    </View>
+
+                    <View
+                      style={[
+                        styles.statusBadge,
+                        {
+                          backgroundColor: isCompleted
+                            ? colors.semantic.successTint
+                            : colors.semantic.dangerTint,
+                        },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.statusDot,
+                          {
+                            backgroundColor: isCompleted
+                              ? colors.semantic.success
+                              : colors.semantic.danger,
+                          },
+                        ]}
+                      />
+                      <Text
+                        style={[
+                          styles.statusText,
+                          {
+                            color: isCompleted
+                              ? colors.semantic.success
+                              : colors.semantic.danger,
+                          },
+                        ]}
+                      >
+                        {isCompleted ? 'Completed' : 'Cancelled'}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
 
-                {/* Ride Type Pill Badge Indicator */}
-                <View
-                  style={[
-                    styles.typeTagCapsule,
-                    (ride.type || "Shared") === "Shared"
-                      ? styles.sharedBackground
-                      : [styles.privateBackground, { backgroundColor: theme.iconWrap, borderColor: theme.tabBarBorder }],
-                  ]}
-                >
-                  <Text style={[styles.typeTagText, { color: (ride.type || "Shared") === "Shared" ? "#1E3A8A" : theme.iconColor }]}>
-                    {(ride.type || "Shared").toUpperCase()}
+                {/* Middle Row: Route Path */}
+                <View style={styles.routeContainer}>
+                  <View style={styles.routeNodeCol}>
+                    <View style={[styles.pickupDot, { backgroundColor: colors.brand.primary }]} />
+                    <View style={[styles.routeTrack, { backgroundColor: colors.border.divider }]} />
+                    <View style={[styles.dropoffDot, { backgroundColor: colors.text.primary }]} />
+                  </View>
+
+                  <View style={styles.routeTextCol}>
+                    <Text style={[styles.locationText, { color: colors.text.primary }]} numberOfLines={1}>
+                      {pickupName}
+                    </Text>
+                    <Text style={[styles.locationText, { color: colors.text.primary }]} numberOfLines={1}>
+                      {dropoffName}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Footer Row: canonical trip reference */}
+                <View style={[styles.cardFooter, { borderTopColor: colors.border.divider }]}>
+                  <Text style={[styles.tripIdText, { color: colors.text.muted }]}>
+                    {shortId ? `Trip ${shortId}` : ''}
                   </Text>
+                  <Text style={[styles.modeText, { color: colors.text.primary }]}>{rideType}</Text>
                 </View>
               </View>
-
-              {/* Vertical Routing Visual Stack */}
-              <View style={styles.routeContainer}>
-                <View style={styles.timelineIndicatorsColumn}>
-                  <MaterialCommunityIcons
-                    name="circle"
-                    size={10}
-                    color={theme.iconColor}
-                  />
-                  <View style={[styles.verticalLinkConnector, { backgroundColor: theme.borderColor }]} />
-                  <MaterialCommunityIcons
-                    name="map-marker"
-                    size={14}
-                    color="#A3E635"
-                  />
-                </View>
-
-                <View style={styles.routeLabelsColumn}>
-                  <Text style={[styles.locationText, { color: theme.mainText }]} numberOfLines={1}>
-                    {ride.pickupLocation?.address ||
-                      ride.pickup ||
-                      "Campus Pickup"}
-                  </Text>
-                  <Text style={[styles.locationText, { color: theme.mainText }]} numberOfLines={1}>
-                    {ride.destinationLocation?.address ||
-                      ride.destination ||
-                      "Campus Destination"}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Footer Row Block Module with Trip Fare details */}
-              <View style={[styles.cardFooterRow, { borderTopColor: theme.borderColor }]}>
-                <Text style={[styles.rideIdLabel, { color: theme.subText }]}>
-                  ID: #{(ride._id || ride.id).substring(0, 8).toUpperCase()}
-                </Text>
-                <Text style={[styles.fareLabel, { color: theme.iconColor }]}>
-                  GH₵ {(ride.fare || 0).toFixed(2)}
-                </Text>
-              </View>
-            </View>
-          ))}
+            );
+          })}
         </ScrollView>
       )}
-
-      {/* Persistent App Footer Bottom Nav Tabs Menu */}
-      <View style={[styles.bottomNav, { backgroundColor: theme.background, borderTopColor: theme.tabBarBorder }]}>
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={() => onChangeTab && onChangeTab("home")}
-          activeOpacity={0.7}
-        >
-          <View style={styles.tabIconBackground}>
-            <MaterialCommunityIcons
-              name="home-outline"
-              size={24}
-              color="#94A3B8"
-            />
-          </View>
-          <Text style={styles.navLabel}>Home</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={() => onChangeTab && onChangeTab("trips")}
-          activeOpacity={0.7}
-        >
-          <View style={styles.tabIconBackground}>
-            <MaterialCommunityIcons
-              name="car-multiple"
-              size={24}
-              color="#94A3B8"
-            />
-          </View>
-          <Text style={styles.navLabel}>Trips</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={() => onBack && onBack()}
-          activeOpacity={0.7}
-        >
-          <View
-            style={[
-              styles.tabIconBackground,
-              !darkModeEnabled && styles.activeTabIconBackground,
-              darkModeEnabled && { backgroundColor: "#334155" },
-            ]}
-          >
-            <MaterialCommunityIcons
-              name="account-circle"
-              size={24}
-              color={theme.iconColor}
-            />
-          </View>
-          <Text style={[styles.navLabelActive, { color: theme.iconColor }]}>Profile</Text>
-        </TouchableOpacity>
-      </View>
     </SafeAreaView>
   );
-};
+}
 
 const styles = StyleSheet.create({
-  activeFilterBtn: {
-    opacity: 0.9,
-  },
-  activeTabIconBackground: {
-    backgroundColor: "#F1F5F9",
-  },
-  bottomNav: {
-    borderTopWidth: 1,
-    flexDirection: "row",
-    height: 74,
-  },
-  cardFooterRow: {
-    alignItems: "center",
-    borderTopWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingTop: 12,
-  },
-  cardHeaderRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 16,
-  },
-  container: {
+  safeArea: {
     flex: 1,
   },
-  dateText: {
-    fontSize: 14,
-    fontWeight: "600",
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
   },
-  emptyContainer: {
-    alignItems: "center",
+  backButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    fontFamily: fonts.extraBold,
+    fontSize: 20,
+    letterSpacing: -0.4,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xs,
+    gap: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  filterTab: {
     flex: 1,
-    justifyContent: "center",
-    paddingHorizontal: 40,
-  },
-  emptyText: {
-    fontSize: 15,
-    fontWeight: "700",
-    textAlign: "center",
-    marginTop: 16,
-  },
-  fareLabel: {
-    fontSize: 16,
-    fontWeight: "800",
-  },
-  filterDrawer: {
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    gap: 12,
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-  },
-  filterOption: {
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-  },
-  filterOptionText: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  headerLeftMeta: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-  },
-  historyCard: {
-    borderRadius: 16,
+    paddingVertical: 7,
+    borderRadius: radii.full,
     borderWidth: 1,
-    elevation: 2,
-    marginBottom: 16,
-    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  loaderContainer: {
-    alignItems: "center",
+  filterLabel: {
+    fontFamily: fonts.semiBold,
+    fontSize: 12,
+  },
+  scrollContent: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.xxl,
+  },
+  centerState: {
     flex: 1,
-    justifyContent: "center",
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+    gap: spacing.xs,
+  },
+  emptyIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.xs,
+  },
+  emptyTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 17,
+  },
+  emptySubtitle: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    textAlign: 'center',
+    maxWidth: 260,
   },
   loadingText: {
-    fontSize: 14,
-    fontWeight: "600",
-    marginTop: 12,
-  },
-  locationText: {
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  navItem: {
-    alignItems: "center",
-    flex: 1,
-    justifyContent: "center",
-  },
-  navLabel: {
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  navLabelActive: {
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  privateBackground: {
-    borderStyle: "solid",
-  },
-  rideIdLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    letterSpacing: 0.3,
-  },
-  routeContainer: {
-    alignItems: "stretch",
-    flexDirection: "row",
-    marginBottom: 16,
-    paddingLeft: 2,
-  },
-  routeLabelsColumn: {
-    flex: 1,
-    gap: 14,
-    justifyContent: "center",
-  },
-  scrollContainer: {
-    flexGrow: 1,
-    paddingBottom: 24,
-    paddingHorizontal: 24,
-    paddingTop: 16,
-  },
-  selectedFilterText: {
-    color: "#FFFFFF",
-  },
-  sharedBackground: {
-    backgroundColor: "#A3E635",
-    borderColor: "#1E3A8A",
-  },
-  statusText: {
-    color: "#16A34A",
+    fontFamily: fonts.medium,
     fontSize: 13,
-    fontWeight: "700",
+    marginTop: spacing.xs,
   },
-  tabIconBackground: {
-    alignItems: "center",
-    borderRadius: 16,
-    justifyContent: "center",
-    marginBottom: 2,
-    paddingHorizontal: 20,
-    paddingVertical: 4,
-  },
-  timelineIndicatorsColumn: {
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginRight: 14,
-    paddingVertical: 4,
-    width: 16,
-  },
-  topBar: {
-    alignItems: "center",
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-  },
-  topBarButton: {
-    alignItems: "center",
-    borderRadius: 8,
-    height: 40,
-    justifyContent: "center",
-    width: 40,
-  },
-  topBarTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    letterSpacing: -0.5,
-  },
-  typeTagCapsule: {
-    borderRadius: 8,
+  card: {
+    borderRadius: radii.md,
     borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
   },
-  typeTagText: {
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  dateText: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+  },
+  badgesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  modeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: radii.sm,
+  },
+  modeBadgeText: {
+    fontFamily: fonts.bold,
     fontSize: 10,
-    fontWeight: "800",
+    textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  verticalLinkConnector: {
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: radii.sm,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusText: {
+    fontFamily: fonts.bold,
+    fontSize: 10.5,
+  },
+  routeContainer: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  routeNodeCol: {
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+    width: 14,
+  },
+  pickupDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  routeTrack: {
+    width: 1.5,
     flex: 1,
-    marginVertical: 4,
-    width: 2,
+    marginVertical: 2,
+  },
+  dropoffDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 2,
+  },
+  routeTextCol: {
+    flex: 1,
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  locationText: {
+    fontFamily: fonts.semiBold,
+    fontSize: 13.5,
+  },
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    paddingTop: spacing.xs + 2,
+  },
+  tripIdText: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+  },
+  modeText: {
+    fontFamily: fonts.extraBold,
+    fontSize: 15,
   },
 });
-
-export default RideHistory;

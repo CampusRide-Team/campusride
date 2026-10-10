@@ -1,8 +1,31 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
+
+// Resolves and normalizes base API URL dynamically from environment or local development fallback
+export const getApiBaseUrl = () => {
+  let url = process.env.EXPO_PUBLIC_API_URL;
+  if (url && typeof url === 'string') {
+    // Strip trailing /api/v1 or trailing slash to normalize base host URL
+    return url.trim().replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '');
+  }
+  // Local development fallback using your PC's active Wi-Fi IP address
+  return 'http://10.196.117.129:5000';
+};
+
+export const API_BASE_URL = getApiBaseUrl();
+
+if (__DEV__) {
+  console.info('[CampusRide Network] REST origin', {
+    origin: API_BASE_URL,
+    platform: Platform.OS,
+    platformVersion: Platform.Version,
+    configuredByEnvironment: Boolean(process.env.EXPO_PUBLIC_API_URL),
+  });
+}
 
 const api = axios.create({
-  baseURL: "https://c5m62bwc-5000.uks1.devtunnels.ms/",
+  baseURL: API_BASE_URL,
   timeout: 15000,
   headers: {
     "Content-Type": "application/json",
@@ -23,6 +46,21 @@ api.interceptors.request.use(
 
       config.url = `/api/v1/${cleanUrl}`;
 
+      if (__DEV__) {
+        console.info('[CampusRide Network] REST request', {
+          method: String(config.method || 'get').toUpperCase(),
+          origin: config.baseURL || API_BASE_URL,
+          path: config.url,
+        });
+      }
+
+      // When sending FormData (multipart), let React Native / Axios set boundary automatically
+      if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+        if (config.headers) {
+          delete config.headers['Content-Type'];
+        }
+      }
+
       // Check all possible storage keys for the auth token
       const rawToken = await AsyncStorage.getItem("token") || 
                        await AsyncStorage.getItem("user_token") || 
@@ -34,9 +72,6 @@ api.interceptors.request.use(
         // Sanitize token: remove wrapping quotes and any accidental "Bearer " prefix
         const cleanToken = rawToken.replace(/^["']|["']$/g, '').trim().replace(/^Bearer\s+/i, '');
         config.headers.Authorization = `Bearer ${cleanToken}`;
-        console.log(`[Axios] Attached token to ${config.url} (Token preview: ${cleanToken.substring(0, 10)}...)`);
-      } else {
-        console.warn(`[Axios] NO TOKEN FOUND in AsyncStorage for request: ${config.url}`);
       }
     } catch (error) {
       console.error("Failed to retrieve token:", error);
@@ -45,5 +80,79 @@ api.interceptors.request.use(
   },
   (error) => Promise.reject(error)
 );
+
+api.interceptors.response.use(
+  (response) => {
+    if (__DEV__) {
+      console.info('[CampusRide Network] REST response', {
+        status: response.status,
+        method: String(response.config?.method || 'get').toUpperCase(),
+        path: response.config?.url,
+      });
+    }
+    return response;
+  },
+  (error) => {
+    if (__DEV__) {
+      console.warn('[CampusRide Network] REST failure', {
+        category: error.response ? 'http' : 'transport',
+        status: error.response?.status || null,
+        code: error.code || null,
+        method: String(error.config?.method || 'get').toUpperCase(),
+        origin: error.config?.baseURL || API_BASE_URL,
+        path: error.config?.url || null,
+        message: error.message,
+      });
+    }
+    return Promise.reject(error);
+  }
+);
+
+/**
+ * Categorizes and formats errors into human-readable messages
+ */
+export const formatApiError = (err, fallbackMessage = 'An unexpected error occurred. Please try again.') => {
+  if (!err) return fallbackMessage;
+
+  // 1. Response received from backend
+  if (err.response) {
+    const status = err.response.status;
+    const errorData = err.response.data;
+    const backendCode = errorData?.error?.code || errorData?.code;
+    const backendMsg = errorData?.error?.message || errorData?.message;
+
+    if (backendCode === 'PENDING_APPROVAL') {
+      return 'Driver account is pending safety verification. University of Ghana approval takes 24–48 hours.';
+    }
+    if (backendCode === 'ROLE_MISMATCH') {
+      return backendMsg || 'This account belongs to a different role. Please switch portal.';
+    }
+    if (backendCode === 'ACCOUNT_SUSPENDED') {
+      return 'Your account has been suspended by campus administration.';
+    }
+    if (backendCode === 'USER_EXISTS') {
+      return 'An account with this email or phone number already exists. Please sign in.';
+    }
+    if (backendCode === 'AUTH_FAILED' || status === 401) {
+      return 'The phone number/email or password entered is incorrect.';
+    }
+    if (backendCode === 'MISSING_CREDENTIALS' || backendCode === 'MISSING_FIELDS') {
+      return backendMsg || 'Please fill in all required fields.';
+    }
+    if (status >= 500) {
+      return 'CampusRide server is temporarily busy. Please try again in a few moments.';
+    }
+    if (backendMsg && typeof backendMsg === 'string') {
+      return backendMsg;
+    }
+  }
+
+  // 2. Network connectivity error (no response received)
+  if (err.request || err.code === 'ECONNABORTED' || err.message?.includes('Network Error')) {
+    return "We couldn't connect to CampusRide. Please check your internet connection and verify that your phone is on the campus/development network.";
+  }
+
+  return err.message || fallbackMessage;
+};
 
 export default api;

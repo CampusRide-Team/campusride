@@ -17,11 +17,19 @@ import uploadRoutes from './src/routes/uploadRoutes.js';
 import rideRoutes from './src/routes/rideRoutes.js';
 import driverRoutes from './src/routes/driverRoutes.js';
 import authRoutes from './src/routes/authRoutes.js';
+import poiRoutes from './src/routes/poiRoutes.js';
+import bookingRoutes from './src/routes/bookingRoutes.js';
+import tripRoutes from './src/routes/tripRoutes.js';
+import ratingRoutes from './src/routes/ratingRoutes.js';
+import routingRoutes from './src/routes/routingRoutes.js';
+import safetyRoutes from './src/routes/safetyRoutes.js';
+import dispatchOfferRoutes from './src/routes/dispatchOfferRoutes.js';
 
 // 3. Import System Services & Core Middlewares
 import { initCronJobs } from './src/services/cronService.js';
 import { initializeSockets } from './src/services/socketService.js';
 import { errorHandler, notFound } from './src/middleware/errorHandler.js';
+import { seedCampusPOIs } from './src/services/poiService.js';
 
 const app = express();
 const server = http.createServer(app);
@@ -57,6 +65,15 @@ app.use('/api/v1/drivers', driverRoutes);
 app.use('/api/v1/rides', rideRoutes);
 app.use('/api/v1/upload', uploadRoutes);
 
+// Canonical Domain Endpoints
+app.use('/api/v1/pois', poiRoutes);
+app.use('/api/v1/bookings', bookingRoutes);
+app.use('/api/v1/trips', tripRoutes);
+app.use('/api/v1/ratings', ratingRoutes);
+app.use('/api/v1/routing', routingRoutes);
+app.use('/api/v1/safety', safetyRoutes);
+app.use('/api/v1/dispatch-offers', dispatchOfferRoutes);
+
 app.get('/api/health', (req, res) => res.json({ success: true, data: { message: 'CampusRide V2 Backend Engine is Live' } }));
 
 // 6. Global Catch Handlers
@@ -73,8 +90,11 @@ const startApplication = async () => {
     // Force runtime execution engine to wait until Atlas database is live
     await connectDB();
     
+    // Seed canonical Campus POIs idempotently
+    await seedCampusPOIs();
+    
     // Background automation systems initialization
-    initCronJobs();
+    initCronJobs(io);
     
     const PORT = process.env.PORT || 5000;
     server.listen(PORT, () => {

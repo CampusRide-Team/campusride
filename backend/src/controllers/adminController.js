@@ -1,7 +1,9 @@
 import mongoose from 'mongoose';
 import https from 'https';
 import User from '../models/User.js';
-import Ride from '../models/Ride.js';
+import RideBooking from '../models/RideBooking.js';
+import DriverTrip from '../models/DriverTrip.js';
+import CampusPOI from '../models/CampusPOI.js';
 import { sendDriverRejectionEmail } from '../services/emailService.js';
 
 // Helper to calculate the current calendar week of the year
@@ -38,17 +40,17 @@ const getUserDirectory = async (req, res, next) => {
     const users = await User.find(filter).select('-password').sort({ createdAt: -1 });
 
     // 2. Calculate Live Aggregated Platform Metrics
-    const [totalUsers, activeCount, driversCount, studentsCount] = await Promise.all([
+    const [totalUsers, activeCount, driversCount, passengersCount] = await Promise.all([
       User.countDocuments({ role: { $ne: 'admin' } }),
       User.countDocuments({ isOnline: true }),
-      User.countDocuments({ role: 'driver', isApproved: true }),
-      User.countDocuments({ role: { $in: ['student', 'rider'] } })
+      User.countDocuments({ role: 'driver', approvalStatus: 'approved' }),
+      User.countDocuments({ role: { $in: ['passenger', 'student', 'rider', 'guest'] } })
     ]);
 
     const metrics = [
       { id: 'u1', label: 'Total Platform Accounts', value: totalUsers.toString(), change: 'Registered', trendColor: '#15803D', icon: 'users', color: '#1E3A8A', bg: '#EFF6FF' },
       { id: 'u2', label: 'Active Fleet Operators', value: driversCount.toString(), change: 'Drivers', trendColor: '#15803D', icon: 'userCheck', color: '#16A34A', bg: '#DCFCE7' },
-      { id: 'u3', label: 'Student / Rider Base', value: studentsCount.toString(), change: 'Riders', trendColor: '#15803D', icon: 'userPlus', color: '#2563EB', bg: '#DBEAFE' },
+      { id: 'u3', label: 'Passenger Base', value: passengersCount.toString(), change: 'Passengers', trendColor: '#15803D', icon: 'userPlus', color: '#2563EB', bg: '#DBEAFE' },
       { id: 'u4', label: 'Currently Active Online', value: activeCount.toString(), change: 'Live GPS', trendColor: '#15803D', icon: 'alertTriangle', color: '#CA8A04', bg: '#FEF9E7' }
     ];
 
@@ -63,7 +65,7 @@ const getUserDirectory = async (req, res, next) => {
 
       let mappedUserType = 'GUEST';
       if (raw.role === 'driver') mappedUserType = 'DRIVER';
-      if (['student', 'rider'].includes(raw.role?.toLowerCase())) mappedUserType = 'STUDENT';
+      if (['passenger', 'student', 'rider'].includes(raw.role?.toLowerCase())) mappedUserType = 'PASSENGER';
 
       // ACCURATE MULTI-STATE STATUS LOGIC
       let userStatus = 'ACTIVE';
@@ -83,12 +85,12 @@ const getUserDirectory = async (req, res, next) => {
         email: raw.email || 'N/A',
         phone: raw.phoneNumber || raw.phone || 'N/A',
         userType: mappedUserType,
-        role: raw.role || 'student',
+        role: raw.role || 'passenger',
         residence: raw.locationResidence || raw.residence || 'Campus Zone',
         status: userStatus,
         initials,
         image: raw.profilePicture || raw.avatar || raw.avatarUri || null,
-        rideCount: raw.tripsCompleted || raw.rideCount || 0,
+        rideCount: raw.totalTrips || raw.tripsCompleted || raw.rideCount || 0,
         rideStatus: raw.isOnline ? 'In Transit' : 'Idle',
         tripsHistory: [],
         feedbackHistory: [],
@@ -233,15 +235,15 @@ const getCampusDemand = async (req, res, next) => {
 
     const demandResults = await Promise.all(
       landmarks.map(async (place) => {
-        const range = 0.0015; // ~150m boundary box
+        const range = 0.0020; // ~200m boundary box
         
         let activeRequests = 0;
-        if (Ride) {
-          activeRequests = await Ride.countDocuments({
-            status: { $in: ['requested', 'searching', 'ongoing'] },
+        if (RideBooking) {
+          activeRequests = await RideBooking.countDocuments({
+            status: { $in: ['pending', 'driver_assigned', 'arrived_at_pickup', 'in_progress'] },
             createdAt: { $gte: twentyMinutesAgo },
-            pickupLatitude: { $gte: place.lat - range, $lte: place.lat + range },
-            pickupLongitude: { $gte: place.lng - range, $lte: place.lng + range }
+            "pickup.coordinates.coordinates.1": { $gte: place.lat - range, $lte: place.lat + range },
+            "pickup.coordinates.coordinates.0": { $gte: place.lng - range, $lte: place.lng + range }
           });
         }
 
@@ -280,24 +282,24 @@ const getDashboardData = async (req, res, next) => {
     past7Days.setDate(past7Days.getDate() - 7);
 
     const [
-      activeRidesCount,
+      activeTripsCount,
       onlineDriversCount,
       registeredDriversCount,  
-      registeredRidersCount,
+      registeredPassengersCount,
       pendingVerificationCount,
       recentActivityData,
       weeklyPerformanceData
     ] = await Promise.all([
-      Ride ? Ride.countDocuments({ status: 'ongoing' }) : Promise.resolve(0),
-      User.countDocuments({ role: 'driver', isApproved: true, isOnline: true }),
+      DriverTrip ? DriverTrip.countDocuments({ status: { $in: ['dispatched', 'active'] } }) : Promise.resolve(0),
+      User.countDocuments({ role: 'driver', approvalStatus: 'approved', isOnline: true }),
       User.countDocuments({ role: 'driver' }),  
-      User.countDocuments({ role: 'student' }),
-      User.countDocuments({ role: 'driver', isApproved: false }),
-      Ride ? Ride.find()
+      User.countDocuments({ role: { $in: ['passenger', 'student', 'rider'] } }),
+      User.countDocuments({ role: 'driver', approvalStatus: { $ne: 'approved' } }),
+      RideBooking ? RideBooking.find()
         .sort({ createdAt: -1 })
-        .limit(3)
-        .populate('riderId driverId', 'fullName') : Promise.resolve([]),
-      Ride ? Ride.aggregate([
+        .limit(5)
+        .populate('passengerId driverId', 'fullName') : Promise.resolve([]),
+      DriverTrip ? DriverTrip.aggregate([
         { 
           $match: { 
             status: 'completed', 
@@ -317,10 +319,10 @@ const getDashboardData = async (req, res, next) => {
     ]);
 
     const stats = [
-      { label: 'Active Rides Now', value: activeRidesCount.toString(), change: activeRidesCount > 0 ? '+12%' : null, changeColor: '#15803D' },
+      { label: 'Active Rides Now', value: activeTripsCount.toString(), change: activeTripsCount > 0 ? '+12%' : null, changeColor: '#15803D' },
       { label: 'Drivers Online', value: onlineDriversCount.toString(), change: onlineDriversCount > 0 ? '+5%' : null, changeColor: '#15803D' },
       { label: 'Drivers Registered', value: registeredDriversCount.toString(), change: registeredDriversCount > 0 ? '+8%' : null, changeColor: '#15803D' },
-      { label: 'Riders Registered', value: registeredRidersCount.toLocaleString(), change: registeredRidersCount > 0 ? '+24%' : null, changeColor: '#15803D' },
+      { label: 'Riders Registered', value: registeredPassengersCount.toLocaleString(), change: registeredPassengersCount > 0 ? '+24%' : null, changeColor: '#15803D' },
       { label: 'Pending Verification', value: pendingVerificationCount.toString(), change: pendingVerificationCount > 0 ? 'Action Req.' : null, changeColor: '#991B1B' }
     ];
 
@@ -332,7 +334,7 @@ const getDashboardData = async (req, res, next) => {
     if (weeklyPerformanceData && weeklyPerformanceData.length > 0) {
       const activeDriverIds = weeklyPerformanceData.map(item => item._id);
       const profiles = await User.find({ _id: { $in: activeDriverIds } })
-        .select('fullName rating profilePicture avatar avatarUrl');
+        .select('fullName rating ratingAverage profilePicture avatar avatarUrl avatarUri');
 
       topDrivers = weeklyPerformanceData.map(item => {
         const driver = profiles.find(p => p._id.toString() === item._id.toString());
@@ -342,7 +344,7 @@ const getDashboardData = async (req, res, next) => {
         const parts = name.trim().split(/\s+/);
         const initials = parts.length > 1 ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase() : name.slice(0, 2).toUpperCase();
 
-        let rawImage = driver.profilePicture || driver.avatar || driver.avatarUrl || null;
+        let rawImage = driver.profilePicture || driver.avatar || driver.avatarUrl || driver.avatarUri || null;
         let finalImgUrl = null;
         if (rawImage) {
           finalImgUrl = (rawImage.startsWith('http://') || rawImage.startsWith('https://')) 
@@ -350,9 +352,11 @@ const getDashboardData = async (req, res, next) => {
             : `${serverBaseUrl}${rawImage.startsWith('/') ? rawImage : '/' + rawImage}`;
         }
 
+        const effectiveRating = driver.ratingAverage || driver.rating || 5.0;
+
         return {
           name,
-          rating: driver.rating ? `★ ${driver.rating.toFixed(2)}` : 'N/A',
+          rating: `★ ${effectiveRating.toFixed(2)}`,
           trips: item.ridesCompletedThisWeek,
           initials,
           profilePicture: finalImgUrl
@@ -361,22 +365,22 @@ const getDashboardData = async (req, res, next) => {
     }
 
     const recentActivity = recentActivityData.length > 0 
-      ? recentActivityData.map(ride => ({
-          title: ride.status === 'completed' ? 'Ride Completed' : 'New Ride Requested',
-          desc: `${ride.riderId?.fullName || 'A student'} was matched for a campus run.`,
+      ? recentActivityData.map(booking => ({
+          title: booking.status === 'completed' ? 'Ride Completed' : booking.status === 'in_progress' ? 'Ride In Progress' : 'New Ride Requested',
+          desc: `${booking.passengerId?.fullName || 'A passenger'} - ${booking.pickup?.name || 'Campus'} → ${booking.dropoff?.name || 'Campus'}.`,
           time: 'JUST NOW',
-          circleColor: ride.status === 'completed' ? '#22C55E' : '#3B82F6'
+          circleColor: booking.status === 'completed' ? '#22C55E' : '#3B82F6'
         }))
-      : [{ title: 'System Running', desc: 'Awaiting first campus ride request stream...', time: 'LIVE', circleColor: '#3B82F6' }];
+      : [{ title: 'System Running', desc: 'Awaiting campus ride bookings...', time: 'LIVE', circleColor: '#3B82F6' }];
 
     let chartData = [0, 0, 0, 0, 0, 0, 0];
-    if (Ride) {
+    if (DriverTrip) {
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      const lastWeekRides = await Ride.find({ createdAt: { $gte: sevenDaysAgo } }).select('createdAt');
+      const lastWeekTrips = await DriverTrip.find({ createdAt: { $gte: sevenDaysAgo } }).select('createdAt');
       const dayCounts = [0, 0, 0, 0, 0, 0, 0];
-      lastWeekRides.forEach(ride => {
-        const dayIndex = (new Date(ride.createdAt).getDay() + 6) % 7;
+      lastWeekTrips.forEach(trip => {
+        const dayIndex = (new Date(trip.createdAt).getDay() + 6) % 7;
         dayCounts[dayIndex] += 1;
       });
       chartData = dayCounts;
@@ -552,9 +556,9 @@ const deleteNotification = async (req, res, next) => {
 
 const getNotificationsSnapshot = async (req, res, next) => {
   try {
-    const [pendingDriversCount, activeRidesCount, totalUsers] = await Promise.all([
-      User.countDocuments({ role: 'driver', isApproved: false }),
-      Ride ? Ride.countDocuments({ status: { $in: ['requested', 'searching', 'ongoing'] } }) : Promise.resolve(0),
+    const [pendingDriversCount, activeTripsCount, totalUsers] = await Promise.all([
+      User.countDocuments({ role: 'driver', approvalStatus: { $ne: 'approved' } }),
+      DriverTrip ? DriverTrip.countDocuments({ status: { $in: ['dispatched', 'active'] } }) : Promise.resolve(0),
       User.countDocuments({})
     ]);
 
@@ -600,12 +604,12 @@ const getNotificationsSnapshot = async (req, res, next) => {
       });
     }
 
-    if (activeRidesCount > 0) {
+    if (activeTripsCount > 0) {
       eventFeed.push({
         id: 'sys-active-rides',
         type: 'SYSTEM_ALERT',
         title: 'Campus Transit Activity',
-        desc: `${activeRidesCount} active ride streams are traveling across campus zones.`,
+        desc: `${activeTripsCount} active driver trips are traveling across campus zones.`,
         category: 'rides',
         urgency: 'INFO',
         time: 'LIVE',
@@ -616,7 +620,7 @@ const getNotificationsSnapshot = async (req, res, next) => {
         id: 'sys-nominal',
         type: 'SYSTEM_ALERT',
         title: 'Transit System Nominal',
-        desc: 'Gateway links online. Awaiting student pickup matching request streams.',
+        desc: 'Gateway links online. Awaiting passenger ride request streams.',
         category: 'system',
         urgency: 'INFO',
         time: 'LIVE',
@@ -631,7 +635,7 @@ const getNotificationsSnapshot = async (req, res, next) => {
       data: {
         metrics: {
           pendingDrivers: pendingDriversCount,
-          activeRides: activeRidesCount,
+          activeRides: activeTripsCount,
           systemLoad: totalUsers
         },
         notifications: eventFeed.slice(0, 25)
@@ -647,62 +651,66 @@ const getMonitoringSnapshot = async (req, res, next) => {
     const [
       totalActiveDrivers,
       onlineDriversCount,
-      activeRidesCount,
+      activeTripsCount,
       pendingVerifications,
-      completedRidesAgg,
-      landmarksAggregation
+      completedTripsAgg
     ] = await Promise.all([
       User.countDocuments({ role: 'driver' }),
       User.countDocuments({ role: 'driver', isOnline: true }),  
-      Ride ? Ride.countDocuments({ status: 'ongoing' }) : Promise.resolve(0),
-      User.countDocuments({ role: 'driver', isApproved: false }),
-      Ride ? Ride.aggregate([
+      DriverTrip ? DriverTrip.countDocuments({ status: { $in: ['dispatched', 'active'] } }) : Promise.resolve(0),
+      User.countDocuments({ role: 'driver', approvalStatus: { $ne: 'approved' } }),
+      DriverTrip ? DriverTrip.aggregate([
         { $match: { status: 'completed' } },
         { $group: { _id: '$driverId', count: { $sum: 1 } } }
-      ]) : Promise.resolve([]),
-      Ride ? Ride.aggregate([
-        { $match: { status: { $in: ['requested', 'searching', 'ongoing'] } } },
-        { $group: { _id: '$pickupLocationName', activeCount: { $sum: 1 } } }
       ]) : Promise.resolve([])
     ]);
 
     const metrics = [
       { id: 'm1', label: 'Total Fleet Operators', value: totalActiveDrivers.toString(), change: 'Registered', color: '#1E3A8A', bg: '#EFF6FF' },
       { id: 'm2', label: 'Drivers Active Online', value: onlineDriversCount.toString(), change: 'Live GPS', color: '#16A34A', bg: '#DCFCE7' },
-      { id: 'm3', label: 'Ongoing Dispatches', value: activeRidesCount.toString(), change: 'Transit', color: '#CA8A04', bg: '#FEF9E7' },
+      { id: 'm3', label: 'Ongoing Dispatches', value: activeTripsCount.toString(), change: 'Transit', color: '#CA8A04', bg: '#FEF9E7' },
       { id: 'm4', label: 'Actionable Screening Items', value: pendingVerifications.toString(), change: 'Pending', color: '#DC2626', bg: '#FEE2E2' }
     ];
 
     let realTimeTrips = [];
-    if (Ride) {
-      const liveRides = await Ride.find({ status: { $in: ['requested', 'searching', 'ongoing'] } })
-        .populate('riderId driverId', 'fullName vehicleModel vehicleLicensePlate')
+    if (DriverTrip) {
+      const liveTrips = await DriverTrip.find({ status: { $in: ['dispatched', 'active'] } })
+        .populate('driverId', 'fullName driverProfile')
+        .populate('tripStops.passengerId', 'fullName')
         .sort({ createdAt: -1 })
         .limit(15);
 
-      realTimeTrips = liveRides.map(ride => ({
-        id: ride._id.toString().substring(Math.max(0, ride._id.toString().length - 6)).toUpperCase(),
-        status: ride.status === 'ongoing' ? 'In Progress' : 'Matching',
-        statusBg: ride.status === 'ongoing' ? '#DCFCE7' : '#FEF9E7',
-        statusColor: ride.status === 'ongoing' ? '#16A34A' : '#CA8A04',
-        studentName: ride.riderId?.fullName || 'Student Rider',
-        driverName: ride.driverId?.fullName || 'Assigning Near-Field...',
-        route: ride.pickupLocationName && ride.dropoffLocationName 
-          ? `${ride.pickupLocationName} ➔ ${ride.dropoffLocationName}`
-          : 'Campus Internal Run',
-        vehicle: ride.driverId?.vehicleLicensePlate || 'Awaiting Match'
-      }));
+      realTimeTrips = liveTrips.map(trip => {
+        const stops = trip.tripStops || [];
+        const pickupStop = stops.find(s => s.stopType === 'pickup') || stops[0];
+        const dropoffStop = stops.find(s => s.stopType === 'dropoff') || stops[stops.length - 1];
+        const passengerName = pickupStop?.passengerId?.fullName || (stops.length > 0 ? `${stops.length} Passenger(s)` : 'Passenger');
+        const driverName = trip.driverId?.fullName || 'Assigning Near-Field...';
+        const routeText = pickupStop && dropoffStop ? `${pickupStop.name} ➔ ${dropoffStop.name}` : 'Campus Run';
+        const vehiclePlate = trip.driverId?.driverProfile?.vehicle?.licensePlate || trip.driverId?.vehicleLicensePlate || 'Assigned';
+
+        return {
+          id: trip._id.toString().substring(Math.max(0, trip._id.toString().length - 6)).toUpperCase(),
+          status: trip.status === 'active' ? 'In Progress' : 'Dispatched',
+          statusBg: trip.status === 'active' ? '#DCFCE7' : '#FEF9E7',
+          statusColor: trip.status === 'active' ? '#16A34A' : '#CA8A04',
+          studentName: passengerName,
+          driverName,
+          route: routeText,
+          vehicle: vehiclePlate
+        };
+      });
     }
 
     const fullDriversList = await User.find({ role: 'driver' })
-      .select('fullName isOnline rating email infractions vehicleModel vehicleLicensePlate vehicleColor vehicleType vehicleDetails vehicle tripsCompleted tripsCanceled');
+      .select('fullName isOnline rating ratingAverage email infractions driverProfile totalTrips tripsCompleted tripsCanceled');
     
     const driverRoster = fullDriversList.map((driver) => {
-      const completionStat = completedRidesAgg.find(c => c._id && c._id.toString() === driver._id.toString());
-      const realCompletedCount = completionStat ? completionStat.count : (driver.tripsCompleted || 0);
+      const completionStat = completedTripsAgg.find(c => c._id && c._id.toString() === driver._id.toString());
+      const realCompletedCount = completionStat ? completionStat.count : (driver.totalTrips || driver.tripsCompleted || 0);
 
-      const model = driver.vehicleModel || driver.vehicleType || driver.vehicle?.model || driver.vehicleDetails?.model || 'Not Specified';
-      const plate = driver.vehicleLicensePlate || driver.licensePlate || driver.vehicle?.licensePlate || driver.vehicleDetails?.licensePlate || 'N/A';
+      const model = driver.driverProfile?.vehicle?.model || driver.vehicleModel || 'Not Specified';
+      const plate = driver.driverProfile?.vehicle?.licensePlate || driver.vehicleLicensePlate || 'N/A';
 
       return {
         id: driver._id.toString(),
@@ -718,7 +726,7 @@ const getMonitoringSnapshot = async (req, res, next) => {
           completed: realCompletedCount, 
           canceled: driver.tripsCanceled || 0 
         },
-        infractionsLog: []
+        infractionsLog: driver.isSuspended ? [{ type: 'Account Suspended', date: 'LIVE', details: 'Flagged for moderation review.' }] : []
       };
     });
 
@@ -730,26 +738,12 @@ const getMonitoringSnapshot = async (req, res, next) => {
     ];
 
     const routePerformance = targetCampusHubs.map(hub => {
-      const activeMatch = landmarksAggregation.find(l => l._id && l._id.toLowerCase().includes(hub.defaultKey.toLowerCase()));
-      const activeCount = activeMatch ? activeMatch.activeCount : 0;
-
-      let load = "LOW VOLUME";
-      let color = "#10B981";
-
-      if (activeCount >= 5) {
-        load = "HIGH DENSITY";
-        color = "#EF4444";
-      } else if (activeCount >= 2) {
-        load = "MID SURGE";
-        color = "#F59E0B";
-      }
-
       return {
         name: hub.name,
         activeDrivers: onlineDriversCount,
         avgEta: "5 min",
-        load,
-        color
+        load: "OPTIMAL",
+        color: "#10B981"
       };
     });
 

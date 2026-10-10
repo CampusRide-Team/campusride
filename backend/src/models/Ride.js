@@ -18,7 +18,7 @@ const rideSchema = new mongoose.Schema({
     enum: ['pending', 'accepted', 'in_progress', 'completed', 'cancelled_timeout', 'failed_no_drivers', 'Scheduled'], 
     default: 'pending' 
   },
-  fare: { type: Number, default: 0 },
+  fare: { type: Number, default: 0, select: false },
   rideMode: { type: String, enum: ['shared', 'private'], default: 'private' },
   scheduledTime: { type: Date }
 }, { timestamps: true });

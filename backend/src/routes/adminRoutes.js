@@ -17,12 +17,12 @@ import { getGlobalSettings, updateGlobalSettings } from '../controllers/settingC
 import { getAnalyticsSnapshot } from '../controllers/analyticsController.js';
 import { getMonitoringSnapshot, handleDriverIntervention } from '../controllers/monitoringController.js';
 
-// import { protect, requireRole } from '../middleware/authMiddleware.js'; //  Temporarily comment out for dev
+import { protect, requireAdmin } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-// router.use(protect);
-// router.use(requireRole('admin'));
+router.use(protect);
+router.use(requireAdmin);
 
 // Dashboard & Metrics
 router.get('/dashboard', getDashboardData);

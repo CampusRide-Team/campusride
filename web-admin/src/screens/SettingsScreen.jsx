@@ -6,55 +6,76 @@ import {
   Palette, 
   AlertTriangle, 
   ChevronDown,
-  RefreshCw,
-  LogOut
+  LogOut,
+  X,
+  KeyRound,
+  CheckCircle2
 } from 'lucide-react'
 import api from '../api/axios'
 
 export default function SettingsScreen({ onLogout }) {
   const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [toast, setToast] = useState(null)
 
-  // 1. System Preferences Configurations States
+  // System Preferences
   const [platformName, setPlatformName] = useState('')
-  const [operatingHours, setOperatingHours] = useState('06:00 AM - 11:59 PM')
-  const [rideRadius, setRideRadius] = useState('5 Miles')
+  const [operatingHours, setOperatingHours] = useState('')
+  const [rideRadius, setRideRadius] = useState('')
   const [enableRideNotifications, setEnableRideNotifications] = useState(true)
 
-  // 2. Security Configuration Vectors States
+  // Security
   const [twoFactorAuth, setTwoFactorAuth] = useState(false)
-  const [sessionTimeout, setSessionTimeout] = useState('30 Minutes of inactivity')
+  const [sessionTimeout, setSessionTimeout] = useState('')
 
-  // 3. System Notification Preferences Toggles States
+  // Notification Preferences
   const [driverVerificationAlerts, setDriverVerificationAlerts] = useState(true)
   const [rideActivityAlerts, setRideActivityAlerts] = useState(true)
   const [riderActivityAlerts, setRiderActivityAlerts] = useState(false)
   const [systemMaintenanceAlerts, setSystemMaintenanceAlerts] = useState(true)
 
-  // 4. Portal Appearance Profile States
-  const [colorTheme, setColorTheme] = useState('light') 
-  const [interfaceDensity, setInterfaceDensity] = useState('comfortable') 
+  // Appearance
+  const [colorTheme, setColorTheme] = useState('light')
+  const [interfaceDensity, setInterfaceDensity] = useState('comfortable')
+
+  // Password modal
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordSaving, setPasswordSaving] = useState(false)
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type })
+    setTimeout(() => setToast(null), 3200)
+  }
+
+  const applySettings = (d) => {
+    if (!d) return
+    setPlatformName(d.platformName ?? '')
+    setOperatingHours(d.operatingHours ?? '')
+    setRideRadius(d.rideRadius ?? '')
+    setEnableRideNotifications(d.enableRideNotifications !== false)
+    setTwoFactorAuth(!!d.twoFactorAuth)
+    setSessionTimeout(d.sessionTimeout ?? '')
+    setDriverVerificationAlerts(d.driverVerificationAlerts !== false)
+    setRideActivityAlerts(d.rideActivityAlerts !== false)
+    setRiderActivityAlerts(!!d.riderActivityAlerts)
+    setSystemMaintenanceAlerts(d.systemMaintenanceAlerts !== false)
+    setColorTheme(d.colorTheme || 'light')
+    setInterfaceDensity(d.interfaceDensity || 'comfortable')
+  }
 
   const fetchGlobalSettings = async () => {
     try {
       setLoading(true)
       const res = await api.get('/admin/settings')
       if (res.data?.success && res.data?.data) {
-        const d = res.data.data
-        setPlatformName(d.platformName || 'CampusRide Admin Portal')
-        setOperatingHours(d.operatingHours || '06:00 AM - 11:59 PM')
-        setRideRadius(d.rideRadius || '5 Miles')
-        setEnableRideNotifications(d.enableRideNotifications !== false)
-        setTwoFactorAuth(!!d.twoFactorAuth)
-        setSessionTimeout(d.sessionTimeout || '30 Minutes of inactivity')
-        setDriverVerificationAlerts(d.driverVerificationAlerts !== false)
-        setRideActivityAlerts(d.rideActivityAlerts !== false)
-        setRiderActivityAlerts(!!d.riderActivityAlerts)
-        setSystemMaintenanceAlerts(d.systemMaintenanceAlerts !== false)
-        setColorTheme(d.colorTheme || 'light')
-        setInterfaceDensity(d.interfaceDensity || 'comfortable')
+        applySettings(res.data.data)
       }
     } catch (err) {
-      console.error("Failed downloading master architecture settings profile:", err)
+      console.error('Failed to load settings:', err)
+      showToast('Failed to load settings', 'error')
     } finally {
       setLoading(false)
     }
@@ -66,7 +87,7 @@ export default function SettingsScreen({ onLogout }) {
 
   const handleSaveChanges = async () => {
     try {
-      setLoading(true)
+      setSaving(true)
       const payload = {
         platformName,
         operatingHours,
@@ -81,659 +102,876 @@ export default function SettingsScreen({ onLogout }) {
         colorTheme,
         interfaceDensity
       }
-      
+
       const res = await api.put('/admin/settings', payload)
       if (res.data?.success) {
-        alert("Global platform parameter modifications applied successfully.")
+        showToast('Settings saved successfully')
+      } else {
+        showToast(res.data?.message || 'Failed to save settings', 'error')
       }
     } catch (err) {
-      console.error("Failed persisting system parameters payload:", err)
-      alert("Error persisting database configurations row parameter validations.")
+      console.error('Failed to save settings:', err)
+      showToast('Failed to save settings', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleResetPreferences = async () => {
+    const ok = window.confirm(
+      'Reset all preferences to the values stored on the server? Unsaved changes will be lost.'
+    )
+    if (!ok) return
+
+    try {
+      setLoading(true)
+      const res = await api.get('/admin/settings')
+      if (res.data?.success && res.data?.data) {
+        applySettings(res.data.data)
+        showToast('Preferences reset from server')
+      }
+    } catch (err) {
+      console.error('Failed to reset preferences:', err)
+      showToast('Failed to reset preferences', 'error')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleImmediateLogout = () => {
-    if (!window.confirm("Are you sure you want to end your session and log out of the CampusRide Admin Portal?")) return
-    
-    // Clear tokens and credentials storage state
+  const handleChangePassword = async (e) => {
+    e.preventDefault()
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      showToast('Please fill in all password fields', 'error')
+      return
+    }
+    if (newPassword.length < 8) {
+      showToast('New password must be at least 8 characters', 'error')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      showToast('New passwords do not match', 'error')
+      return
+    }
+
+    try {
+      setPasswordSaving(true)
+      const res = await api.put('/admin/settings/password', {
+        currentPassword,
+        newPassword
+      })
+      if (res.data?.success) {
+        showToast('Password updated successfully')
+        setPasswordModalOpen(false)
+        setCurrentPassword('')
+        setNewPassword('')
+        setConfirmPassword('')
+      } else {
+        showToast(res.data?.message || 'Failed to update password', 'error')
+      }
+    } catch (err) {
+      console.error('Password update failed:', err)
+      const msg = err.response?.data?.message || 'Failed to update password'
+      showToast(msg, 'error')
+    } finally {
+      setPasswordSaving(false)
+    }
+  }
+
+  const handleLogout = () => {
+    const ok = window.confirm('End your admin session and log out?')
+    if (!ok) return
+    localStorage.removeItem('adminToken')
     localStorage.removeItem('token')
     onLogout?.()
   }
 
-  return (
-    <div style={seStyles.workspaceWrapperContainer}>
+  if (loading && !platformName && !operatingHours) {
+    return (
+      <div style={s.loadingWrapper}>
+        <span style={s.loadingText}>Loading settings...</span>
+      </div>
+    )
+  }
 
-      {/* HEADER SECTION METADATA */}
-      <div style={seStyles.screenHeaderRow}>
-        <h2 style={seStyles.screenTitleMainText}>Portal Settings</h2>
-        <p style={seStyles.screenSubtitleSupportingText}>
-          Manage global system preferences, environment operational variables, network security rules, and interface presentation profiles.
-        </p>
+  return (
+    <div style={s.container}>
+      {toast && (
+        <div style={{
+          ...s.toast,
+          backgroundColor: toast.type === 'error' ? '#FEF2F2' : '#ECFDF5',
+          borderColor: toast.type === 'error' ? '#FECACA' : '#A7F3D0',
+          color: toast.type === 'error' ? '#B91C1C' : '#065F46'
+        }}>
+          <CheckCircle2 size={16} />
+          {toast.message}
+        </div>
+      )}
+
+      {/* HEADER */}
+      <div style={s.header}>
+        <div>
+          <h1 style={s.title}>Settings</h1>
+          <p style={s.subtitle}>
+            Manage system preferences, security, notifications, and appearance
+          </p>
+        </div>
       </div>
 
-      {/* TWO-COLUMN CONFIGURATION CANVAS GRID */}
-      <div style={seStyles.splitContentRowCanvas}>
-
-        {/* LEFT COLUMN: PRIMARY PLATFORM OPERATIONS */}
-        <div style={seStyles.leftWorkspaceMainColumn}>
-
-          {/* SYSTEM PREFERENCES WIDGET CARD */}
-          <div style={seStyles.configCardPanel}>
-            <div style={seStyles.cardHeaderRow}>
-              <Settings size={16} color="#1E3A8A" />
-              <h3 style={seStyles.cardBlockTitle}>System Preferences</h3>
+      {/* MAIN GRID */}
+      <div style={s.mainRow}>
+        {/* LEFT */}
+        <div style={s.leftCol}>
+          {/* System Preferences */}
+          <div style={s.card}>
+            <div style={s.cardHeader}>
+              <Settings size={16} color="#2563EB" />
+              <h3 style={s.cardTitle}>System Preferences</h3>
             </div>
 
-            <div style={seStyles.formFieldGroupStack}>
-              <div style={seStyles.inputUnitBlock}>
-                <label style={seStyles.inputLabelFieldTitle}>Platform Name</label>
-                <input 
-                  type="text" 
-                  value={platformName} 
-                  onChange={(e) => setPlatformName(e.target.value)} 
-                  style={seStyles.standardTextInputField} 
+            <div style={s.fieldStack}>
+              <div style={s.field}>
+                <label style={s.label}>Platform Name</label>
+                <input
+                  type="text"
+                  value={platformName}
+                  onChange={(e) => setPlatformName(e.target.value)}
+                  style={s.input}
+                  placeholder="CampusRide Admin"
                 />
               </div>
 
-              <div style={seStyles.formInlineDoubleRow}>
-                <div style={seStyles.inputUnitBlock}>
-                  <label style={seStyles.inputLabelFieldTitle}>Campus Operating Hours</label>
-                  <div style={seStyles.selectDropdownInteractiveAnchor}>
-                    <select 
-                      value={operatingHours} 
-                      onChange={(e) => setOperatingHours(e.target.value)} 
-                      style={seStyles.hiddenNativeSelectInput}
+              <div style={s.fieldRow}>
+                <div style={s.field}>
+                  <label style={s.label}>Operating Hours</label>
+                  <div style={s.selectWrap}>
+                    <select
+                      value={operatingHours}
+                      onChange={(e) => setOperatingHours(e.target.value)}
+                      style={s.select}
                     >
-                      <option value="06:00 AM - 11:59 PM">06:00 AM - 11:59 PM</option>
-                      <option value="24 Hours Open">24 Hours Open</option>
+                      <option value="">Select hours</option>
+                      <option value="06:00 AM - 11:59 PM">06:00 AM – 11:59 PM</option>
+                      <option value="24 Hours Open">24 Hours</option>
                     </select>
-                    <ChevronDown size={14} color="#94A3B8" style={seStyles.dropdownOverlayIconChevron} />
+                    <ChevronDown size={14} color="#94A3B8" style={s.chevron} />
                   </div>
                 </div>
 
-                <div style={seStyles.inputUnitBlock}>
-                  <label style={seStyles.inputLabelFieldTitle}>Default Dispatch Search Radius</label>
-                  <div style={seStyles.selectDropdownInteractiveAnchor}>
-                    <select 
-                      value={rideRadius} 
-                      onChange={(e) => setRideRadius(e.target.value)} 
-                      style={seStyles.hiddenNativeSelectInput}
+                <div style={s.field}>
+                  <label style={s.label}>Dispatch Search Radius</label>
+                  <div style={s.selectWrap}>
+                    <select
+                      value={rideRadius}
+                      onChange={(e) => setRideRadius(e.target.value)}
+                      style={s.select}
                     >
+                      <option value="">Select radius</option>
                       <option value="3 Miles">3 Miles</option>
                       <option value="5 Miles">5 Miles</option>
                       <option value="10 Miles">10 Miles</option>
                     </select>
-                    <ChevronDown size={14} color="#94A3B8" style={seStyles.dropdownOverlayIconChevron} />
+                    <ChevronDown size={14} color="#94A3B8" style={s.chevron} />
                   </div>
                 </div>
               </div>
 
-              <div style={seStyles.interactiveToggleRowStrip}>
-                <div style={seStyles.toggleTextStackedGroup}>
-                  <span style={seStyles.togglePrimaryTitleText}>Enable Global Dispatch Notifications</span>
-                  <span style={seStyles.toggleSecondarySubtitleText}>Broadcast real-time dispatch matching updates to systemic administrator streams.</span>
+              <div style={s.toggleRow}>
+                <div>
+                  <span style={s.toggleTitle}>Global Dispatch Notifications</span>
+                  <span style={s.toggleSub}>
+                    Send real-time matching updates to admins
+                  </span>
                 </div>
-                <button 
-                  onClick={() => setEnableRideNotifications(!enableRideNotifications)} 
-                  style={{ ...seStyles.toggleTrackBaseSwitch, backgroundColor: enableRideNotifications ? '#1E3A8A' : '#E2E8F0' }}
+                <button
+                  type="button"
+                  onClick={() => setEnableRideNotifications(!enableRideNotifications)}
+                  style={{
+                    ...s.toggle,
+                    backgroundColor: enableRideNotifications ? '#2563EB' : '#E2E8F0'
+                  }}
                 >
-                  <div style={{ ...seStyles.toggleInnerKnobNodeCircle, transform: enableRideNotifications ? 'translateX(20px)' : 'translateX(2px)' }} />
+                  <div style={{
+                    ...s.toggleKnob,
+                    transform: enableRideNotifications ? 'translateX(20px)' : 'translateX(2px)'
+                  }} />
                 </button>
               </div>
             </div>
           </div>
 
-          {/* SECURITY SETTINGS WIDGET CARD */}
-          <div style={seStyles.configCardPanel}>
-            <div style={seStyles.cardHeaderRow}>
-              <Shield size={16} color="#1E3A8A" />
-              <h3 style={seStyles.cardBlockTitle}>Security Settings</h3>
+          {/* Security */}
+          <div style={s.card}>
+            <div style={s.cardHeader}>
+              <Shield size={16} color="#2563EB" />
+              <h3 style={s.cardTitle}>Security</h3>
             </div>
 
-            <div style={seStyles.formFieldGroupStack}>
-              <div style={seStyles.interactiveToggleRowStrip}>
-                <div style={seStyles.toggleTextStackedGroup}>
-                  <span style={seStyles.togglePrimaryTitleText}>Change Administrative Credential Password</span>
-                  <span style={seStyles.toggleSecondarySubtitleText}>Last updated 45 days ago. Periodic token cycle resets recommended.</span>
+            <div style={s.fieldStack}>
+              <div style={s.toggleRow}>
+                <div>
+                  <span style={s.toggleTitle}>Change Password</span>
+                  <span style={s.toggleSub}>Update your admin account password</span>
                 </div>
-                <button style={seStyles.inlineActionTriggerButton}>Update</button>
-              </div>
-
-              <div style={seStyles.interactiveToggleRowStrip}>
-                <div style={seStyles.toggleTextStackedGroup}>
-                  <span style={seStyles.togglePrimaryTitleText}>Enforce Two-Factor Authentication (MFA)</span>
-                  <span style={seStyles.toggleSecondarySubtitleText}>Mandate explicit device code validation profiles upon active admin portal logins.</span>
-                </div>
-                <button 
-                  onClick={() => setTwoFactorAuth(!twoFactorAuth)} 
-                  style={{ ...seStyles.toggleTrackBaseSwitch, backgroundColor: twoFactorAuth ? '#1E3A8A' : '#E2E8F0' }}
+                <button
+                  type="button"
+                  style={s.inlineBtn}
+                  onClick={() => setPasswordModalOpen(true)}
                 >
-                  <div style={{ ...seStyles.toggleInnerKnobNodeCircle, transform: twoFactorAuth ? 'translateX(20px)' : 'translateX(2px)' }} />
+                  <KeyRound size={13} />
+                  Update
                 </button>
               </div>
 
-              <div style={seStyles.inputUnitBlock}>
-                <label style={seStyles.inputLabelFieldTitle}>Session Inactivity Timeout Window</label>
-                <div style={seStyles.selectDropdownInteractiveAnchor}>
-                  <select 
-                    value={sessionTimeout} 
-                    onChange={(e) => setSessionTimeout(e.target.value)} 
-                    style={seStyles.hiddenNativeSelectInput}
+              <div style={s.toggleRow}>
+                <div>
+                  <span style={s.toggleTitle}>Two-Factor Authentication</span>
+                  <span style={s.toggleSub}>
+                    Require a verification code on login
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setTwoFactorAuth(!twoFactorAuth)}
+                  style={{
+                    ...s.toggle,
+                    backgroundColor: twoFactorAuth ? '#2563EB' : '#E2E8F0'
+                  }}
+                >
+                  <div style={{
+                    ...s.toggleKnob,
+                    transform: twoFactorAuth ? 'translateX(20px)' : 'translateX(2px)'
+                  }} />
+                </button>
+              </div>
+
+              <div style={s.field}>
+                <label style={s.label}>Session Timeout</label>
+                <div style={s.selectWrap}>
+                  <select
+                    value={sessionTimeout}
+                    onChange={(e) => setSessionTimeout(e.target.value)}
+                    style={s.select}
                   >
-                    <option value="15 Minutes of inactivity">15 Minutes of inactivity</option>
-                    <option value="30 Minutes of inactivity">30 Minutes of inactivity</option>
-                    <option value="60 Minutes of inactivity">60 Minutes of inactivity</option>
+                    <option value="">Select timeout</option>
+                    <option value="15 Minutes of inactivity">15 minutes</option>
+                    <option value="30 Minutes of inactivity">30 minutes</option>
+                    <option value="60 Minutes of inactivity">60 minutes</option>
                   </select>
-                  <ChevronDown size={14} color="#94A3B8" style={seStyles.dropdownOverlayIconChevron} />
+                  <ChevronDown size={14} color="#94A3B8" style={s.chevron} />
                 </div>
               </div>
             </div>
           </div>
-
         </div>
 
-        {/* RIGHT COLUMN: WEBHOOK & VISUAL PRESENTATION RULES */}
-        <div style={seStyles.rightWorkspaceSidebarPanel}>
-
-          {/* NOTIFICATION PREFERENCES */}
-          <div style={seStyles.configCardPanel}>
-            <div style={seStyles.cardHeaderRow}>
-              <Bell size={16} color="#1E3A8A" />
-              <h3 style={seStyles.cardBlockTitle}>Notification Preferences</h3>
+        {/* RIGHT */}
+        <div style={s.rightCol}>
+          {/* Notifications */}
+          <div style={s.card}>
+            <div style={s.cardHeader}>
+              <Bell size={16} color="#2563EB" />
+              <h3 style={s.cardTitle}>Notification Preferences</h3>
             </div>
 
-            <div style={seStyles.verticalTogglesStackContainer}>
-              <div style={seStyles.compactToggleInlineRow}>
-                <span style={seStyles.compactToggleTitleLabelText}>Driver Verification Alerts</span>
-                <button 
-                  onClick={() => setDriverVerificationAlerts(!driverVerificationAlerts)} 
-                  style={{ ...seStyles.toggleTrackBaseSwitchCompact, backgroundColor: driverVerificationAlerts ? '#1E3A8A' : '#E2E8F0' }}
-                >
-                  <div style={{ ...seStyles.toggleInnerKnobNodeCircleCompact, transform: driverVerificationAlerts ? 'translateX(14px)' : 'translateX(2px)' }} />
-                </button>
-              </div>
-
-              <div style={seStyles.compactToggleInlineRow}>
-                <span style={seStyles.compactToggleTitleLabelText}>Ride Activity Alerts</span>
-                <button 
-                  onClick={() => setRideActivityAlerts(!rideActivityAlerts)} 
-                  style={{ ...seStyles.toggleTrackBaseSwitchCompact, backgroundColor: rideActivityAlerts ? '#1E3A8A' : '#E2E8F0' }}
-                >
-                  <div style={{ ...seStyles.toggleInnerKnobNodeCircleCompact, transform: rideActivityAlerts ? 'translateX(14px)' : 'translateX(2px)' }} />
-                </button>
-              </div>
-
-              <div style={seStyles.compactToggleInlineRow}>
-                <span style={seStyles.compactToggleTitleLabelText}>Rider Account Alerts</span>
-                <button 
-                  onClick={() => setRiderActivityAlerts(!riderActivityAlerts)} 
-                  style={{ ...seStyles.toggleTrackBaseSwitchCompact, backgroundColor: riderActivityAlerts ? '#1E3A8A' : '#E2E8F0' }}
-                >
-                  <div style={{ ...seStyles.toggleInnerKnobNodeCircleCompact, transform: riderActivityAlerts ? 'translateX(14px)' : 'translateX(2px)' }} />
-                </button>
-              </div>
-
-              <div style={seStyles.compactToggleInlineRow}>
-                <span style={seStyles.compactToggleTitleLabelText}>System Maintenance Alerts</span>
-                <button 
-                  onClick={() => setSystemMaintenanceAlerts(!systemMaintenanceAlerts)} 
-                  style={{ ...seStyles.toggleTrackBaseSwitchCompact, backgroundColor: systemMaintenanceAlerts ? '#1E3A8A' : '#E2E8F0' }}
-                >
-                  <div style={{ ...seStyles.toggleInnerKnobNodeCircleCompact, transform: systemMaintenanceAlerts ? 'translateX(14px)' : 'translateX(2px)' }} />
-                </button>
-              </div>
+            <div style={s.compactStack}>
+              {[
+                { label: 'Driver Verification Alerts', value: driverVerificationAlerts, set: setDriverVerificationAlerts },
+                { label: 'Ride Activity Alerts', value: rideActivityAlerts, set: setRideActivityAlerts },
+                { label: 'Rider Account Alerts', value: riderActivityAlerts, set: setRiderActivityAlerts },
+                { label: 'System Maintenance Alerts', value: systemMaintenanceAlerts, set: setSystemMaintenanceAlerts }
+              ].map((item) => (
+                <div key={item.label} style={s.compactRow}>
+                  <span style={s.compactLabel}>{item.label}</span>
+                  <button
+                    type="button"
+                    onClick={() => item.set(!item.value)}
+                    style={{
+                      ...s.toggleSm,
+                      backgroundColor: item.value ? '#2563EB' : '#E2E8F0'
+                    }}
+                  >
+                    <div style={{
+                      ...s.toggleKnobSm,
+                      transform: item.value ? 'translateX(14px)' : 'translateX(2px)'
+                    }} />
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
 
-          {/* VISUAL APPEARANCE DESIGN SYSTEM */}
-          <div style={seStyles.configCardPanel}>
-            <div style={seStyles.cardHeaderRow}>
-              <Palette size={16} color="#1E3A8A" />
-              <h3 style={seStyles.cardBlockTitle}>Appearance</h3>
+          {/* Appearance */}
+          <div style={s.card}>
+            <div style={s.cardHeader}>
+              <Palette size={16} color="#2563EB" />
+              <h3 style={s.cardTitle}>Appearance</h3>
             </div>
 
-            <div style={seStyles.verticalTogglesStackContainer}>
-              <div style={seStyles.radioControlGroupBlock}>
-                <span style={seStyles.compactToggleTitleLabelText}>Color Theme</span>
-                <div style={seStyles.segmentedControlTrackWrapperFrame}>
-                  <button 
-                    onClick={() => setColorTheme('light')} 
-                    style={{ ...seStyles.segmentOptionTriggerButton, backgroundColor: colorTheme === 'light' ? '#ffffff' : 'transparent', fontWeight: colorTheme === 'light' ? 800 : 500, color: colorTheme === 'light' ? '#1E3A8A' : '#64748B', boxShadow: colorTheme === 'light' ? '0 1px 3px rgba(0,0,0,0.05)' : 'none' }}
-                  >
-                    Light
-                  </button>
-                  <button 
-                    onClick={() => setColorTheme('dark')} 
-                    style={{ ...seStyles.segmentOptionTriggerButton, backgroundColor: colorTheme === 'dark' ? '#ffffff' : 'transparent', fontWeight: colorTheme === 'dark' ? 800 : 500, color: colorTheme === 'dark' ? '#1E3A8A' : '#64748B', boxShadow: colorTheme === 'dark' ? '0 1px 3px rgba(0,0,0,0.05)' : 'none' }}
-                  >
-                    Dark
-                  </button>
+            <div style={s.compactStack}>
+              <div style={s.segmentGroup}>
+                <span style={s.compactLabel}>Color Theme</span>
+                <div style={s.segmentTrack}>
+                  {['light', 'dark'].map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setColorTheme(t)}
+                      style={{
+                        ...s.segmentBtn,
+                        backgroundColor: colorTheme === t ? '#fff' : 'transparent',
+                        color: colorTheme === t ? '#0F172A' : '#64748B',
+                        fontWeight: colorTheme === t ? 700 : 500,
+                        boxShadow: colorTheme === t ? '0 1px 3px rgba(15,23,42,0.08)' : 'none'
+                      }}
+                    >
+                      {t === 'light' ? 'Light' : 'Dark'}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              <div style={seStyles.radioControlGroupBlock}>
-                <span style={seStyles.compactToggleTitleLabelText}>Interface Density</span>
-                <div style={seStyles.segmentedControlTrackWrapperFrame}>
-                  <button 
-                    onClick={() => setInterfaceDensity('comfortable')} 
-                    style={{ ...seStyles.segmentOptionTriggerButton, backgroundColor: interfaceDensity === 'comfortable' ? '#ffffff' : 'transparent', fontWeight: interfaceDensity === 'comfortable' ? 800 : 500, color: interfaceDensity === 'comfortable' ? '#1E3A8A' : '#64748B', boxShadow: interfaceDensity === 'comfortable' ? '0 1px 3px rgba(0,0,0,0.05)' : 'none' }}
-                  >
-                    Comfortable
-                  </button>
-                  <button 
-                    onClick={() => setInterfaceDensity('compact')} 
-                    style={{ ...seStyles.segmentOptionTriggerButton, backgroundColor: interfaceDensity === 'compact' ? '#ffffff' : 'transparent', fontWeight: interfaceDensity === 'compact' ? 800 : 500, color: interfaceDensity === 'compact' ? '#1E3A8A' : '#64748B', boxShadow: interfaceDensity === 'compact' ? '0 1px 3px rgba(0,0,0,0.05)' : 'none' }}
-                  >
-                    Compact
-                  </button>
+              <div style={s.segmentGroup}>
+                <span style={s.compactLabel}>Interface Density</span>
+                <div style={s.segmentTrack}>
+                  {['comfortable', 'compact'].map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setInterfaceDensity(d)}
+                      style={{
+                        ...s.segmentBtn,
+                        backgroundColor: interfaceDensity === d ? '#fff' : 'transparent',
+                        color: interfaceDensity === d ? '#0F172A' : '#64748B',
+                        fontWeight: interfaceDensity === d ? 700 : 500,
+                        boxShadow: interfaceDensity === d ? '0 1px 3px rgba(15,23,42,0.08)' : 'none'
+                      }}
+                    >
+                      {d === 'comfortable' ? 'Comfortable' : 'Compact'}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
           </div>
-
         </div>
-
       </div>
 
-      {/* 3. LOWER DESTRUCTIVE SECTION CRITICAL FIELD (DANGER ZONE) */}
-      <div style={seStyles.destructiveDangerZoneWrapperCardContainer}>
-        <div style={seStyles.dangerCardLeftContentMetadataStack}>
-          <div style={seStyles.cardHeaderRow}>
-            <AlertTriangle size={14} color="#991B1B" />
-            <h4 style={seStyles.dangerHeadingTitleSectionLabelText}>Danger Zone Actions</h4>
+      {/* DANGER ZONE */}
+      <div style={s.dangerCard}>
+        <div>
+          <div style={s.dangerHeader}>
+            <AlertTriangle size={14} color="#BE123C" />
+            <h4 style={s.dangerTitle}>Danger Zone</h4>
           </div>
-          <p style={seStyles.dangerParagraphSupportingExplanationBodyText}>Irreversible global infrastructure data actions. Exercising caution remains strongly advised profile wide.</p>
+          <p style={s.dangerText}>
+            Session and preference actions that cannot be undone from this screen.
+          </p>
         </div>
-
-        <div style={seStyles.dangerButtonsClusterRowAlignContainer}>
-          <button style={seStyles.dangerPrimaryActionButtonMarkup} onClick={handleImmediateLogout}>
-            <LogOut size={12} /> Exit Portal Session
+        <div style={s.dangerActions}>
+          <button type="button" style={s.dangerPrimary} onClick={handleLogout}>
+            <LogOut size={13} />
+            Log Out
           </button>
-          <button style={seStyles.dangerSecondaryActionButtonMarkup}>Reset System Preferences</button>
+          <button type="button" style={s.dangerSecondary} onClick={handleResetPreferences}>
+            Reset Preferences
+          </button>
         </div>
       </div>
 
-      {/* MASTER SAVE CHANGE FOOTER TOOLBAR */}
-      <div style={seStyles.masterActionToolbarFooterRowBase}>
-        <button onClick={handleSaveChanges} disabled={loading} style={seStyles.masterSaveActionButtonMarkup}>
-          {loading ? 'Saving...' : 'Save Changes'}
+      {/* FOOTER */}
+      <div style={s.footer}>
+        <button type="button" style={s.cancelBtn} onClick={fetchGlobalSettings}>
+          Cancel
         </button>
-        <button onClick={fetchGlobalSettings} style={seStyles.masterCancelActionButtonMarkup}>Cancel</button>
+        <button
+          type="button"
+          style={s.saveBtn}
+          onClick={handleSaveChanges}
+          disabled={saving}
+        >
+          {saving ? 'Saving…' : 'Save Changes'}
+        </button>
       </div>
 
+      {/* PASSWORD MODAL */}
+      {passwordModalOpen && (
+        <div style={s.modalOverlay}>
+          <div style={s.modal}>
+            <div style={s.modalHeader}>
+              <div style={s.cardHeader}>
+                <KeyRound size={16} color="#2563EB" />
+                <h3 style={s.modalTitle}>Change Password</h3>
+              </div>
+              <button type="button" style={s.modalClose} onClick={() => setPasswordModalOpen(false)}>
+                <X size={16} color="#64748B" />
+              </button>
+            </div>
+
+            <form onSubmit={handleChangePassword} style={s.modalForm}>
+              <div style={s.field}>
+                <label style={s.label}>Current Password</label>
+                <input
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  style={s.input}
+                  required
+                  autoComplete="current-password"
+                />
+              </div>
+              <div style={s.field}>
+                <label style={s.label}>New Password</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  style={s.input}
+                  required
+                  minLength={8}
+                  autoComplete="new-password"
+                />
+              </div>
+              <div style={s.field}>
+                <label style={s.label}>Confirm New Password</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  style={s.input}
+                  required
+                  minLength={8}
+                  autoComplete="new-password"
+                />
+              </div>
+
+              <div style={s.modalFooter}>
+                <button
+                  type="button"
+                  style={s.cancelBtn}
+                  onClick={() => setPasswordModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button type="submit" style={s.saveBtn} disabled={passwordSaving}>
+                  {passwordSaving ? 'Updating…' : 'Update Password'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-const seStyles = {
-  workspaceWrapperContainer: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: '24px', 
-    width: '100%', 
-    boxSizing: 'border-box' 
+const s = {
+  container: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 24,
+    width: '100%',
+    boxSizing: 'border-box',
+    fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
+    position: 'relative'
   },
-  screenHeaderRow: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: '6px', 
-    textAlign: 'left', 
-    marginBottom: '4px' 
+  loadingWrapper: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '70vh'
   },
-  screenTitleMainText: { 
-    fontSize: '22px', 
-    fontWeight: 800, 
-    color: '#1E3A8A', 
-    margin: 0 
+  loadingText: {
+    fontSize: 14,
+    color: '#1E40AF',
+    fontWeight: 600
   },
-  screenSubtitleSupportingText: { 
-    fontSize: '13px', 
-    color: '#64748B', 
-    fontWeight: 500, 
-    margin: 0, 
-    lineHeight: '1.4' 
+  toast: {
+    position: 'fixed',
+    top: 20,
+    right: 20,
+    zIndex: 10000,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '12px 16px',
+    borderRadius: 10,
+    border: '1px solid',
+    fontSize: 13,
+    fontWeight: 600,
+    boxShadow: '0 8px 24px rgba(15,23,42,0.12)'
   },
-  splitContentRowCanvas: { 
-    display: 'flex', 
-    gap: '32px', 
-    width: '100%', 
-    boxSizing: 'border-box', 
-    alignItems: 'stretch' 
+  header: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 4
   },
-  leftWorkspaceMainColumn: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    flex: 2.2, 
-    gap: '24px', 
-    boxSizing: 'border-box' 
+  title: {
+    margin: 0,
+    fontSize: 22,
+    fontWeight: 800,
+    color: '#0F172A',
+    letterSpacing: '-0.3px'
   },
-  rightWorkspaceSidebarPanel: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: '24px', 
-    flex: 1.2, 
-    minWidth: '340px', 
-    boxSizing: 'border-box' 
+  subtitle: {
+    margin: 0,
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: 500
   },
-  configCardPanel: { 
-    backgroundColor: '#ffffff', 
-    borderRadius: '16px', 
-    border: '1px solid #E2E8F0', 
-    padding: '24px', 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: '20px', 
-    boxSizing: 'border-box' 
+  mainRow: {
+    display: 'flex',
+    gap: 20,
+    alignItems: 'stretch'
   },
-  cardHeaderRow: { 
-    display: 'flex', 
-    alignItems: 'center', 
-    gap: '10px', 
-    width: '100%' 
+  leftCol: {
+    flex: 2.2,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 20
   },
-  cardBlockTitle: { 
-    fontSize: '14px', 
-    fontWeight: 800, 
-    color: '#1E3A8A', 
-    margin: 0, 
-    textTransform: 'uppercase', 
-    letterSpacing: '0.4px', 
-    textAlign: 'left' 
+  rightCol: {
+    flex: 1.2,
+    minWidth: 300,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 20
   },
-  formFieldGroupStack: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: '18px', 
-    width: '100%' 
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    border: '1px solid #E2E8F0',
+    padding: 22,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 18,
+    boxShadow: '0 1px 3px rgba(15,23,42,0.04)'
   },
-  inputUnitBlock: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: '6px', 
-    width: '100%', 
-    textAlign: 'left' 
+  cardHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8
   },
-  inputLabelFieldTitle: { 
-    fontSize: '11px', 
-    fontWeight: 700, 
-    color: '#64748B', 
-    textTransform: 'uppercase', 
-    letterSpacing: '0.3px' 
+  cardTitle: {
+    margin: 0,
+    fontSize: 13,
+    fontWeight: 700,
+    color: '#0F172A',
+    textTransform: 'uppercase',
+    letterSpacing: '0.3px'
   },
-  standardTextInputField: { 
-    width: '100%', 
-    boxSizing: 'border-box', 
-    backgroundColor: '#F8FAFC', 
-    border: '1px solid #E2E8F0', 
-    borderRadius: '10px', 
-    padding: '10px 14px', 
-    fontSize: '13px', 
-    color: '#334155', 
-    fontWeight: 600, 
-    outline: 'none' 
+  fieldStack: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 16
   },
-  formInlineDoubleRow: { 
-    display: 'flex', 
-    gap: '16px', 
-    width: '100%' 
+  field: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 6,
+    flex: 1
   },
-  selectDropdownInteractiveAnchor: { 
-    position: 'relative', 
-    width: '100%', 
-    display: 'flex', 
-    alignItems: 'center' 
+  fieldRow: {
+    display: 'flex',
+    gap: 12
   },
-  hiddenNativeSelectInput: { 
-    width: '100%', 
-    boxSizing: 'border-box', 
-    backgroundColor: '#F8FAFC', 
-    border: '1px solid #E2E8F0', 
-    borderRadius: '10px', 
-    padding: '10px 36px 10px 14px', 
-    fontSize: '13px', 
-    color: '#334155', 
-    fontWeight: 600, 
-    outline: 'none', 
-    appearance: 'none', 
-    WebkitAppearance: 'none', 
-    cursor: 'pointer' 
+  label: {
+    fontSize: 11,
+    fontWeight: 600,
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: '0.3px'
   },
-  dropdownOverlayIconChevron: { 
-    position: 'absolute', 
-    right: '14px', 
-    pointerEvents: 'none' 
+  input: {
+    width: '100%',
+    boxSizing: 'border-box',
+    backgroundColor: '#F8FAFC',
+    border: '1px solid #E2E8F0',
+    borderRadius: 10,
+    padding: '10px 12px',
+    fontSize: 13,
+    color: '#0F172A',
+    fontWeight: 500,
+    outline: 'none'
   },
-  interactiveToggleRowStrip: { 
-    display: 'flex', 
-    alignItems: 'center', 
-    justifyContent: 'space-between', 
-    gap: '24px', 
-    padding: '14px', 
-    border: '1px solid #F1F5F9', 
-    borderRadius: '12px', 
-    backgroundColor: '#FAFCFF', 
-    width: '100%', 
-    boxSizing: 'border-box' 
+  selectWrap: {
+    position: 'relative',
+    width: '100%'
   },
-  toggleTextStackedGroup: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: '3px', 
-    textAlign: 'left' 
+  select: {
+    width: '100%',
+    boxSizing: 'border-box',
+    backgroundColor: '#F8FAFC',
+    border: '1px solid #E2E8F0',
+    borderRadius: 10,
+    padding: '10px 36px 10px 12px',
+    fontSize: 13,
+    color: '#0F172A',
+    fontWeight: 500,
+    outline: 'none',
+    appearance: 'none',
+    WebkitAppearance: 'none',
+    cursor: 'pointer'
   },
-  togglePrimaryTitleText: { 
-    fontSize: '13px', 
-    fontWeight: 700, 
-    color: '#1E293B' 
+  chevron: {
+    position: 'absolute',
+    right: 12,
+    top: '50%',
+    transform: 'translateY(-50%)',
+    pointerEvents: 'none'
   },
-  toggleSecondarySubtitleText: { 
-    fontSize: '11px', 
-    color: '#64748B', 
-    lineHeight: '1.4', 
-    fontWeight: 500 
+  toggleRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 16,
+    padding: 14,
+    border: '1px solid #F1F5F9',
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC'
   },
-  toggleTrackBaseSwitch: { 
-    width: '42px', 
-    height: '22px', 
-    borderRadius: '50px', 
-    border: 'none', 
-    cursor: 'pointer', 
-    display: 'flex', 
-    alignItems: 'center', 
-    padding: 0, 
-    transition: 'background-color 0.15s ease', 
-    outline: 'none' 
+  toggleTitle: {
+    display: 'block',
+    fontSize: 13,
+    fontWeight: 600,
+    color: '#0F172A'
   },
-  toggleInnerKnobNodeCircle: { 
-    width: '18px', 
-    height: '18px', 
-    borderRadius: '50%', 
-    backgroundColor: '#ffffff', 
-    boxShadow: '0 1px 2px rgba(0,0,0,0.1)', 
-    transition: 'transform 0.15s ease' 
+  toggleSub: {
+    display: 'block',
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+    lineHeight: 1.4
   },
-  inlineActionTriggerButton: { 
-    backgroundColor: '#F1F5F9', 
-    color: '#475569', 
-    border: 'none', 
-    borderRadius: '8px', 
-    padding: '8px 16px', 
-    fontSize: '12px', 
-    fontWeight: 700, 
-    cursor: 'pointer', 
-    outline: 'none' 
+  toggle: {
+    width: 42,
+    height: 22,
+    borderRadius: 50,
+    border: 'none',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    padding: 0,
+    flexShrink: 0
   },
-  verticalTogglesStackContainer: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: '14px', 
-    width: '100%' 
+  toggleKnob: {
+    width: 18,
+    height: 18,
+    borderRadius: '50%',
+    backgroundColor: '#fff',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
+    transition: 'transform 0.15s ease'
   },
-  compactToggleInlineRow: { 
-    display: 'flex', 
-    alignItems: 'center', 
-    justifyContent: 'space-between', 
-    gap: '16px', 
-    padding: '12px 14px', 
-    border: '1px solid #F8FAFC', 
-    borderRadius: '10px', 
-    backgroundColor: '#FAFCFF', 
-    textAlign: 'left' 
+  toggleSm: {
+    width: 34,
+    height: 18,
+    borderRadius: 50,
+    border: 'none',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    padding: 0,
+    flexShrink: 0
   },
-  compactToggleTitleLabelText: { 
-    fontSize: '12px', 
-    fontWeight: 700, 
-    color: '#334155' 
+  toggleKnobSm: {
+    width: 14,
+    height: 14,
+    borderRadius: '50%',
+    backgroundColor: '#fff',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
+    transition: 'transform 0.15s ease'
   },
-  toggleTrackBaseSwitchCompact: { 
-    width: '34px', 
-    height: '18px', 
-    borderRadius: '50px', 
-    border: 'none', 
-    cursor: 'pointer', 
-    display: 'flex', 
-    alignItems: 'center', 
-    padding: 0, 
-    transition: 'background-color 0.15s ease', 
-    outline: 'none' 
+  inlineBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F1F5F9',
+    color: '#334155',
+    border: '1px solid #E2E8F0',
+    borderRadius: 8,
+    padding: '8px 12px',
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: 'pointer',
+    flexShrink: 0
   },
-  toggleInnerKnobNodeCircleCompact: { 
-    width: '14px', 
-    height: '14px', 
-    borderRadius: '50%', 
-    backgroundColor: '#ffffff', 
-    boxShadow: '0 1px 2px rgba(0,0,0,0.1)', 
-    transition: 'transform 0.15s ease' 
+  compactStack: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 12
   },
-  radioControlGroupBlock: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: '8px', 
-    width: '100%', 
-    textAlign: 'left' 
+  compactRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    padding: '10px 12px',
+    border: '1px solid #F1F5F9',
+    borderRadius: 10,
+    backgroundColor: '#F8FAFC'
   },
-  segmentedControlTrackWrapperFrame: { 
-    display: 'flex', 
-    backgroundColor: '#F1F5F9', 
-    borderRadius: '10px', 
-    padding: '4px', 
-    gap: '4px', 
-    width: '100%', 
-    boxSizing: 'border-box' 
+  compactLabel: {
+    fontSize: 12,
+    fontWeight: 600,
+    color: '#334155'
   },
-  segmentOptionTriggerButton: { 
-    flex: 1, 
-    border: 'none', 
-    padding: '8px 0', 
-    borderRadius: '7px', 
-    fontSize: '11px', 
-    cursor: 'pointer', 
-    outline: 'none', 
-    transition: 'all 0.1s ease' 
+  segmentGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8
   },
-  destructiveDangerZoneWrapperCardContainer: { 
-    border: '1px solid #FEE2E2', 
-    backgroundColor: '#FFF5F5', 
-    padding: '24px', 
-    borderRadius: '16px', 
-    display: 'flex', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    gap: '32px', 
-    width: '100%', 
-    boxSizing: 'border-box', 
-    marginTop: '8px' 
+  segmentTrack: {
+    display: 'flex',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 10,
+    padding: 4,
+    gap: 4
   },
-  dangerCardLeftContentMetadataStack: { 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: '6px', 
-    textAlign: 'left' 
+  segmentBtn: {
+    flex: 1,
+    border: 'none',
+    padding: '8px 0',
+    borderRadius: 8,
+    fontSize: 12,
+    cursor: 'pointer'
   },
-  dangerHeadingTitleSectionLabelText: { 
-    fontSize: '13px', 
-    fontWeight: 800, 
-    color: '#991B1B', 
-    margin: 0, 
-    textTransform: 'uppercase', 
-    letterSpacing: '0.4px' 
+  dangerCard: {
+    border: '1px solid #FECDD3',
+    backgroundColor: '#FFF1F2',
+    borderRadius: 16,
+    padding: 22,
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 24,
+    flexWrap: 'wrap'
   },
-  dangerParagraphSupportingExplanationBodyText: { 
-    fontSize: '12px', 
-    color: '#7F1D1D', 
-    margin: 0, 
-    fontWeight: 500, 
-    lineHeight: '1.4' 
+  dangerHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8
   },
-  dangerButtonsClusterRowAlignContainer: { 
-    display: 'flex', 
-    gap: '12px', 
-    alignItems: 'center', 
-    flexShrink: 0 
+  dangerTitle: {
+    margin: 0,
+    fontSize: 12,
+    fontWeight: 700,
+    color: '#BE123C',
+    textTransform: 'uppercase',
+    letterSpacing: '0.3px'
   },
-  dangerPrimaryActionButtonMarkup: { 
-    display: 'flex', 
-    alignItems: 'center', 
-    gap: '6px', 
-    backgroundColor: '#E11D48', 
-    color: '#ffffff', 
-    border: 'none', 
-    borderRadius: '10px', 
-    padding: '10px 16px', 
-    fontSize: '12px', 
-    fontWeight: 700, 
-    cursor: 'pointer', 
-    outline: 'none', 
-    boxShadow: '0 2px 4px rgba(225,29,72,0.1)' 
+  dangerText: {
+    margin: '6px 0 0',
+    fontSize: 12,
+    color: '#9F1239',
+    fontWeight: 500,
+    lineHeight: 1.4
   },
-  dangerSecondaryActionButtonMarkup: { 
-    backgroundColor: '#FEE2E2', 
-    color: '#991B1B', 
-    border: '1px solid #FCA5A5', 
-    borderRadius: '10px', 
-    padding: '10px 16px', 
-    fontSize: '12px', 
-    fontWeight: 700, 
-    cursor: 'pointer', 
-    outline: 'none' 
+  dangerActions: {
+    display: 'flex',
+    gap: 10,
+    flexShrink: 0
   },
-  masterActionToolbarFooterRowBase: { 
-    display: 'flex', 
-    flexDirection: 'row-reverse', 
-    gap: '16px', 
-    alignItems: 'center', 
-    width: '100%', 
-    boxSizing: 'border-box', 
-    borderTop: '1px solid #E2E8F0', 
-    paddingTop: '24px', 
-    marginTop: '12px' 
+  dangerPrimary: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#E11D48',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 10,
+    padding: '10px 14px',
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: 'pointer'
   },
-  masterSaveActionButtonMarkup: { 
-    backgroundColor: '#1E3A8A', 
-    color: '#ffffff', 
-    border: 'none', 
-    borderRadius: '12px', 
-    padding: '12px 28px', 
-    fontSize: '13px', 
-    fontWeight: 700, 
-    cursor: 'pointer', 
-    outline: 'none', 
-    boxShadow: '0 1px 3px rgba(30,58,138,0.15)', 
-    display: 'flex', 
-    alignItems: 'center', 
-    gap: '8px' 
+  dangerSecondary: {
+    backgroundColor: '#FFE4E6',
+    color: '#BE123C',
+    border: '1px solid #FECDD3',
+    borderRadius: 10,
+    padding: '10px 14px',
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: 'pointer'
   },
-  masterCancelActionButtonMarkup: { 
-    backgroundColor: '#ffffff', 
-    color: '#475569', 
-    border: '1px solid #E2E8F0', 
-    borderRadius: '12px', 
-    padding: '12px 24px', 
-    fontSize: '13px', 
-    fontWeight: 700, 
-    cursor: 'pointer', 
-    outline: 'none' 
+  footer: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: 12,
+    borderTop: '1px solid #E2E8F0',
+    paddingTop: 20
+  },
+  saveBtn: {
+    backgroundColor: '#2563EB',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 10,
+    padding: '11px 20px',
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: 'pointer'
+  },
+  cancelBtn: {
+    backgroundColor: '#fff',
+    color: '#475569',
+    border: '1px solid #E2E8F0',
+    borderRadius: 10,
+    padding: '11px 18px',
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: 'pointer'
+  },
+  modalOverlay: {
+    position: 'fixed',
+    inset: 0,
+    backgroundColor: 'rgba(15,23,42,0.5)',
+    backdropFilter: 'blur(4px)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 9999,
+    padding: 20
+  },
+  modal: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    border: '1px solid #E2E8F0',
+    padding: 24,
+    width: '100%',
+    maxWidth: 420,
+    boxShadow: '0 20px 40px rgba(15,23,42,0.15)'
+  },
+  modalHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingBottom: 14,
+    borderBottom: '1px solid #F1F5F9'
+  },
+  modalTitle: {
+    margin: 0,
+    fontSize: 15,
+    fontWeight: 700,
+    color: '#0F172A'
+  },
+  modalClose: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    padding: 4,
+    display: 'flex'
+  },
+  modalForm: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 14
+  },
+  modalFooter: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: 10,
+    paddingTop: 12,
+    borderTop: '1px solid #F1F5F9',
+    marginTop: 4
   }
 }

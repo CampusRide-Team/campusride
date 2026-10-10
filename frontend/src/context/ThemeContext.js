@@ -1,51 +1,116 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
+import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { lightColors, darkColors, getThemeColors } from '../theme/colors';
+import { typography, fonts } from '../theme/typography';
+import spacing from '../theme/spacing';
+import radii from '../theme/radii';
+import elevation from '../theme/elevation';
+import iconSizes from '../theme/icons';
+import motion from '../theme/motion';
 
-const ThemeContext = createContext();
+const THEME_STORAGE_KEY = '@campusride_theme_preference';
+
+const ThemeContext = createContext({
+  themeMode: 'system',
+  isDark: false,
+  setThemeMode: () => {},
+  theme: {
+    colors: lightColors,
+    typography,
+    fonts,
+    spacing,
+    radii,
+    elevation,
+    iconSizes,
+    motion,
+    isDark: false,
+    themeMode: 'system',
+  },
+});
 
 export const ThemeProvider = ({ children }) => {
-  const [darkModeEnabled, setDarkModeEnabled] = useState(false);
+  const systemColorScheme = useColorScheme(); // 'light' | 'dark' | null | undefined
+  const [themeMode, setThemeModeState] = useState('system'); // 'system' | 'light' | 'dark'
+  const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
-    // Read the saved user preference from storage on app load
-    const loadGlobalTheme = async () => {
+    const loadStoredTheme = async () => {
       try {
-        const localDark = await AsyncStorage.getItem('@campusride_dark_enabled');
-        if (localDark !== null) setDarkModeEnabled(JSON.parse(localDark));
+        const storedMode = await AsyncStorage.getItem(THEME_STORAGE_KEY);
+        if (storedMode && ['system', 'light', 'dark'].includes(storedMode)) {
+          setThemeModeState(storedMode);
+        } else {
+          // Backward compatibility check for legacy boolean key
+          const legacyDark = await AsyncStorage.getItem('@campusride_dark_enabled');
+          if (legacyDark !== null) {
+            setThemeModeState(JSON.parse(legacyDark) ? 'dark' : 'light');
+          }
+        }
       } catch (err) {
-        console.error('Failed to load theme preference from hardware memory:', err);
+        console.warn('Failed to load theme preference from storage:', err.message);
+      } finally {
+        setIsHydrated(true);
       }
     };
-    loadGlobalTheme();
+
+    loadStoredTheme();
   }, []);
 
-  const toggleGlobalTheme = async (value) => {
-    setDarkModeEnabled(value);
+  const setThemeMode = async (mode) => {
+    if (!['system', 'light', 'dark'].includes(mode)) return;
+    setThemeModeState(mode);
     try {
-      await AsyncStorage.setItem('@campusride_dark_enabled', JSON.stringify(value));
+      await AsyncStorage.setItem(THEME_STORAGE_KEY, mode);
     } catch (err) {
-      console.error('Storage update failed:', err);
+      console.warn('Failed to persist theme preference:', err.message);
     }
   };
 
-  // Central color token mapping referenced globally
+  const isDark = themeMode === 'system'
+    ? systemColorScheme === 'dark'
+    : themeMode === 'dark';
+
+  const activeColors = getThemeColors(isDark);
+
   const theme = {
-    background: darkModeEnabled ? '#121824' : '#FFFFFF',
-    cardBackground: darkModeEnabled ? '#1E293B' : '#FFFFFF',
-    mainText: darkModeEnabled ? '#F8FAFC' : '#1E2937',
-    subText: darkModeEnabled ? '#94A3B8' : '#64748B',
-    borderColor: darkModeEnabled ? '#334155' : '#E2E8F0',
-    iconWrap: darkModeEnabled ? '#1E3A8A' : '#EFF6FF',
-    iconColor: darkModeEnabled ? '#60A5FA' : '#1E3A8A',
-    statusBar: darkModeEnabled ? 'light' : 'dark',
-    tabBarBorder: darkModeEnabled ? '#1E293B' : '#F1F5F9',
+    colors: activeColors,
+    typography,
+    fonts,
+    spacing,
+    radii,
+    elevation,
+    iconSizes,
+    motion,
+    isDark,
+    themeMode,
+    // Backward compatibility aliases
+    background: activeColors.brand.baseBackground,
+    cardBackground: activeColors.surface.base,
+    mainText: activeColors.text.primary,
+    subText: activeColors.text.secondary,
+    borderColor: activeColors.border.subtle,
+    iconWrap: activeColors.brand.primaryTint,
+    iconColor: activeColors.brand.primary,
+    statusBar: isDark ? 'light' : 'dark',
+    tabBarBorder: activeColors.border.subtle,
   };
 
   return (
-    <ThemeContext.Provider value={{ darkModeEnabled, toggleGlobalTheme, theme }}>
+    <ThemeContext.Provider
+      value={{
+        themeMode,
+        isDark,
+        setThemeMode,
+        theme,
+        darkModeEnabled: isDark, // legacy compatibility
+        toggleGlobalTheme: (val) => setThemeMode(val ? 'dark' : 'light'), // legacy compatibility
+      }}
+    >
       {children}
     </ThemeContext.Provider>
   );
 };
 
 export const useTheme = () => useContext(ThemeContext);
+export default ThemeContext;

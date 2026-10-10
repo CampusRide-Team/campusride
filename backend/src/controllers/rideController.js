@@ -7,9 +7,6 @@ import { processPrivateMatch, findSharedRideMatch } from '../services/matchmakin
 export const toggleDriverStatus = async (req, res, next) => {
   try {
     const { isOnline } = req.body;
-    if (isOnline && req.user.walletBalance < -50) {
-      return res.status(403).json({ success: false, error: { message: 'Outstanding commission debt.' } });
-    }
     const driver = await User.findByIdAndUpdate(req.user.id || req.user._id, { isOnline }, { new: true }).select('-password');
     res.json({ success: true, data: { isOnline: driver.isOnline } });
   } catch (error) { 
@@ -19,7 +16,7 @@ export const toggleDriverStatus = async (req, res, next) => {
 
 export const requestRide = async (req, res, next) => {
   try {
-    let { pickupLocation, dropoffLocation, pickupCoordinates, dropoffCoordinates, fare, rideMode, driverId } = req.body;
+    let { pickupLocation, dropoffLocation, pickupCoordinates, dropoffCoordinates, rideMode, driverId } = req.body;
 
     console.log(" [REQUEST RIDE CALLED]");
     console.log("   - Target driverId in req.body:", driverId ? driverId : "NONE (General Broadcast)");
@@ -44,7 +41,6 @@ export const requestRide = async (req, res, next) => {
       dropoffLocation: dropoffLocation || 'Campus Destination',
       pickupCoordinates: { type: 'Point', coordinates: validPickup },
       dropoffCoordinates: { type: 'Point', coordinates: validDropoff },
-      fare: fare || 0, 
       rideMode: rideMode || 'shared',
       status: 'pending'
     });
@@ -245,11 +241,6 @@ export const updateRideStatus = async (req, res, next) => {
     ride.status = status;
     await ride.save({ session });
 
-    if (status === 'completed' && ride.fare) {
-      const commission = ride.fare * 0.10;
-      await User.findByIdAndUpdate(userId, { $inc: { walletBalance: -commission } }, { session });
-    }
-
     await session.commitTransaction();
     res.json({ success: true, data: ride });
   } catch (error) { 
@@ -277,7 +268,7 @@ export const getPendingCampusRequests = async (req, res, next) => {
 
 export const scheduleRide = async (req, res, next) => {
   try {
-    const { pickup, destination, rideType, scheduledTime, fare } = req.body;
+    const { pickup, destination, rideType, scheduledTime } = req.body;
     
     if (!destination || !scheduledTime) {
       return res.status(400).json({ success: false, error: { message: 'Destination and scheduled time are required.' } });
@@ -291,7 +282,6 @@ export const scheduleRide = async (req, res, next) => {
       dropoffLocation: destination,
       rideMode: rideType || 'shared',
       scheduledTime: new Date(scheduledTime),
-      fare: fare || 0,
       status: 'Scheduled',
     });
 

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -6,510 +6,487 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
-  Dimensions,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { StatusBar } from "expo-status-bar";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useTheme } from "../../context/ThemeContext";  
+  StatusBar,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTheme } from '../../context/ThemeContext';
+import { fonts, spacing } from '../../theme';
+import { CRIcon } from '../../components/common';
+import { appConfig } from '../../config/appConfig';
+import LogoutConfirmationModal from '../../components/passenger/LogoutConfirmationModal';
 
-const { width } = Dimensions.get("window");
+export default function DriverProfile({ onLogout, onNavigate, driverData }) {
+  const { theme, isDark } = useTheme();
+  const { colors } = theme;
+  const [logoutModalVisible, setLogoutModalVisible] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
-// Verified badge icon
-const VerifiedBadge = () => (
-  <View style={styles.verifiedBadge}>
-    <MaterialCommunityIcons name="check" size={14} color="#1E3A8A" prefix="verified" />
-  </View>
-);
+  const rawAvatar = driverData?.avatarUri || driverData?.avatarUrl || null;
+  const fullName = driverData?.fullName?.trim() || 'Campus Driver';
+  const email = driverData?.email?.trim() || '';
+  const rating = driverData?.rating !== undefined && driverData?.rating !== null ? Number(driverData.rating).toFixed(1) : '5.0';
+  const totalTrips = driverData?.totalTrips ?? 0;
+  const tripsToday = driverData?.tripsToday ?? 0;
+  const isApproved = driverData?.isApproved ?? true;
 
-// Rating pill indicator
-const RatingPill = ({ rating, theme }) => (
-  <View style={[styles.ratingPill, { backgroundColor: theme.iconWrap }]}>
-    <MaterialCommunityIcons name="star" size={14} color={theme.iconColor} />
-    <Text style={[styles.ratingText, { color: theme.iconColor }]}>
-      {rating ? `${rating} RATING` : "NEW DRIVER"}
-    </Text>
-  </View>
-);
+  const initials = fullName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase() || 'CD';
 
-// Stats row data metrics
-const StatsRow = ({ totalTrips, tripsToday, theme }) => (
-  <View style={[styles.statsRow, { backgroundColor: theme.background, borderColor: theme.borderColor }]}>
-    <View style={styles.statItem}>
-      <MaterialCommunityIcons
-        name="car-multiple"
-        size={24}
-        color={theme.iconColor}
-        style={styles.statIcon}
-      />
-      <Text style={[styles.statNumber, { color: theme.mainText }]}>{totalTrips ?? 0}</Text>
-      <Text style={[styles.statLabel, { color: theme.subText }]}>TOTAL TRIPS</Text>
-    </View>
-    <View style={[styles.statDivider, { backgroundColor: theme.borderColor }]} prefix="divider" />
-    <View style={styles.statItem}>
-      <MaterialCommunityIcons
-        name="calendar-month"
-        size={24}
-        color={theme.iconColor}
-        style={styles.statIcon}
-      />
-      <Text style={[styles.statNumber, { color: theme.mainText }]}>{tripsToday ?? 0}</Text>
-      <Text style={[styles.statLabel, { color: theme.subText }]}>TRIPS TODAY</Text>
-    </View>
-  </View>
-);
+  const avatarUri = rawAvatar && rawAvatar.startsWith('http')
+    ? `${rawAvatar}?t=${Date.now()}`
+    : rawAvatar;
 
-// Menu list action row component
-const MenuItem = ({
-  iconName,
-  label,
-  onPress,
-  showDot = false,
-  isFirst = false,
-  isLast = false,
-  theme,
-}) => (
-  <TouchableOpacity
-    style={[
-      styles.menuItem,
-      isFirst && styles.menuItemFirst,
-      isLast && styles.menuItemLast,
-      !isLast && [styles.menuItemBorder, { borderBottomColor: theme.borderColor }],
-    ]}
-    onPress={onPress}
-    activeOpacity={0.7}
-  >
-    <View style={[styles.menuIconWrap, { backgroundColor: theme.background }]}>
-      <MaterialCommunityIcons name={iconName} size={20} color={theme.subText} />
-    </View>
-    <Text style={[styles.menuLabel, { color: theme.mainText }]}>{label}</Text>
-    <View style={styles.menuRight}>
-      {showDot && <View style={styles.notifDot} prefix="dot" />}
-      <MaterialCommunityIcons name="chevron-right" size={20} color={theme.subText} />
-    </View>
-  </TouchableOpacity>
-);
-
-const DriverProfile = ({ onLogout, onNavigate, driverData }) => {
-  const { theme, darkModeEnabled } = useTheme();
-
- const rawAvatar = driverData?.avatarUri || driverData?.avatarUrl || null;
-  const user = {
-    name: driverData?.fullName || "Driver",
-    email: driverData?.email || "",
-    rating: driverData?.rating,
-    totalTrips: driverData?.totalTrips,
-    tripsToday: driverData?.tripsToday,
-    avatar: rawAvatar && rawAvatar.startsWith("http") 
-      ? `${rawAvatar}?t=${Date.now()}` 
-      : rawAvatar,
-    verified: driverData?.isApproved || false,
+  const handleConfirmLogout = async () => {
+    try {
+      setLoggingOut(true);
+      if (onLogout) await onLogout();
+    } catch (err) {
+      console.warn('Driver logout failed:', err.message);
+    } finally {
+      setLoggingOut(false);
+      setLogoutModalVisible(false);
+    }
   };
 
+  const quickActions = [
+    {
+      label: 'History',
+      icon: 'time-outline',
+      onPress: () => onNavigate?.('ride-history'),
+    },
+    {
+      label: 'Requests',
+      icon: 'flash-outline',
+      onPress: () => onNavigate?.('active-requests'),
+    },
+    {
+      label: 'Support',
+      icon: 'headset-outline',
+      onPress: () => onNavigate?.('help-support'),
+    },
+    {
+      label: 'Settings',
+      icon: 'settings-outline',
+      onPress: () => onNavigate?.('app-settings'),
+    },
+  ];
+
+  const primaryGroup = [
+    {
+      icon: 'person-outline',
+      title: 'Personal information',
+      subtitle: 'Name, phone & vehicle profile',
+      onPress: () => onNavigate?.('settings'),
+    },
+    {
+      icon: 'time-outline',
+      title: 'Ride history',
+      subtitle: 'Past rides & trip receipts',
+      onPress: () => onNavigate?.('ride-history'),
+    },
+    {
+      icon: 'notifications-outline',
+      title: 'Notifications',
+      subtitle: 'System alerts & announcements',
+      onPress: () => onNavigate?.('notifications'),
+    },
+  ];
+
+  const secondaryGroup = [
+    {
+      icon: 'help-circle-outline',
+      title: 'Help & Support',
+      subtitle: 'Contact dispatch & FAQs',
+      onPress: () => onNavigate?.('help-support'),
+    },
+    {
+      icon: 'settings-outline',
+      title: 'Preferences',
+      subtitle: 'Theme & notification settings',
+      onPress: () => onNavigate?.('app-settings'),
+    },
+    {
+      icon: 'information-circle-outline',
+      title: 'About CampusRide',
+      subtitle: `Version ${appConfig.version} (Driver)`,
+      onPress: () => onNavigate?.('help-support'),
+    },
+  ];
+
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={["top", "bottom"]}>
-      <StatusBar style={theme.statusBar} />
+    <SafeAreaView
+      style={[styles.safeArea, { backgroundColor: colors.surface.base }]}
+      edges={['top', 'left', 'right']}
+    >
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={colors.surface.base}
+      />
 
-      {/* Top logo header section */}
-      <View style={[styles.header, { backgroundColor: theme.background, borderBottomColor: theme.tabBarBorder }]}>
-        <Text style={[styles.logoText, { color: theme.iconColor }]}>CampusRide</Text>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Top Header */}
+        <View style={styles.topBar}>
+          <Text style={[styles.headerTitle, { color: colors.text.primary }]}>Account</Text>
+        </View>
+
+        {/* 1. Large Profile Avatar & Identification Header (Reference B Style) */}
         <TouchableOpacity
-          onPress={() => onNavigate?.("settings")}
+          style={styles.identity}
+          onPress={() => onNavigate?.('settings')}
           activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={`Edit driver profile for ${fullName}`}
         >
-          {user.avatar ? (
-            <Image
-              source={{ uri: user.avatar }}
-              style={[styles.topBarAvatar, { borderColor: theme.iconColor }]}
-              resizeMode="cover"
-            />
-          ) : (
-            <View style={[styles.topBarAvatarPlaceholder, { backgroundColor: theme.iconColor }]}>
-              <Text style={styles.topBarAvatarInitials}>
-                {user.name
-                  .split(" ")
-                  .map((n) => n[0])
-                  .join("")
-                  .toUpperCase()}
-              </Text>
-            </View>
-          )}
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView
-        contentContainerStyle={[styles.scroll, { backgroundColor: theme.background }]}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* User identification header card layout */}
-        <View style={styles.profileSection}>
-          <TouchableOpacity
-            onPress={() => onNavigate?.("settings")}
-            activeOpacity={0.85}
-            style={styles.photoWrap}
-          >
-            {user.avatar ? (
-              <Image
-                source={{ uri: user.avatar }}
-                style={[styles.profilePhoto, { borderColor: theme.background }]}
-              />
+          <View style={[styles.avatarWrap, { backgroundColor: colors.surface.tile, borderColor: colors.border.subtle }]}>
+            {avatarUri ? (
+              <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
             ) : (
-              <View style={[styles.profilePhotoPlaceholder, { backgroundColor: theme.iconColor }]}>
-                <Text style={styles.profilePhotoInitials}>
-                  {user.name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")
-                    .toUpperCase()}
-                </Text>
+              <CRIcon name="camera-outline" size={34} color={colors.text.secondary} />
+            )}
+            {isApproved ? (
+              <View style={[styles.verifiedBadge, { backgroundColor: colors.semantic.success }]}>
+                <CRIcon name="checkmark" size={12} color="#FFFFFF" />
+              </View>
+            ) : (
+              <View style={[styles.avatarBadge, { backgroundColor: colors.brand.primary }]}>
+                <CRIcon name="add" size={13} color="#FFFFFF" />
               </View>
             )}
-            {user.verified && <VerifiedBadge />}
-          </TouchableOpacity>
+          </View>
 
-          <Text style={[styles.profileName, { color: theme.iconColor }]} numberOfLines={1}>
-            {user.name}
-          </Text>
-          <Text style={[styles.profileEmail, { color: theme.subText }]} numberOfLines={1}>
-            {user.email}
-          </Text>
-          <RatingPill rating={user.rating} theme={theme} />
-        </View>
+          <View style={styles.nameRow}>
+            <Text style={[styles.name, { color: colors.text.primary }]} numberOfLines={1}>
+              {fullName}
+            </Text>
+            <CRIcon name="chevron-forward" size={18} color={colors.text.secondary} />
+          </View>
 
-        {/* User metrics analytics breakdown block */}
-        <StatsRow totalTrips={user.totalTrips} tripsToday={user.tripsToday} theme={theme} />
+          {email ? (
+            <Text style={[styles.email, { color: colors.text.secondary }]} numberOfLines={1}>
+              {email}
+            </Text>
+          ) : null}
 
-        {/* Settings options card list links */}
-        <View style={[styles.menuCard, { backgroundColor: theme.cardBackground, borderColor: theme.borderColor }]}>
-          <MenuItem
-            iconName="clock-outline"
-            label="Ride History"
-            onPress={() => onNavigate?.("ride-history")}
-            isFirst
-            theme={theme}
-          />
-          <MenuItem
-            iconName="bell-outline"
-            label="Notifications"
-            onPress={() => onNavigate?.("notifications")}
-            theme={theme}
-          />
-          <MenuItem
-            iconName="help-circle-outline"
-            label="Help & Support"
-            onPress={() => onNavigate?.("help-support")}
-            theme={theme}
-          />
-          <MenuItem
-            iconName="cog-outline"
-            label="Settings"
-            onPress={() => onNavigate?.("app-settings")}
-            isLast
-            theme={theme}
-          />
-        </View>
-
-        {/* Account login termination controller action */}
-        <TouchableOpacity
-          style={[
-            styles.logoutBtn,
-            {
-              backgroundColor: theme.cardBackground,
-              borderColor: darkModeEnabled ? theme.borderColor : "#FEE2E2",
-            },
-          ]}
-          onPress={onLogout}
-          activeOpacity={0.85}
-        >
-          <MaterialCommunityIcons name="logout" size={18} color="#EF4444" />
-          <Text style={styles.logoutText}>Logout</Text>
+          {/* Rating Pill */}
+          <View style={[styles.ratingPill, { backgroundColor: colors.surface.tile, borderColor: colors.border.subtle }]}>
+            <CRIcon name="star" size={13} color={colors.brand.primary} />
+            <Text style={[styles.ratingText, { color: colors.text.primary }]}>
+              {rating} RATING
+            </Text>
+          </View>
         </TouchableOpacity>
+
+        {/* Operational Metrics Banner */}
+        <View style={[styles.metricsCard, { backgroundColor: colors.surface.tile, borderColor: colors.border.subtle }]}>
+          <View style={styles.metricItem}>
+            <Text style={[styles.metricNumber, { color: colors.text.primary }]}>{totalTrips}</Text>
+            <Text style={[styles.metricLabel, { color: colors.text.secondary }]}>TOTAL TRIPS</Text>
+          </View>
+          <View style={[styles.metricDivider, { backgroundColor: colors.border.subtle }]} />
+          <View style={styles.metricItem}>
+            <Text style={[styles.metricNumber, { color: colors.text.primary }]}>{tripsToday}</Text>
+            <Text style={[styles.metricLabel, { color: colors.text.secondary }]}>TRIPS TODAY</Text>
+          </View>
+        </View>
+
+        {/* 2. Circular Quick Actions Row (Reference B Style) */}
+        <View style={styles.quickRow}>
+          {quickActions.map((action) => (
+            <TouchableOpacity
+              key={action.label}
+              style={styles.quickAction}
+              onPress={action.onPress}
+              activeOpacity={0.75}
+              accessibilityRole="button"
+              accessibilityLabel={action.label}
+            >
+              <View style={[styles.quickIconCircle, { backgroundColor: colors.surface.tile, borderColor: colors.border.subtle }]}>
+                <CRIcon name={action.icon} size={22} color={colors.text.primary} />
+              </View>
+              <Text style={[styles.quickLabel, { color: colors.text.primary }]}>{action.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* 3. Grouped Light-Gray Section Cards (Reference B Style) */}
+        <View style={[styles.groupedCard, { backgroundColor: colors.surface.tile, borderColor: colors.border.subtle }]}>
+          {primaryGroup.map((row, index) => (
+            <React.Fragment key={row.title}>
+              <TouchableOpacity
+                style={styles.menuRow}
+                onPress={row.onPress}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={row.title}
+              >
+                <View style={styles.menuIconWrap}>
+                  <CRIcon name={row.icon} size={20} color={colors.text.primary} />
+                </View>
+                <View style={styles.menuTextCol}>
+                  <Text style={[styles.menuTitle, { color: colors.text.primary }]}>{row.title}</Text>
+                  {row.subtitle ? (
+                    <Text style={[styles.menuSubtitle, { color: colors.text.secondary }]}>{row.subtitle}</Text>
+                  ) : null}
+                </View>
+                <CRIcon name="chevron-forward" size={16} color={colors.text.muted} />
+              </TouchableOpacity>
+              {index < primaryGroup.length - 1 && (
+                <View style={[styles.rowDivider, { backgroundColor: colors.border.subtle }]} />
+              )}
+            </React.Fragment>
+          ))}
+        </View>
+
+        {/* 4. Second Grouped Section Card */}
+        <View style={[styles.groupedCard, { backgroundColor: colors.surface.tile, borderColor: colors.border.subtle }]}>
+          {secondaryGroup.map((row, index) => (
+            <React.Fragment key={row.title}>
+              <TouchableOpacity
+                style={styles.menuRow}
+                onPress={row.onPress}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={row.title}
+              >
+                <View style={styles.menuIconWrap}>
+                  <CRIcon name={row.icon} size={20} color={colors.text.primary} />
+                </View>
+                <View style={styles.menuTextCol}>
+                  <Text style={[styles.menuTitle, { color: colors.text.primary }]}>{row.title}</Text>
+                  {row.subtitle ? (
+                    <Text style={[styles.menuSubtitle, { color: colors.text.secondary }]}>{row.subtitle}</Text>
+                  ) : null}
+                </View>
+                <CRIcon name="chevron-forward" size={16} color={colors.text.muted} />
+              </TouchableOpacity>
+              {index < secondaryGroup.length - 1 && (
+                <View style={[styles.rowDivider, { backgroundColor: colors.border.subtle }]} />
+              )}
+            </React.Fragment>
+          ))}
+        </View>
+
+        {/* 5. Danger Logout Row in Clean Tile */}
+        <View style={[styles.groupedCard, { backgroundColor: colors.surface.tile, borderColor: colors.border.subtle, marginTop: 4 }]}>
+          <TouchableOpacity
+            style={styles.menuRow}
+            onPress={() => setLogoutModalVisible(true)}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Log out of Driver account"
+          >
+            <View style={styles.menuIconWrap}>
+              <CRIcon name="log-out-outline" size={20} color={colors.semantic.danger} />
+            </View>
+            <View style={styles.menuTextCol}>
+              <Text style={[styles.menuTitle, { color: colors.semantic.danger }]}>Log Out</Text>
+            </View>
+            <CRIcon name="chevron-forward" size={16} color={colors.text.muted} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Footer */}
+        <Text style={[styles.version, { color: colors.text.muted }]}>
+          {appConfig.appName} · v{appConfig.version} (Driver)
+        </Text>
       </ScrollView>
 
-      {/* App Base System Tab Nav Bar Component */}
-      <View style={[styles.tabBarContainer, { backgroundColor: theme.background, borderTopColor: theme.tabBarBorder }]}>
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => onNavigate?.("home")}
-          activeOpacity={0.7}
-        >
-          <View style={styles.tabIconBackground}>
-            <MaterialCommunityIcons
-              name="home-outline"
-              size={24}
-              color="#94A3B8"
-            />
-          </View>
-          <Text style={styles.tabLabelText}>Home</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => onNavigate?.("active-requests")}
-          activeOpacity={0.7}
-        >
-          <View style={styles.tabIconBackground}>
-            <MaterialCommunityIcons
-              name="car-multiple"
-              size={24}
-              color="#94A3B8"
-            />
-          </View>
-          <Text style={styles.tabLabelText}>Trips</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => onNavigate?.("profile")}
-          activeOpacity={0.7}
-        >
-          <View
-            style={[
-              styles.tabIconBackground,
-              !darkModeEnabled && styles.activeTabIconBackground,
-              darkModeEnabled && { backgroundColor: "#334155" },
-            ]}
-          >
-            <MaterialCommunityIcons
-              name="account-circle"
-              size={24}
-              color={theme.iconColor}
-            />
-          </View>
-          <Text style={[styles.tabLabelText, { color: theme.iconColor, fontWeight: "700" }]}>
-            Profile
-          </Text>
-        </TouchableOpacity>
-      </View>
+      <LogoutConfirmationModal
+        visible={logoutModalVisible}
+        onClose={() => setLogoutModalVisible(false)}
+        onConfirm={handleConfirmLogout}
+        loading={loggingOut}
+      />
     </SafeAreaView>
   );
-};
+}
 
 const styles = StyleSheet.create({
-  activeTabIconBackground: {
-    backgroundColor: "#F1F5F9",
-  },
-  container: {
+  safeArea: {
     flex: 1,
   },
-  header: {
-    alignItems: "center",
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: 24,
-    paddingVertical: 14,
+  content: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xxl,
   },
-  logoText: {
-    fontSize: 22,
-    fontWeight: "800",
+  topBar: {
+    marginBottom: spacing.sm,
+  },
+  headerTitle: {
+    fontFamily: fonts.extraBold,
+    fontSize: 26,
     letterSpacing: -0.5,
   },
-  logoutBtn: {
-    alignItems: "center",
-    borderRadius: 16,
+  identity: {
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+  },
+  avatarWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.sm,
     borderWidth: 1,
-    flexDirection: "row",
-    gap: 10,
-    justifyContent: "center",
-    marginBottom: 8,
-    paddingVertical: 16,
+    position: 'relative',
   },
-  logoutText: {
-    color: "#EF4444",
-    fontSize: 16,
-    fontWeight: "700",
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 40,
   },
-  menuCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    marginBottom: 16,
-    overflow: "hidden",
-  },
-  menuIconWrap: {
-    alignItems: "center",
-    borderRadius: 12,
-    height: 40,
-    justifyContent: "center",
-    width: 40,
-  },
-  menuItem: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-  },
-  menuItemBorder: {
-    borderBottomWidth: 1,
-  },
-  menuItemFirst: {
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-  },
-  menuItemLast: {
-    borderBottomLeftRadius: 16,
-    borderBottomRightRadius: 16,
-  },
-  menuLabel: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  menuRight: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 6,
-  },
-  notifDot: {
-    backgroundColor: "#A3E635",
-    borderRadius: 4,
-    height: 8,
-    width: 8,
-  },
-  photoWrap: {
-    marginBottom: 4,
-    position: "relative",
-  },
-  profileEmail: {
-    fontSize: 14,
-    fontWeight: "500",
-    textAlign: "center",
-  },
-  profileName: {
-    fontSize: 24,
-    fontWeight: "800",
-    letterSpacing: -0.5,
-    textAlign: "center",
-  },
-  profilePhoto: {
-    borderRadius: 55,
-    borderWidth: 3,
-    height: 110,
-    width: 110,
-  },
-  profilePhotoInitials: {
-    color: "#FFFFFF",
-    fontSize: 36,
-    fontWeight: "800",
-  },
-  profilePhotoPlaceholder: {
-    alignItems: "center",
-    borderRadius: 55,
-    elevation: 2,
-    height: 110,
-    justifyContent: "center",
-    width: 110,
-  },
-  profileSection: {
-    alignItems: "center",
-    gap: 8,
-    paddingBottom: 20,
-    paddingTop: 20,
-  },
-  ratingPill: {
-    alignItems: "center",
-    borderRadius: 20,
-    flexDirection: "row",
-    gap: 6,
-    marginTop: 2,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-  },
-  ratingText: {
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-  },
-  scroll: {
-    flexGrow: 1,
-    paddingBottom: 24,
-    paddingHorizontal: 24,
-  },
-  statDivider: {
-    marginVertical: 4,
-    width: 1,
-  },
-  statIcon: {
-    marginBottom: 2,
-  },
-  statItem: {
-    alignItems: "center",
-    flex: 1,
-    gap: 4,
-  },
-  statLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.8,
-  },
-  statNumber: {
-    fontSize: 32,
-    fontWeight: "800",
-    letterSpacing: -0.5,
-    lineHeight: 36,
-  },
-  statsRow: {
-    borderRadius: 16,
-    borderWidth: 1,
-    flexDirection: "row",
-    marginBottom: 16,
-    paddingVertical: 20,
-  },
-  tabBarContainer: {
-    borderTopWidth: 1,
-    flexDirection: "row",
-    height: 74,
-  },
-  tabIconBackground: {
-    alignItems: "center",
-    borderRadius: 16,
-    justifyContent: "center",
-    marginBottom: 2,
-    paddingHorizontal: 20,
-    paddingVertical: 4,
-  },
-  tabItem: {
-    alignItems: "center",
-    flex: 1,
-    justifyContent: "center",
-  },
-  tabLabelText: {
-    color: "#94A3B8",
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  topBarAvatar: {
-    borderRadius: 18,
+  avatarBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 2,
-    height: 36,
-    width: 36,
-  },
-  topBarAvatarInitials: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  topBarAvatarPlaceholder: {
-    alignItems: "center",
-    borderRadius: 18,
-    height: 36,
-    justifyContent: "center",
-    width: 36,
+    borderColor: '#FFFFFF',
   },
   verifiedBadge: {
-    alignItems: "center",
-    backgroundColor: "#A3E635",
-    borderColor: "#FFFFFF",
-    borderRadius: 12,
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     borderWidth: 2,
-    bottom: 4,
-    height: 24,
-    justifyContent: "center",
-    position: "absolute",
-    right: 4,
-    width: 24,
+    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    maxWidth: '85%',
+  },
+  name: {
+    fontFamily: fonts.bold,
+    fontSize: 20,
+    letterSpacing: -0.3,
+  },
+  email: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    marginTop: 2,
+  },
+  ratingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginTop: 8,
+  },
+  ratingText: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    letterSpacing: 0.6,
+  },
+  metricsCard: {
+    flexDirection: 'row',
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingVertical: 14,
+    marginVertical: 12,
+  },
+  metricItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  metricDivider: {
+    width: 1,
+    height: '70%',
+    alignSelf: 'center',
+  },
+  metricNumber: {
+    fontFamily: fonts.extraBold,
+    fontSize: 22,
+    letterSpacing: -0.5,
+  },
+  metricLabel: {
+    fontFamily: fonts.semiBold,
+    fontSize: 10,
+    letterSpacing: 0.6,
+    marginTop: 2,
+  },
+  quickRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginVertical: spacing.md,
+    paddingHorizontal: 4,
+  },
+  quickAction: {
+    alignItems: 'center',
+    width: 68,
+    gap: 6,
+  },
+  quickIconCircle: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickLabel: {
+    fontFamily: fonts.semiBold,
+    fontSize: 12,
+  },
+  groupedCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 2,
+    marginBottom: 14,
+    overflow: 'hidden',
+  },
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+  },
+  menuIconWrap: {
+    width: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  menuTextCol: {
+    flex: 1,
+  },
+  menuTitle: {
+    fontFamily: fonts.semiBold,
+    fontSize: 15,
+  },
+  menuSubtitle: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  rowDivider: {
+    height: 1,
+    marginLeft: 40,
+  },
+  version: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: spacing.md,
   },
 });
-
-export default DriverProfile;

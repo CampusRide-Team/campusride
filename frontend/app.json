@@ -3,6 +3,7 @@
     "name": "frontend",
     "slug": "frontend",
     "version": "1.0.0",
+    "newArchEnabled": true,
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -21,14 +22,16 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "owner": "hyperw1an",
+    "plugins": [
+      "@react-native-community/datetimepicker",
+      "expo-font",
+      "@maplibre/maplibre-react-native"
+    ],
     "extra": {
       "eas": {
-        "projectId": "c2d11632-12f3-4305-af3a-503412915b75"
+        "projectId": "1c1f0f87-3b19-4e33-a8b1-6c5162675407"
       }
-    },
-    "owner": "byk_moni1",
-    "plugins": [
-      "@react-native-community/datetimepicker"
-    ]
+    }
   }
 }
